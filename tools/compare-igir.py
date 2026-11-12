@@ -4,7 +4,12 @@
 The Phase 1 gate: Romdex agrees with igir about which dumps are in the library. Run igir on the library first,
 for example
 
-    igir report --dat ./dats --input ./roms --report-output igir.csv
+    igir copy extract report --dat ./dats --input ./roms --output ./igir-out --allow-incomplete-sets --report-output igir.csv
+
+Two of those options make igir judge the way Romdex does. --allow-incomplete-sets lets it report a game with only some
+of its files as INCOMPLETE; without it, it says MISSING. And igir only looks for headers (an NES cartridge's iNES
+header, say) inside archives when it copies files out, so a plain `igir report` misses a headered ROM in a zip. The
+copy goes to ./igir-out, which can be deleted after.
 
 then point this at that report and at Romdex, with an API key that can read:
 
@@ -27,6 +32,9 @@ def read_report(text):
     """{DAT name: {game name: status}} from a report in igir's shape."""
     dats = {}
     for row in csv.DictReader(io.StringIO(text)):
+        # igir lists the files it didn't use under no DAT.
+        if not row["DAT Name"]:
+            continue
         dats.setdefault(row["DAT Name"], {})[row["Game Name"]] = row["Status"].upper()
     return dats
 

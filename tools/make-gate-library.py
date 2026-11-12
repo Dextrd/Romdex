@@ -9,9 +9,10 @@ several tracks with a BIOS (PlayStation) and large discs (GameCube). Every game,
 writes out/dats (a DAT per system, in Logiqx XML), out/roms (the library) and out/expected.csv (what each dump should
 be: FOUND, INCOMPLETE or MISSING, as igir's report says it). Then scan out/roms with Romdex and run igir on it:
 
-    igir report --dat out/dats --input out/roms --report-output out/igir.csv
+    igir copy extract report --dat out/dats --input out/roms --output out/igir-out --allow-incomplete-sets --report-output out/igir.csv
 
-and compare the two with tools/compare-igir.py. Needs 7z for the 7-Zip case.
+and compare the two with tools/compare-igir.py (which says why igir needs those options). Anything else in out, such as
+Romdex's saved reports, is left alone. Needs 7z for the 7-Zip case.
 """
 
 import argparse
@@ -81,13 +82,14 @@ def disc(name, tracks):
 
 def main():
     parser = argparse.ArgumentParser(description="Make a library of made-up games for the Phase 1 gate.")
-    parser.add_argument("out", help="the folder to make; emptied first")
+    parser.add_argument("out", help="the folder to make; its dats, roms and igir-out are replaced")
     args = parser.parse_args()
 
     out = args.out
-    if os.path.exists(out):
-        shutil.rmtree(out)
     dats, roms = os.path.join(out, "dats"), os.path.join(out, "roms")
+    for folder in (dats, roms, os.path.join(out, "igir-out")):
+        if os.path.exists(folder):
+            shutil.rmtree(folder)
     os.makedirs(dats)
     expected = []
 
