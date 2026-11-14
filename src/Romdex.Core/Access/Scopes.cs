@@ -10,7 +10,7 @@ public static class Scopes
     public const string Read = "read";
 
     /// <summary>Accept, reject and retry arriving dumps, set each system's preferences, and ignore titles.</summary>
-    public const string Intake = "intake";
+    public const string Download = "download";
 
     /// <summary>Play games from the library in the browser.</summary>
     public const string Play = "play";
@@ -46,7 +46,7 @@ public static class Scopes
     public const string SignedIn = "signed-in";
 
     /// <summary>The permissions a user can be given, in the order they're listed.</summary>
-    public static readonly IReadOnlyList<string> Permissions = [Read, Intake, Play, Review, Files, Scan, Settings, Keys, Users];
+    public static readonly IReadOnlyList<string> Permissions = [Read, Download, Play, Review, Files, Scan, Settings, Keys, Users];
 
     /// <summary>Every scope a key can have: the permissions, and admin.</summary>
     public static readonly IReadOnlyList<string> All = [.. Permissions, Admin];

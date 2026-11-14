@@ -18,7 +18,7 @@ public sealed class AboutPageTests
         var page = File.ReadAllText(Path.Combine(root, "src", "Romdex.Web", "Pages", "About.razor"));
         var plugins = Directory.GetDirectories(Path.Combine(root, "src"), "Romdex.Plugins.*").Select(d => Path.GetFileName(d)["Romdex.Plugins.".Length..])
             .Concat(Directory.Exists(Path.Combine(root, "plugins"))
-                ? Directory.GetDirectories(Path.Combine(root, "plugins"), "intake-*").Select(d => Path.GetFileName(d)["intake-".Length..])
+                ? Directory.GetDirectories(Path.Combine(root, "plugins"), "retriever-*").Select(d => Path.GetFileName(d)["retriever-".Length..])
                 : [])
             .ToList();
         Assert.NotEmpty(plugins);

@@ -82,6 +82,8 @@ public partial class RomdexDbContext(DbContextOptions<RomdexDbContext> options) 
     public DbSet<LibraryFile> LibraryFiles => Set<LibraryFile>();
     public DbSet<LibraryContent> LibraryContents => Set<LibraryContent>();
     public DbSet<LibraryMatch> LibraryMatches => Set<LibraryMatch>();
+    public DbSet<Download> Downloads => Set<Download>();
+    public DbSet<DownloadDump> DownloadDumps => Set<DownloadDump>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -165,6 +167,22 @@ public partial class RomdexDbContext(DbContextOptions<RomdexDbContext> options) 
             e.HasOne(m => m.Content).WithMany(c => c.Matches).HasForeignKey(m => m.ContentId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(m => m.DumpFile).WithMany().HasForeignKey(m => m.DumpFileId).OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(m => m.DumpFileId);
+        });
+
+        modelBuilder.Entity<Download>(e =>
+        {
+            e.HasOne<PluginInstance>().WithMany().HasForeignKey(i => i.PluginInstanceId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne<Title>().WithMany().HasForeignKey(i => i.TitleId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne<Dump>().WithMany().HasForeignKey(i => i.WantedDumpId).OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(i => new { i.State, i.CreatedAt });
+            e.HasIndex(i => new { i.PluginInstanceId, i.CandidateId });
+        });
+
+        modelBuilder.Entity<DownloadDump>(e =>
+        {
+            e.HasKey(d => new { d.DownloadId, d.DumpId });
+            e.HasOne(d => d.Item).WithMany(i => i.Dumps).HasForeignKey(d => d.DownloadId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(d => d.Dump).WithMany().HasForeignKey(d => d.DumpId).OnDelete(DeleteBehavior.Cascade);
         });
 
         // Store enums as their names so the database stays readable and reordering members is safe.

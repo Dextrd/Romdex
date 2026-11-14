@@ -201,7 +201,7 @@ public sealed class LibraryViewBuilder(RomdexDbContext db, LibraryViews cache, P
         return unmatched.Select(c => Path.GetFileName(c.Entry ?? c.Path)).ToList();
     }
 
-    private static bool IsSheet(string name) => Sheets.Contains(Path.GetExtension(name), StringComparer.OrdinalIgnoreCase);
+    internal static bool IsSheet(string name) => Sheets.Contains(Path.GetExtension(name), StringComparer.OrdinalIgnoreCase);
 
     private static IReadOnlyList<string> Split(string value) => value.Length == 0 ? [] : value.Split(',');
 }

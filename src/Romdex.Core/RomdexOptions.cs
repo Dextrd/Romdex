@@ -11,7 +11,7 @@ public class RomdexOptions
     /// <summary>The real ROM library. The core only reads it; the igir worker writes it.</summary>
     public string LibraryPath { get; set; } = "roms";
 
-    /// <summary>Arrived dumps awaiting verification, written by intake plugins.</summary>
+    /// <summary>Arrived dumps awaiting verification, written by retrievers.</summary>
     public string StagingPath { get; set; } = "staging";
 
     /// <summary>DAT files, dropped in by hand or fetched by index plugins.</summary>
@@ -32,9 +32,18 @@ public class RomdexOptions
     /// <summary>How many files are hashed at once. Hashing big disc images is the heaviest work Romdex does.</summary>
     public int HashThreads { get; set; } = 2;
 
-    /// <summary>MAME's chdman, which reads CHDs. The Docker image has it on the path.</summary>
+    /// <summary>
+    /// The igir worker's address, such as <c>http://igir-worker:8080</c>: it files arrivals into the library, converts
+    /// them, and reads CHDs and RVZs. Empty, nothing is filed.
+    /// </summary>
+    public string WorkerUrl { get; set; } = "";
+
+    /// <summary>How often retrievers that hand over what arrived by themselves are asked, in minutes; 0 leaves only the button.</summary>
+    public int DownloadCheckMinutes { get; set; } = 5;
+
+    /// <summary>MAME's chdman, which reads CHDs where there's no igir worker. The worker's image has it.</summary>
     public string ChdmanPath { get; set; } = "chdman";
 
-    /// <summary>Dolphin's command-line tool, which reads RVZs. The Docker image has it on the path.</summary>
+    /// <summary>Dolphin's command-line tool, which reads RVZs where there's no igir worker. The worker's image has it.</summary>
     public string DolphinToolPath { get; set; } = "dolphin-tool";
 }

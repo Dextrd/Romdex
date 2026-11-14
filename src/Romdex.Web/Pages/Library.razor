@@ -13,8 +13,6 @@
 
 <div class="toolbar">
     <Segmented T="string" Value="_view" Options="Views" OnChange="Show" Label="View" />
-    <button class="primary" disabled="@(Running("library-scan") || _systems.Count == 0)" @onclick="ScanAsync">@(Running("library-scan") ? "Scanning…" : "Scan library")</button>
-    <button disabled="@Running("catalogue-refresh")" @onclick="RefreshAsync">@(Running("catalogue-refresh") ? "Updating…" : "Update catalogue")</button>
     @if (_status is not null)
     {
         <span class="muted small">
@@ -25,7 +23,6 @@
             }
         </span>
     }
-    @if (_error is not null) { <span class="error small">@_error</span> }
 </div>
 
 @if (!_loaded)
@@ -36,7 +33,7 @@ else if (_systems.Count == 0)
 {
     <div class="empty card">
         No catalogue yet. Put No-Intro or other Logiqx DATs in the DATs folder, or turn on Redump under <a href="settings/plugins">Plugins</a>,
-        then update the catalogue.
+        then update the catalogue from the menu beside Scan.
     </div>
 }
 else if (_view == "games")
@@ -111,8 +108,6 @@ else
     private IReadOnlyList<SystemSummary> _systems = [];
     private IReadOnlyDictionary<Guid, string> _names = new Dictionary<Guid, string>();
     private LibraryStatus? _status;
-    private IReadOnlyList<TaskInfo> _active = [];
-    private string? _error;
 
     private TitlePage? _games;
     private List<TitleSummary> _titles = [];
@@ -124,10 +119,8 @@ else
     private List<SystemSummary> Held => _systems.Where(s => s.Owned + s.Partial + s.Bad > 0).ToList();
 
     private string NothingYet => _status?.ScannedAt is null
-        ? "Nothing yet. Scan the library to read your games."
+        ? "Nothing yet. Scan, at the top, reads your games."
         : "None of your files match the catalogue yet. Review lists what they are.";
-
-    private bool Running(string kind) => _active.Any(t => t.Kind == kind);
 
     protected override void OnInitialized() => Events.Received += OnEvent;
 
@@ -155,7 +148,6 @@ else
     {
         try
         {
-            _active = await Api.ListTasksAsync(active: true);
             _systems = await Api.ListSystemsAsync();
             _names = _systems.ToDictionary(s => s.Id, s => s.Name);
             _status = await Api.GetLibraryStatusAsync();
@@ -194,23 +186,6 @@ else
     }
 
     private Task MoreAsync() => LoadGamesAsync(PageSize, _titles.Count);
-
-    private Task ScanAsync() => StartAsync(() => Api.ScanLibraryAsync());
-
-    private Task RefreshAsync() => StartAsync(() => Api.RefreshCatalogueAsync());
-
-    private async Task StartAsync(Func<Task<TaskInfo>> start)
-    {
-        _error = null;
-        try
-        {
-            _active = [.. _active, await start()];
-        }
-        catch (RomdexApiException e)
-        {
-            _error = e.Message;
-        }
-    }
 
     public void Dispose() => Events.Received -= OnEvent;
 }

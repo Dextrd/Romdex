@@ -74,8 +74,8 @@ public sealed class PluginCatalog
 
     private static string? Check(PluginManifest manifest)
     {
-        if (manifest.Type == PluginType.Intake)
-            return "Intake plugins run in their own container and are added by URL, not loaded in process.";
+        if (manifest.Type == PluginType.Retrieval)
+            return "Retriever plugins run in their own container and are added by URL, not loaded in process.";
         ContractVersion version;
         try
         {

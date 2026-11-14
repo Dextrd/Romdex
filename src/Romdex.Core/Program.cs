@@ -10,6 +10,7 @@ using Romdex.Core.Api;
 using Romdex.Core.Data;
 using Romdex.Core.Diagnostics;
 using Romdex.Core.Events;
+using Romdex.Core.Downloads;
 using Romdex.Core.Plugins;
 using Romdex.Core.Settings;
 using Romdex.Core.Tasks;
@@ -48,8 +49,8 @@ builder.Services.AddSingleton<PluginCatalog>();
 builder.Services.AddSingleton<PluginHost>();
 builder.Services.AddScoped<IndexPlugins>();
 builder.Services.AddScoped<ConnectorPlugins>();
-builder.Services.AddScoped<IntakePlugins>();
-builder.Services.AddHttpClient(IntakePlugins.HttpClientName, http => http.Timeout = TimeSpan.FromMinutes(2));
+builder.Services.AddScoped<RetrievalPlugins>();
+builder.Services.AddHttpClient(RetrievalPlugins.HttpClientName, http => http.Timeout = TimeSpan.FromMinutes(2));
 builder.Services.AddScoped<SettingsService>();
 
 // Background work
@@ -70,6 +71,17 @@ builder.Services.AddSingleton<ContainerReader>();
 builder.Services.AddScoped<ITaskHandler, CatalogueRefreshTask>();
 builder.Services.AddScoped<ITaskHandler, LibraryScanTask>();
 builder.Services.AddHostedService<CatalogueSchedule>();
+
+// Downloads: what arrives through the retriever plugins, identified here and filed by the igir worker.
+builder.Services.AddHttpClient<IFilingWorker, HttpFilingWorker>(HttpFilingWorker.HttpClientName, http => http.Timeout = TimeSpan.FromHours(2));
+builder.Services.AddScoped<Filing>();
+builder.Services.AddScoped<Adoption>();
+builder.Services.AddScoped<RetrievalTargets>();
+builder.Services.AddScoped<DownloadService>();
+builder.Services.AddScoped<DownloadPipeline>();
+builder.Services.AddScoped<ITaskHandler, DownloadTask>();
+builder.Services.AddSingleton<DownloadSignal>();
+builder.Services.AddHostedService<DownloadWatcher>();
 
 // Events: announced on the event stream and sent to webhooks
 builder.Services.AddHttpClient(WebhookSender.HttpClientName, http => http.Timeout = TimeSpan.FromSeconds(15));
@@ -143,6 +155,7 @@ api.MapSetupEndpoints();
 api.MapTaskEndpoints();
 api.MapCatalogueEndpoints();
 api.MapLibraryEndpoints();
+api.MapDownloadEndpoints();
 api.MapPluginEndpoints();
 api.MapAccessEndpoints();
 api.MapWebhookEndpoints();

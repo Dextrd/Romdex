@@ -3,7 +3,7 @@
   <PropertyGroup>
     <RootNamespace>Romdex.Contracts</RootNamespace>
     <PackageId>Romdex.Contracts</PackageId>
-    <Description>Contracts that Romdex index plugins and connectors are built against, plus the DTOs of the intake plugin HTTP contract.</Description>
+    <Description>Contracts that Romdex index plugins and connectors are built against, plus the DTOs of the retriever HTTP contract.</Description>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 

@@ -1,0 +1,197 @@
+@page "/downloads"
+@implements IDisposable
+@inject RomdexClient Api
+@inject AuthState Auth
+@inject ServerEvents Events
+
+<PageTitle>Downloads · Romdex</PageTitle>
+
+<h1>Downloads</h1>
+<p class="muted">
+    Dumps arriving through the retrievers. Each is identified by its checksums and filed in the library as its system says. Anything that
+    can't be verified, or that the system wants a person to look at, waits here.
+</p>
+
+<div class="toolbar">
+    <Segmented T="DownloadState?" Value="_state" Options="Tabs" OnChange="ShowAsync" Label="Show" />
+    @if (Auth.May(UserPermissions.Download))
+    {
+        <button @onclick="CheckAsync" disabled="@_checking" title="Ask the plugins that hand over what arrives, such as the inbox folder, for anything new">Check now</button>
+    }
+</div>
+
+@if (_error is not null)
+{
+    <div class="notice error">@_error</div>
+}
+
+@if (_page is null)
+{
+    <Loading />
+}
+else if (_items.Count == 0)
+{
+    <div class="empty card">
+        @if (_state == DownloadState.NeedsReview) { <span>Nothing needs review.</span> }
+        else { <span>Nothing has arrived yet. Add a retriever in Settings, such as the inbox folder, or find a game with Search and get it.</span> }
+    </div>
+}
+else
+{
+    <div class="card downloads">
+        @foreach (var item in _items)
+        {
+            var open = _open.Contains(item.Id);
+            <div class="request" @key="item.Id">
+                <div class="request-head">
+                    <button class="request-toggle" aria-expanded="@(open ? "true" : "false")" @onclick="() => Toggle(item.Id)">
+                        <span aria-hidden="true">@(open ? "▾" : "▸")</span>
+                        <span class="request-title">@item.Name</span>
+                    </button>
+                    <span class="request-state"><span class="badge @Format.Badge(item.State)">@Format.Label(item.State)</span></span>
+                    <span class="muted small request-time hide-narrow" title="@item.UpdatedAt.ToLocalTime()">@Format.Ago(item.UpdatedAt)</span>
+                    <span class="request-actions">
+                        @if (Auth.May(UserPermissions.Download))
+                        {
+                            @if (item.CanAccept) { <button class="primary" @onclick="() => ActAsync(item, Api.AcceptDownloadAsync)" title="File it anyway">Accept</button> }
+                            @if (item.CanRetry) { <button @onclick="() => ActAsync(item, Api.RetryDownloadAsync)" title="Identify it again, or fetch it again if its files are gone">Retry</button> }
+                            @if (item.CanReject) { <button @onclick="() => ActAsync(item, Api.RejectDownloadAsync)" title="Throw its files away">Reject</button> }
+                        }
+                    </span>
+                </div>
+                <div class="muted small request-detail">
+                    @item.Source@(item.Title is { } title ? $" · for {title.Name}" : "")@(item.Message is { } message ? $" · {message}" : "")
+                </div>
+                @if (open)
+                {
+                    <div class="request-body small">
+                        @if (item.Dumps.Count > 0)
+                        {
+                            <div class="field-label">Dumps</div>
+                            @foreach (var dump in item.Dumps)
+                            {
+                                <div class="download-dump">
+                                    <a href="systems/@dump.SystemId">@dump.System</a>: <strong>@dump.Dump.Name</strong>
+                                    @if (dump.Alternative) { <span class="badge neutral">Alternative</span> }
+                                    @foreach (var path in dump.Filed) { <div class="muted">Filed as <code>@path</code></div> }
+                                </div>
+                            }
+                        }
+                        @if (item.Files.Count > 0)
+                        {
+                            <div class="field-label">Files</div>
+                            @foreach (var file in item.Files)
+                            {
+                                <div class="download-file">
+                                    <span>@file.Path@(file.Entry is null ? "" : $" → {file.Entry}")</span> <span class="muted">@Format.Size(file.Size)</span>
+                                    @if (file.Error is not null) { <div class="error">@file.Error</div> }
+                                    else if (file.Matches.Count == 0) { <div class="muted">Matches nothing</div> }
+                                    @foreach (var match in file.Matches) { <div class="muted">Matches @match</div> }
+                                    @if (file.Crc32 is not null) { <div class="hashes"><code title="CRC32">@file.Crc32</code><code title="SHA-1">@file.Sha1</code></div> }
+                                </div>
+                            }
+                        }
+                        @if (item.Notes is not null)
+                        {
+                            <div class="field-label">Notes from @item.Source</div>
+                            <pre class="download-notes">@item.Notes</pre>
+                        }
+                        @if (item.Dumps.Count == 0 && item.Files.Count == 0 && item.Notes is null)
+                        {
+                            <div class="muted">Nothing more to show until it's identified.</div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    </div>
+    @if (_items.Count < _page.Total)
+    {
+        <div class="toolbar">
+            <button @onclick="MoreAsync">Show more</button>
+            <span class="muted small">@_items.Count.ToString("N0") of @_page.Total.ToString("N0")</span>
+        </div>
+    }
+}
+
+@code {
+    private const int PageSize = 50;
+
+    private IReadOnlyList<(DownloadState? Value, string Label, string? Hint)> Tabs =>
+    [
+        (DownloadState.NeedsReview, _page is { Waiting: > 0 } page ? $"Waiting ({page.Waiting:N0})" : "Waiting", "Held for someone to look at"),
+        (null, "All", "Everything that's arrived, newest first"),
+    ];
+
+    private DownloadsPage? _page;
+    private List<DownloadInfo> _items = [];
+    private DownloadState? _state;
+    private readonly HashSet<Guid> _open = [];
+    private bool _checking;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Events.Received += OnEvent;
+        // With something to review, that's what's shown first.
+        var waiting = await Api.ListDownloadsAsync(DownloadState.NeedsReview, take: PageSize);
+        _state = waiting.Total > 0 ? DownloadState.NeedsReview : null;
+        await LoadAsync(PageSize);
+    }
+
+    private void OnEvent(string kind)
+    {
+        if (kind is "downloads" or "connected")
+            InvokeAsync(async () => { await LoadAsync(Math.Max(_items.Count, PageSize)); StateHasChanged(); });
+    }
+
+    private async Task LoadAsync(int take, int skip = 0)
+    {
+        var page = await Api.ListDownloadsAsync(_state, skip, take);
+        _page = page;
+        _items = skip == 0 ? [.. page.Items] : [.. _items, .. page.Items];
+    }
+
+    private async Task ShowAsync(DownloadState? state)
+    {
+        _state = state;
+        await LoadAsync(PageSize);
+    }
+
+    private Task MoreAsync() => LoadAsync(PageSize, _items.Count);
+
+    private void Toggle(Guid id)
+    {
+        if (!_open.Remove(id))
+            _open.Add(id);
+    }
+
+    private async Task ActAsync(DownloadInfo item, Func<Guid, CancellationToken, Task<DownloadInfo>> action)
+    {
+        _error = null;
+        try
+        {
+            await action(item.Id, default);
+        }
+        catch (Exception e) when (e is RomdexApiException or HttpRequestException)
+        {
+            _error = $"{item.Name}: {e.Message}";
+        }
+        await LoadAsync(Math.Max(_items.Count, PageSize));
+    }
+
+    private async Task CheckAsync()
+    {
+        _checking = true;
+        try
+        {
+            await Api.CheckDownloadsAsync();
+        }
+        finally
+        {
+            _checking = false;
+        }
+    }
+
+    public void Dispose() => Events.Received -= OnEvent;
+}

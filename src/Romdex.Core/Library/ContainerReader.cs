@@ -11,11 +11,12 @@ namespace Romdex.Core.Library;
 public sealed class UnreadableFileException(string message, Exception? inner = null) : Exception(message, inner);
 
 /// <summary>
-/// Reads what a library file holds, as a DAT would describe it: the file itself, the files inside a zip or 7z, the
-/// tracks of a CHD, or the disc image inside an RVZ. CHD and RVZ are read with chdman and DolphinTool, which the Docker
-/// image has; reading never changes the file.
+/// Reads what a library or staged file holds, as a DAT would describe it: the file itself, the files inside a zip or 7z,
+/// the tracks of a CHD, or the disc image inside an RVZ. CHD and RVZ need chdman and DolphinTool, which are GPL, so
+/// they're read by the igir worker, whose image has them; without a worker, by the tools here if they're installed.
+/// Reading never changes the file.
 /// </summary>
-public sealed partial class ContainerReader(IOptions<RomdexOptions> options)
+public sealed partial class ContainerReader(IOptions<RomdexOptions> options, IServiceScopeFactory scopes)
 {
     public static Container ContainerOf(string path) => Path.GetExtension(path).ToLowerInvariant() switch
     {
@@ -34,6 +35,7 @@ public sealed partial class ContainerReader(IOptions<RomdexOptions> options)
             {
                 Container.Zip => await ReadZipAsync(path, ct),
                 Container.SevenZip => await ReadSevenZipAsync(path, ct),
+                Container.Chd or Container.Rvz when WorkerPath(path) is { } inWorker => await ReadInWorkerAsync(inWorker.Root, inWorker.Path, ct),
                 Container.Chd => await ReadChdAsync(path, ct),
                 Container.Rvz => [await ReadRvzAsync(path, ct)],
                 _ => [await ReadRawAsync(path, ct)],
@@ -42,6 +44,34 @@ public sealed partial class ContainerReader(IOptions<RomdexOptions> options)
         catch (Exception e) when (e is InvalidDataException or SharpCompress.Common.ArchiveException or SharpCompress.Common.InvalidFormatException)
         {
             throw new UnreadableFileException($"It's damaged or isn't really a {Path.GetExtension(path).TrimStart('.')} file: {e.Message}", e);
+        }
+    }
+
+    /// <summary>Where the worker would find a file, when there's a worker and the file is on a volume it shares.</summary>
+    private (string Root, string Path)? WorkerPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(options.Value.WorkerUrl))
+            return null;
+        var full = Path.GetFullPath(path);
+        foreach (var (root, folder) in new[] { ("library", options.Value.LibraryPath), ("staging", options.Value.StagingPath) })
+        {
+            var relative = Path.GetRelativePath(Path.GetFullPath(folder), full);
+            if (!relative.StartsWith("..", StringComparison.Ordinal) && !Path.IsPathRooted(relative))
+                return (root, relative.Replace('\\', '/'));
+        }
+        return null;
+    }
+
+    private async Task<IReadOnlyList<ContentHashes>> ReadInWorkerAsync(string root, string path, CancellationToken ct)
+    {
+        using var scope = scopes.CreateScope();
+        try
+        {
+            return (await scope.ServiceProvider.GetRequiredService<Downloads.IFilingWorker>().ReadAsync(new Downloads.ReadRequest(root, path), ct)).Contents;
+        }
+        catch (Downloads.FilingWorkerException e)
+        {
+            throw new UnreadableFileException(e.Message, e);
         }
     }
 

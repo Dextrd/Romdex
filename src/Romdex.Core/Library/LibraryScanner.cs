@@ -31,6 +31,15 @@ public sealed class LibraryScanner(RomdexDbContext db, ContainerReader reader, I
         var root = Path.GetFullPath(options.Value.LibraryPath);
         if (!Directory.Exists(root))
             throw new DirectoryNotFoundException($"The library folder {root} doesn't exist, or Romdex can't see it.");
+        // Unreadable subfolders are skipped below, but an unreadable library would look empty.
+        try
+        {
+            _ = Directory.EnumerateFileSystemEntries(root).Any();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            throw new UnauthorizedAccessException($"Romdex isn't allowed to read the library folder {root}. Check its permissions, and on SELinux hosts its label.");
+        }
 
         progress.Report("Finding files");
         var found = Directory.EnumerateFiles(root, "*", new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = FileAttributes.Hidden })
@@ -108,6 +117,37 @@ public sealed class LibraryScanner(RomdexDbContext db, ContainerReader reader, I
         await hashing;
         await SaveAsync(batch, ids, ct);
         return new Result(found.Count, done - unreadable, removed.Count, unreadable, bytes);
+    }
+
+    /// <summary>Hashes some files that were just put in the library, such as by filing, without walking the rest.</summary>
+    /// <param name="paths">Relative to the library folder.</param>
+    public async Task ScanPathsAsync(IReadOnlyCollection<string> paths, CancellationToken ct)
+    {
+        var root = Path.GetFullPath(options.Value.LibraryPath);
+        var wanted = paths.Distinct(StringComparer.Ordinal).ToList();
+        var known = await db.LibraryFiles.AsNoTracking().Where(f => wanted.Contains(f.Path)).ToDictionaryAsync(f => f.Path, f => f.Id, StringComparer.Ordinal, ct);
+        var batch = new List<Hashed>();
+        var gone = new List<string>();
+        foreach (var path in wanted)
+        {
+            var file = new FileInfo(Path.Combine(root, path));
+            if (!file.Exists)
+            {
+                gone.Add(path);
+                continue;
+            }
+            try
+            {
+                batch.Add(new Hashed(path, file.Length, file.LastWriteTimeUtc, await reader.ReadAsync(file.FullName, ct), null));
+            }
+            catch (Exception e) when (e is UnreadableFileException or IOException or UnauthorizedAccessException)
+            {
+                batch.Add(new Hashed(path, file.Length, file.LastWriteTimeUtc, null, e.Message));
+            }
+        }
+        if (gone.Count > 0)
+            await db.LibraryFiles.Where(f => gone.Contains(f.Path)).ExecuteDeleteAsync(ct);
+        await SaveAsync(batch, known, ct);
     }
 
     private async Task SaveAsync(List<Hashed> batch, Dictionary<string, Guid> known, CancellationToken ct)

@@ -13,7 +13,7 @@ public sealed class ServerEvents(IJSRuntime js, AuthState auth) : IAsyncDisposab
     private IJSObjectReference? _module;
     private IJSObjectReference? _source;
 
-    /// <summary>The kind of thing that changed: <c>tasks</c>, for now.</summary>
+    /// <summary>The kind of thing that changed: <c>tasks</c> or <c>downloads</c>.</summary>
     public event Action<string>? Received;
 
     /// <summary>Whether events are arriving, so pollers can slow down.</summary>

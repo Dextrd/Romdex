@@ -1,6 +1,6 @@
 using System.Text.Json;
 using Romdex.Contracts.Plugins;
-using Romdex.Contracts.Plugins.Intake;
+using Romdex.Contracts.Plugins.Retrieval;
 
 namespace Romdex.Core.Tests;
 
@@ -29,25 +29,25 @@ public class ContractTests
     }
 
     [Fact]
-    public void An_intake_manifest_round_trips_with_its_settings_schema()
+    public void A_retrieval_manifest_round_trips_with_its_settings_schema()
     {
         const string json = """
             {
-              "id": "romdex.intake.inbox",
+              "id": "romdex.retrieval.inbox",
               "name": "Inbox folder",
               "version": "0.1.0",
-              "type": "intake",
+              "type": "retrieval",
               "contractVersion": "1.0",
               "settingsSchema": { "type": "object", "properties": { "folder": { "type": "string" } } },
               "access": { "files": ["inbox (read)", "staging (write)"] }
             }
             """;
 
-        var manifest = JsonSerializer.Deserialize<PluginManifest>(json, IntakeJson.Options)!;
+        var manifest = JsonSerializer.Deserialize<PluginManifest>(json, RetrievalJson.Options)!;
 
-        Assert.Equal(PluginType.Intake, manifest.Type);
+        Assert.Equal(PluginType.Retrieval, manifest.Type);
         Assert.Equal("object", manifest.SettingsSchema!.Value.GetProperty("type").GetString());
-        Assert.Contains("\"type\":\"intake\"", JsonSerializer.Serialize(manifest, IntakeJson.Options));
+        Assert.Contains("\"type\":\"retrieval\"", JsonSerializer.Serialize(manifest, RetrievalJson.Options));
     }
 
     [Fact]

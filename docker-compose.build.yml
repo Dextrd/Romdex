@@ -6,3 +6,12 @@ services:
     build:
       context: .
       dockerfile: docker/core.Dockerfile
+  igir-worker:
+    image: romdex-igir-worker:dev
+    build: igir-worker
+  retriever-inbox:
+    image: romdex-retriever-inbox:dev
+    build: plugins/retriever-inbox
+  retriever-dumps:
+    image: romdex-retriever-dumps:dev
+    build: plugins/retriever-dumps

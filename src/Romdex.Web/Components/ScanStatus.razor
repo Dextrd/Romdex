@@ -1,0 +1,113 @@
+@implements IDisposable
+@inject RomdexClient Api
+@inject AuthState Auth
+@inject ServerEvents Events
+
+@*
+    Shows the scan button, or what a scan or catalogue update is doing, with a menu of the other things done to the
+    whole library: updating the catalogue and reviewing files. Reloads when tasks change.
+*@
+<div class="row small scan-status">
+    @if (Running is { } task)
+    {
+        <a class="muted scan-progress" href="activity" title="See what it's doing">@(task.Progress ?? task.Title ?? "Starting…")</a>
+    }
+    else if (_error is not null)
+    {
+        <span class="error" title="@_error">@_error</span>
+    }
+    else if (_status is not null)
+    {
+        <span class="muted hide-narrow scan-count" title="@(_status.ScannedAt is { } at ? $"Scanned {Format.Ago(at)}" : "Not scanned yet")">@Format.Count(_status.Files, "file", "files")@(ToReview > 0 ? $", {ToReview} to review" : "")</span>
+    }
+    @if (Auth.May(UserPermissions.Scan))
+    {
+    <div class="split-button">
+        <button class="primary" disabled="@(Running is not null)" title="Read new and changed files, and match them against the catalogue" @onclick="ScanAsync">Scan</button>
+        <button class="primary more" disabled="@(Running is not null)" title="Update the catalogue, and more" aria-label="Update the catalogue, and more" aria-haspopup="menu"
+                aria-expanded="@(_menu ? "true" : "false")" @onclick="() => _menu = !_menu">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+        </button>
+        @if (_menu && Running is null)
+        {
+            <div class="menu-backdrop" @onclick="() => _menu = false"></div>
+            <div class="menu right scan-menu" role="menu">
+                <button type="button" role="menuitem" @onclick="ScanAsync">
+                    Scan for changes<span class="muted small">Read new and changed files, and match them</span>
+                </button>
+                <button type="button" role="menuitem" @onclick="RefreshAsync">
+                    Update the catalogue<span class="muted small">Read the DATs again, and what the catalogue plugins know@(_status?.CatalogueUpdatedAt is { } at ? $"; last updated {Format.Ago(at)}" : "")</span>
+                </button>
+                @if (Auth.May(UserPermissions.Review) && ToReview > 0)
+                {
+                    <hr />
+                    <a role="menuitem" href="review" @onclick="() => _menu = false">
+                        Review files<span class="muted small">@Format.Count(ToReview, "file matches", "files match") nothing, or can't be read</span>
+                    </a>
+                }
+            </div>
+        }
+    </div>
+    }
+</div>
+
+@code {
+    private LibraryStatus? _status;
+    private IReadOnlyList<TaskInfo> _active = [];
+    private bool _menu;
+    private string? _error;
+
+    // Only the tasks this button starts; downloads and conversions show on their own pages.
+    private TaskInfo? Running => _active.FirstOrDefault(t => t.Kind is "library-scan" or "catalogue-refresh");
+
+    private int ToReview => _status is null ? 0 : _status.Unknown + _status.Unreadable;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Events.Received += OnEvent;
+        await RefreshStatusAsync();
+    }
+
+    private void OnEvent(string type)
+    {
+        if (type is "tasks" or "connected")
+            InvokeAsync(async () =>
+            {
+                await RefreshStatusAsync();
+                StateHasChanged();
+            });
+    }
+
+    private async Task RefreshStatusAsync()
+    {
+        try
+        {
+            _active = await Api.ListTasksAsync(active: true);
+            _status = await Api.GetLibraryStatusAsync();
+        }
+        catch (HttpRequestException)
+        {
+            // Keep what's shown; the next event tries again.
+        }
+    }
+
+    private Task ScanAsync() => StartAsync(() => Api.ScanLibraryAsync());
+
+    private Task RefreshAsync() => StartAsync(() => Api.RefreshCatalogueAsync());
+
+    private async Task StartAsync(Func<Task<TaskInfo>> start)
+    {
+        _menu = false;
+        _error = null;
+        try
+        {
+            _active = [.. _active, await start()];
+        }
+        catch (RomdexApiException e)
+        {
+            _error = e.Message;
+        }
+    }
+
+    public void Dispose() => Events.Received -= OnEvent;
+}

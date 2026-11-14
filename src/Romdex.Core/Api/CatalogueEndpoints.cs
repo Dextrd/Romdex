@@ -57,7 +57,7 @@ public static class CatalogueEndpoints
                 await preferences.SaveAsync(system.Name, body, ct);
                 return Results.Ok(new SystemPreferencesInfo(body, true));
             })
-            .RequireScope(Scopes.Intake).WithName("SetSystemPreferences").WithSummary("Gives a system 1G1R preferences of its own.")
+            .RequireScope(Scopes.Download).WithName("SetSystemPreferences").WithSummary("Gives a system 1G1R preferences of its own.")
             .Produces<SystemPreferencesInfo>().ProducesValidationProblem().Produces(StatusCodes.Status404NotFound);
         systems.MapDelete("/{id:guid}/preferences", async (Guid id, RomdexDbContext db, Preferences preferences, CancellationToken ct) =>
             {
@@ -66,7 +66,7 @@ public static class CatalogueEndpoints
                 await preferences.SaveAsync(system.Name, null, ct);
                 return Results.Ok(new SystemPreferencesInfo(await preferences.GetDefaultAsync(ct), false));
             })
-            .RequireScope(Scopes.Intake).WithName("ResetSystemPreferences").WithSummary("Puts a system back on everyone's default preferences.")
+            .RequireScope(Scopes.Download).WithName("ResetSystemPreferences").WithSummary("Puts a system back on everyone's default preferences.")
             .Produces<SystemPreferencesInfo>().Produces(StatusCodes.Status404NotFound);
 
         systems.MapGet("/{id:guid}/report.csv", async (Guid id, LibraryViewBuilder views, RomdexDbContext db, CancellationToken ct) =>
@@ -84,7 +84,7 @@ public static class CatalogueEndpoints
                 await preferences.SaveDefaultAsync(body, ct);
                 return Results.Ok(body);
             })
-            .RequireScope(Scopes.Intake).WithTags("Catalogue").WithName("SetDefaultPreferences")
+            .RequireScope(Scopes.Download).WithTags("Catalogue").WithName("SetDefaultPreferences")
             .Produces<SystemPreferences>().ProducesValidationProblem();
 
         var titles = api.MapGroup("/titles").WithTags("Catalogue");
@@ -108,11 +108,11 @@ public static class CatalogueEndpoints
 
         titles.MapPost("/{id:guid}/ignore", (Guid id, RomdexDbContext db, LibraryViews cache, LibraryViewBuilder views, CancellationToken ct) =>
                 SetIgnoredAsync(id, true, db, cache, views, ct))
-            .RequireScope(Scopes.Intake).WithName("IgnoreTitle").WithSummary("Never list the title as missing. Doing it again changes nothing.")
+            .RequireScope(Scopes.Download).WithName("IgnoreTitle").WithSummary("Never list the title as missing. Doing it again changes nothing.")
             .Produces<TitleDetail>().Produces(StatusCodes.Status404NotFound);
         titles.MapDelete("/{id:guid}/ignore", (Guid id, RomdexDbContext db, LibraryViews cache, LibraryViewBuilder views, CancellationToken ct) =>
                 SetIgnoredAsync(id, false, db, cache, views, ct))
-            .RequireScope(Scopes.Intake).WithName("UnignoreTitle").WithSummary("List the title again.")
+            .RequireScope(Scopes.Download).WithName("UnignoreTitle").WithSummary("List the title again.")
             .Produces<TitleDetail>().Produces(StatusCodes.Status404NotFound);
 
         titles.MapPut("/{id:guid}/preferred", async (Guid id, ChoosePreferred body, RomdexDbContext db, LibraryViews cache, LibraryViewBuilder views, CancellationToken ct) =>
@@ -126,7 +126,7 @@ public static class CatalogueEndpoints
                 cache.Invalidate();
                 return Results.Ok(await DetailAsync(id, db, views, ct));
             })
-            .RequireScope(Scopes.Intake).WithName("ChoosePreferredDump").WithSummary("Prefer one dump of a title over what 1G1R picks, or let 1G1R pick again.")
+            .RequireScope(Scopes.Download).WithName("ChoosePreferredDump").WithSummary("Prefer one dump of a title over what 1G1R picks, or let 1G1R pick again.")
             .Produces<TitleDetail>().ProducesValidationProblem().Produces(StatusCodes.Status404NotFound);
 
         api.MapGet("/catalogue/search", async (string q, LibraryViewBuilder views, Guid? system, bool? have, int? skip, int? take, CancellationToken ct) =>

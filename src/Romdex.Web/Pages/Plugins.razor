@@ -22,9 +22,9 @@ else
         @Section(PluginType.Index, "Catalogue",
             "Where Romdex learns every verified dump of each system, from DATs, to tell what each of your files is. Romdex asks these in order and keeps the first match.",
             "No catalogue. Romdex can list your files, but can't tell what any of them are until you add one.")
-        @Section(PluginType.Intake, "Intake",
-            "Intake plugins run in their own containers and offer new dumps, such as files dropped into an inbox folder. Each is checked by its hash before it's filed.",
-            "No intake yet. Your library is still read, but nothing new comes in through Romdex.")
+        @Section(PluginType.Retrieval, "Retrievers",
+            "Retrievers run in their own containers and offer new dumps, such as files dropped into an inbox folder. Each is checked by its hash before it's filed.",
+            "No retrievers yet. Your library is still read, but nothing new comes in through Romdex.")
         @Section(PluginType.Connector, "Connected apps",
             "Apps that show your games, such as RomM, told to scan when something is filed. The first one that's on is used.",
             "No connected apps. Games are still filed, but nothing is told about it.")
@@ -32,7 +32,7 @@ else
 
     @if (_choosing is { } type)
     {
-        <Dialog Title="@(_adding is { } a ? $"Add {a.Name}" : $"Add to {SectionName(type)}")" OnClose="CloseAdd" Class="wide">
+        <Dialog Title="@(_adding is { } a ? $"Add {a.Name}" : AddTitle(type))" OnClose="CloseAdd" Class="wide">
             @if (_error is not null) { <p class="error">@_error</p> }
             @if (_adding is { } adding)
             {
@@ -125,14 +125,15 @@ else
 }
 
 @code {
-    /// <summary>Something that can be added: an intake plugin Romdex knows the usual address of, any other by its address, or a built-in plugin.</summary>
+    /// <summary>Something that can be added: a retriever Romdex knows the usual address of, any other by its address, or a built-in plugin.</summary>
     public sealed record Template(string Key, string Name, string Description, PluginType Type, string? Endpoint = null, AvailablePlugin? BuiltIn = null);
 
-    // The intake plugins that ship alongside Romdex, at the addresses the Compose file gives them.
+    // The retrievers that ship alongside Romdex, at the addresses the Compose file gives them.
     public static readonly Template[] KnownSources =
     [
-        new("inbox", "Inbox folder", "Offers files you drop into a folder, matched by their hashes.", PluginType.Intake, "http://intake-inbox:8080"),
-        new("other", "Another plugin", "Any plugin that speaks the intake contract, by its address.", PluginType.Intake, ""),
+        new("inbox", "Inbox folder", "Takes the dumps you drop into a folder, and finds games in it when you search.", PluginType.Retrieval, "http://retriever-inbox:8080"),
+        new("dumps", "Dumping tools", "Takes finished dumps from disc rippers' and cartridge dumpers' output, with their logs.", PluginType.Retrieval, "http://retriever-dumps:8080"),
+        new("other", "Another plugin", "Any plugin that speaks the retrieval contract, by its address.", PluginType.Retrieval, ""),
     ];
 
     private IReadOnlyList<PluginInfo>? _plugins;
@@ -178,7 +179,7 @@ else
 
     private async Task LoadAsync() => _plugins = await Api.ListPluginsAsync();
 
-    private IEnumerable<Template> Templates(PluginType type) => type == PluginType.Intake
+    private IEnumerable<Template> Templates(PluginType type) => type == PluginType.Retrieval
         ? KnownSources
         : _available.Where(a => a.Manifest.Type == type && a.Problem is null)
             .Select(a => new Template(a.Manifest.Id, a.Manifest.Name, a.Manifest.Description ?? "", type, BuiltIn: a));
@@ -198,14 +199,14 @@ else
         ? _plugins!.Any(p => p.PluginId == builtIn.Manifest.Id)
         : template.Endpoint is { Length: > 0 } url && _plugins!.Any(p => string.Equals(p.Endpoint, url.TrimEnd('/'), StringComparison.OrdinalIgnoreCase));
 
-    private static string SectionName(PluginType type) => type switch
+    private static string AddTitle(PluginType type) => type switch
     {
-        PluginType.Index => "Catalogue",
-        PluginType.Intake => "Intake",
-        _ => "Connected apps",
+        PluginType.Index => "Add to the catalogue",
+        PluginType.Retrieval => "Add a retriever",
+        _ => "Connect an app",
     };
 
-    private static bool Ordered(PluginType type) => type is PluginType.Intake or PluginType.Index;
+    private static bool Ordered(PluginType type) => type is PluginType.Retrieval or PluginType.Index;
 
     private RenderFragment Section(PluginType type, string title, string about, string empty) => __builder =>
     {

@@ -41,7 +41,7 @@ public sealed record UpdateLogin(string CurrentPassword, string? Username = null
 public static class UserPermissions
 {
     public const string Read = "read";
-    public const string Intake = "intake";
+    public const string Download = "download";
     public const string Play = "play";
     public const string Review = "review";
     public const string Files = "files";
@@ -58,7 +58,7 @@ public static class UserPermissions
     public static readonly IReadOnlyList<Permission> All =
     [
         new(Read, "Browse", "See the systems, what's owned and missing, what's arriving and what's running"),
-        new(Intake, "Intake", "Accept, reject and retry dumps as they arrive, set what each system prefers, and ignore titles"),
+        new(Download, "Download", "Get games through the retrievers, accept, reject and retry downloads, set what each system prefers, and ignore titles"),
         new(Play, "Play", "Play games from the library in the browser"),
         new(Review, "Review", "Look over unknown files and bad dumps, and keep or delete them"),
         new(Files, "Tidy files", "Rename, move and convert files in the library"),

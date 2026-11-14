@@ -73,4 +73,26 @@ public static class Format
     };
 
     public static string Label(DumpStatus status) => status == DumpStatus.Good ? "Have" : status.ToString();
+
+    public static string Label(DownloadState state) => state switch
+    {
+        DownloadState.Fetching => "Fetching",
+        DownloadState.Queued => "Waiting",
+        DownloadState.Working => "Working",
+        DownloadState.NeedsReview => "Needs review",
+        DownloadState.Filed => "Filed",
+        DownloadState.Discarded => "Not needed",
+        DownloadState.Rejected => "Rejected",
+        _ => "Failed",
+    };
+
+    public static string Badge(DownloadState state) => state switch
+    {
+        DownloadState.Fetching or DownloadState.Working => "active",
+        DownloadState.Queued => "active waiting",
+        DownloadState.NeedsReview => "partial",
+        DownloadState.Filed => "owned",
+        DownloadState.Failed => "missing",
+        _ => "neutral",
+    };
 }

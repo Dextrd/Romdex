@@ -21,7 +21,7 @@ public static class OpenApiSetup
             document.Info.Description =
                 "Find what's missing from a ROM library, verified by hash against the preservation DATs, and bring dumps in through plugins.\n\n"
                 + $"Apps authenticate with an API key in the `{AccessService.KeyHeader}` header, made under Settings → API. Each key has scopes, "
-                + "the same permissions users have (`read`, `intake`, `play`, `review` and so on), and never more than the user who made it; `admin` is all they may. Each operation below says the scope it needs. "
+                + "the same permissions users have (`read`, `download`, `play`, `review` and so on), and never more than the user who made it; `admin` is all they may. Each operation below says the scope it needs. "
                 + "The client guide (`docs/client-guide.md`) covers events, webhooks and errors.";
             document.Components ??= new OpenApiComponents();
             document.Components.SecuritySchemes ??= new Dictionary<string, IOpenApiSecurityScheme>();

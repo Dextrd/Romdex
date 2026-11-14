@@ -3,13 +3,13 @@ using Romdex.Contracts.Plugins;
 
 namespace Romdex.Client;
 
-// Plugins: index plugins and connectors load into the core; intake plugins run in their own containers and are
+// Plugins: index plugins and connectors load into the core; retrievers run in their own containers and are
 // added by URL. Every one is configured through a form rendered from its settings schema.
 
 /// <summary>A configured plugin.</summary>
 /// <param name="PluginId">The manifest ID, for example <c>romdex.index.dat-folder</c>.</param>
 /// <param name="Name">The name you gave it.</param>
-/// <param name="Endpoint">For intake plugins, the container's URL.</param>
+/// <param name="Endpoint">For retrievers, the container's URL.</param>
 /// <param name="Priority">Lower goes first: which index plugin's DAT wins when two have the same system.</param>
 /// <param name="Settings">Its settings, with secrets left out.</param>
 /// <param name="Manifest">What the plugin says about itself, including its settings schema and capabilities.</param>
@@ -27,13 +27,13 @@ public sealed record PluginInfo(
     JsonElement Settings,
     PluginManifest? Manifest);
 
-/// <summary>A plugin that can be set up: loaded into the core, or, for intake plugins, any container you point it at.</summary>
+/// <summary>A plugin that can be set up: loaded into the core, or, for retrievers, any container you point it at.</summary>
 /// <param name="Problem">Why it can't be set up, if it can't.</param>
 public sealed record AvailablePlugin(PluginManifest Manifest, string Source, string? Problem);
 
 /// <summary>Body of <c>POST /plugins</c>.</summary>
-/// <param name="PluginId">An in-process plugin from <c>GET /plugins/available</c>; leave out for an intake plugin.</param>
-/// <param name="Endpoint">An intake plugin's container URL, for example <c>http://intake-inbox:8080</c>.</param>
+/// <param name="PluginId">An in-process plugin from <c>GET /plugins/available</c>; leave out for a retriever.</param>
+/// <param name="Endpoint">A retriever's container URL, for example <c>http://retriever-inbox:8080</c>.</param>
 /// <param name="Name">Defaults to the plugin's name.</param>
 /// <param name="Settings">Defaults to the schema's defaults.</param>
 public sealed record AddPlugin(string? PluginId = null, string? Endpoint = null, string? Name = null, JsonElement? Settings = null);

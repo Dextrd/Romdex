@@ -1,13 +1,23 @@
 @page "/review"
 @inject RomdexClient Api
+@inject AuthState Auth
 
 <PageTitle>Review · Romdex</PageTitle>
 
 <h1>Review</h1>
 <p class="muted">
     Files in the library that match nothing in the catalogue, and files that couldn't be read. One with a dump's name but other hashes is
-    likely a bad or modified dump of it.
+    likely a bad or modified dump of it. Sending one to Downloads takes it out of the library, to be identified again or rejected.
 </p>
+
+@if (_waiting > 0)
+{
+    <div class="notice">@Format.Count(_waiting, "arrival waits", "arrivals wait") for review on the <a href="downloads">Downloads page</a>.</div>
+}
+@if (_error is not null)
+{
+    <div class="notice error">@_error</div>
+}
 
 @if (_page is null)
 {
@@ -26,6 +36,7 @@ else
                     <th>File</th>
                     <th class="num hide-narrow">Size</th>
                     <th>What's wrong</th>
+                    @if (CanReclaim) { <th></th> }
                 </tr>
             </thead>
             <tbody>
@@ -43,6 +54,16 @@ else
                             else { <span class="muted">Matches nothing</span> }
                             @if (file.Crc32 is not null) { <div class="hashes"><code title="CRC32">@file.Crc32</code><code title="SHA-1">@file.Sha1</code></div> }
                         </td>
+                        @if (CanReclaim)
+                        {
+                            <td class="actions">
+                                @if (file.Entry is null || _files.First(f => f.FileId == file.FileId) == file)
+                                {
+                                    <button disabled="@_busy.Contains(file.FileId)" @onclick="() => ReclaimAsync(file)"
+                                            title="Take the file out of the library and through Downloads again, where it can be identified afresh or rejected">Send to Downloads</button>
+                                }
+                            </td>
+                        }
                     </tr>
                 }
             </tbody>
@@ -60,11 +81,39 @@ else
 @code {
     private UnknownPage? _page;
     private List<UnknownFile> _files = [];
+    private int _waiting;
+    private string? _error;
+    private readonly HashSet<Guid> _busy = [];
+
+    private bool CanReclaim => Auth.May(UserPermissions.Review);
 
     protected override async Task OnInitializedAsync()
     {
         _page = await Api.ListUnknownAsync();
         _files = [.. _page.Items];
+        _waiting = (await Api.ListDownloadsAsync(DownloadState.NeedsReview, take: 1)).Waiting;
+    }
+
+    // The whole file goes, archive and all, so each archive gets one button.
+    private async Task ReclaimAsync(UnknownFile file)
+    {
+        _error = null;
+        _busy.Add(file.FileId);
+        try
+        {
+            await Api.ReclaimLibraryFileAsync(file.FileId);
+            _files.RemoveAll(f => f.FileId == file.FileId);
+            _page = await Api.ListUnknownAsync(take: Math.Max(_files.Count, 100));
+            _files = [.. _page.Items];
+        }
+        catch (Exception e) when (e is RomdexApiException or HttpRequestException)
+        {
+            _error = $"{file.Path}: {e.Message}";
+        }
+        finally
+        {
+            _busy.Remove(file.FileId);
+        }
     }
 
     private async Task MoreAsync()

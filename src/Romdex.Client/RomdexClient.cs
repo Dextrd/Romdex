@@ -200,6 +200,50 @@ public sealed class RomdexClient(HttpClient http)
     public async Task<UnknownPage> ListUnknownAsync(int skip = 0, int take = 100, CancellationToken ct = default) =>
         (await http.GetFromJsonAsync<UnknownPage>($"{Api}/library/unknown?skip={skip}&take={take}", RomdexJson.Options, ct))!;
 
+    // ---- Downloads ----
+
+    public async Task<DownloadsPage> ListDownloadsAsync(DownloadState? state = null, int skip = 0, int take = 50, CancellationToken ct = default) =>
+        (await http.GetFromJsonAsync<DownloadsPage>($"{Api}/downloads?skip={skip}&take={take}{(state is { } s ? $"&state={s}" : "")}", RomdexJson.Options, ct))!;
+
+    public Task<DownloadInfo?> GetDownloadAsync(Guid id, CancellationToken ct = default) => GetOrNullAsync<DownloadInfo>($"{Api}/downloads/{id}", ct);
+
+    public Task<DownloadInfo> AcceptDownloadAsync(Guid id, CancellationToken ct = default) => PostForAsync<DownloadInfo>($"{Api}/downloads/{id}/accept", null, ct);
+
+    public Task<DownloadInfo> RejectDownloadAsync(Guid id, CancellationToken ct = default) => PostForAsync<DownloadInfo>($"{Api}/downloads/{id}/reject", null, ct);
+
+    public Task<DownloadInfo> RetryDownloadAsync(Guid id, CancellationToken ct = default) => PostForAsync<DownloadInfo>($"{Api}/downloads/{id}/retry", null, ct);
+
+    /// <summary>Asks the plugins that hand over what arrived by themselves for anything new, now.</summary>
+    public Task CheckDownloadsAsync(CancellationToken ct = default) => PostAsync($"{Api}/downloads/check", null, ct);
+
+    /// <summary>Asks every retriever that searches for dumps of a title.</summary>
+    public Task<DownloadSearchResult> SearchDownloadsAsync(Guid titleId, Guid? dumpId = null, CancellationToken ct = default) =>
+        PostForAsync<DownloadSearchResult>($"{Api}/titles/{titleId}/search", new SearchDownloads(dumpId), ct);
+
+    /// <summary>Has a plugin stage a candidate it offered for a title, to be identified and filed.</summary>
+    public Task<DownloadInfo> StartDownloadAsync(StartDownload fetch, CancellationToken ct = default) => PostForAsync<DownloadInfo>($"{Api}/downloads/fetch", fetch, ct);
+
+    /// <summary>Takes a library file that matches nothing, or can't be read, out of the library and through Downloads again.</summary>
+    public Task<DownloadInfo> ReclaimLibraryFileAsync(Guid fileId, CancellationToken ct = default) =>
+        PostForAsync<DownloadInfo>($"{Api}/library/files/{fileId}/download", null, ct);
+
+    public async Task<FilingSettings> GetFilingAsync(Guid systemId, CancellationToken ct = default) =>
+        (await http.GetFromJsonAsync<FilingSettings>($"{Api}/systems/{systemId}/filing", RomdexJson.Options, ct))!;
+
+    public async Task<IReadOnlyList<StorageFormat>> ListStorageFormatsAsync(Guid systemId, CancellationToken ct = default) =>
+        await http.GetFromJsonAsync<List<StorageFormat>>($"{Api}/systems/{systemId}/filing/formats", RomdexJson.Options, ct) ?? [];
+
+    /// <summary>Which of a system's games aren't where its filing settings would put them. Nothing is moved.</summary>
+    public async Task<AdoptionReport> GetAdoptionAsync(Guid systemId, CancellationToken ct = default) =>
+        (await http.GetFromJsonAsync<AdoptionReport>($"{Api}/systems/{systemId}/filing/adoption", RomdexJson.Options, ct))!;
+
+    public async Task<FilingSettings> SetFilingAsync(Guid systemId, FilingSettings filing, CancellationToken ct = default)
+    {
+        using var response = await http.PutAsJsonAsync($"{Api}/systems/{systemId}/filing", filing, RomdexJson.Options, ct);
+        await EnsureAsync(response, ct);
+        return (await response.Content.ReadFromJsonAsync<FilingSettings>(RomdexJson.Options, ct))!;
+    }
+
     // ---- Stopping and ordering tasks ----
 
     public Task CancelTaskAsync(Guid id, CancellationToken ct = default) => PostAsync($"{Api}/tasks/{id}/cancel", null, ct);
@@ -394,6 +438,13 @@ public sealed class RomdexClient(HttpClient http)
         {
         }
         throw new RomdexApiException(response.StatusCode, string.IsNullOrWhiteSpace(message) ? $"{(int)response.StatusCode} {response.ReasonPhrase}" : message);
+    }
+
+    private async Task<T> PostForAsync<T>(string url, object? body, CancellationToken ct)
+    {
+        using var response = body is null ? await http.PostAsync(url, null, ct) : await http.PostAsync(url, JsonContent.Create(body, body.GetType(), options: RomdexJson.Options), ct);
+        await EnsureAsync(response, ct);
+        return (await response.Content.ReadFromJsonAsync<T>(RomdexJson.Options, ct))!;
     }
 
     private async Task<T?> GetOrNullAsync<T>(string url, CancellationToken ct)

@@ -16,3 +16,4 @@ sandbox/dats/
 
 # The Phase 1 gate library (tools/make-gate-library.py).
 /gate/
+__pycache__/

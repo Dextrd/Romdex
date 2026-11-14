@@ -2,6 +2,7 @@
 @implements IDisposable
 @inject RomdexClient Api
 @inject ServerEvents Events
+@inject AuthState Auth
 
 <PageTitle>@(_system?.Name ?? "System") · Romdex</PageTitle>
 
@@ -67,6 +68,70 @@ else
             </table>
         </div>
     }
+
+    @if (_filing is not null)
+    {
+        <h2>Filing</h2>
+        <p class="muted small">How downloads are filed. Files already in the library stay as they are.</p>
+        <div class="card filing">
+            <label class="field">
+                <span class="field-label">Folder</span>
+                <select disabled="@(!CanFile)" @onchange="e => SetFilingAsync(_filing with { Layout = Enum.Parse<LibraryLayout>((string)e.Value!) })">
+                    <option value="@LibraryLayout.Romm" selected="@(_filing.Layout == LibraryLayout.Romm)">A folder per platform, as RomM names them</option>
+                    <option value="@LibraryLayout.DatName" selected="@(_filing.Layout == LibraryLayout.DatName)">A folder named as the DAT is: @_system.Name</option>
+                </select>
+            </label>
+            <label class="field">
+                <span class="field-label">Stored as</span>
+                <select disabled="@(!CanFile)" @onchange="e => SetFilingAsync(_filing with { Storage = Enum.Parse<StorageFormat>((string)e.Value!) })">
+                    @foreach (var format in _formats)
+                    {
+                        <option value="@format" selected="@(_filing.Storage == format)">@StorageLabel(format)</option>
+                    }
+                </select>
+                <span class="muted small">A converted game is checked against the DAT before what it came as is deleted.</span>
+            </label>
+            <label class="field">
+                <span class="field-label">Another dump of a game you have</span>
+                <select disabled="@(!CanFile)" @onchange="e => SetFilingAsync(_filing with { Alternatives = Enum.Parse<AlternativePolicy>((string)e.Value!) })">
+                    <option value="@AlternativePolicy.File" selected="@(_filing.Alternatives == AlternativePolicy.File)">File it beside the one you have</option>
+                    <option value="@AlternativePolicy.Review" selected="@(_filing.Alternatives == AlternativePolicy.Review)">Hold it for review</option>
+                    <option value="@AlternativePolicy.Discard" selected="@(_filing.Alternatives == AlternativePolicy.Discard)">Throw it away</option>
+                </select>
+            </label>
+            @if (_filingError is not null) { <div class="error small">@_filingError</div> }
+            <div class="toolbar">
+                <button @onclick="CheckLibraryAsync" disabled="@_checking"
+                        title="Compare the games already in the library with where Downloads would file them. Nothing is moved.">Check the library</button>
+                @if (_adoption is { Problem: null } report && report.Checked > 0)
+                {
+                    <span class="muted small">@report.InPlace.ToString("N0") of @Format.Count(report.Checked, "game is", "games are") where Downloads would file @(report.Checked == 1 ? "it" : "them").</span>
+                }
+                else if (_adoption is { Problem: null })
+                {
+                    <span class="muted small">None of this system's games are in the library whole.</span>
+                }
+            </div>
+            @if (_adoption?.Problem is { } problem) { <div class="error small">@problem</div> }
+            @if (_adoption is { Moves.Count: > 0 } moves)
+            {
+                <p class="muted small">These would go elsewhere. Moving them isn't something Romdex does yet: this is so you can see what the settings would mean for the library you have.</p>
+                <table class="table small">
+                    <thead><tr><th>Game</th><th>Now</th><th>Would be</th></tr></thead>
+                    <tbody>
+                        @foreach (var move in moves.Moves)
+                        {
+                            <tr>
+                                <td>@move.Dump.Name</td>
+                                <td>@foreach (var path in move.From) { <div><code>@path</code></div> }</td>
+                                <td>@foreach (var path in move.To) { <div><code>@path</code></div> }</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    }
 }
 
 @code {
@@ -82,6 +147,54 @@ else
     private string _filter = "All";
     private string _query = "";
     private int _search;
+    private FilingSettings? _filing;
+    private IReadOnlyList<StorageFormat> _formats = [];
+    private string? _filingError;
+    private AdoptionReport? _adoption;
+    private bool _checking;
+
+    private async Task CheckLibraryAsync()
+    {
+        _checking = true;
+        try
+        {
+            _adoption = await Api.GetAdoptionAsync(Id);
+        }
+        catch (Exception e) when (e is RomdexApiException or HttpRequestException)
+        {
+            _adoption = new AdoptionReport(0, 0, [], e.Message);
+        }
+        finally
+        {
+            _checking = false;
+        }
+    }
+
+    private bool CanFile => Auth.May(UserPermissions.Files);
+
+    private static string StorageLabel(StorageFormat format) => format switch
+    {
+        StorageFormat.Keep => "As it arrives",
+        StorageFormat.Loose => "Loose files",
+        StorageFormat.Zip => "A zip per game",
+        StorageFormat.Chd => "CHD, made with chdman",
+        StorageFormat.Rvz => "RVZ, made with DolphinTool",
+        _ => format.ToString(),
+    };
+
+    private async Task SetFilingAsync(FilingSettings filing)
+    {
+        _filingError = null;
+        try
+        {
+            _filing = await Api.SetFilingAsync(Id, filing);
+            _adoption = null;
+        }
+        catch (Exception e) when (e is RomdexApiException or HttpRequestException)
+        {
+            _filingError = e.Message;
+        }
+    }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -103,6 +216,11 @@ else
         if (_system is null)
             return;
         _bios = (await Api.ListBiosAsync(Id)).Items.Where(b => b.Status != DumpStatus.Missing).ToList();
+        if (_filing is null)
+        {
+            _filing = await Api.GetFilingAsync(Id);
+            _formats = await Api.ListStorageFormatsAsync(Id);
+        }
         await LoadTitlesAsync(Math.Max(_titles.Count, PageSize));
     }
 

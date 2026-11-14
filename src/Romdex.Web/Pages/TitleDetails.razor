@@ -1,5 +1,6 @@
 @page "/titles/{Id:guid}"
 @inject RomdexClient Api
+@inject AuthState Auth
 
 <PageTitle>@(_title?.Name ?? "Game") · Romdex</PageTitle>
 
@@ -16,7 +17,13 @@ else
     var held = _title.Dumps.Where(d => d.Status != DumpStatus.Missing).ToList();
     var others = _title.Dumps.Where(d => d.Status == DumpStatus.Missing).ToList();
     <p class="small"><a href="">Library</a> / <a href="systems/@_title.SystemId">@_title.SystemName</a></p>
-    <h1>@_title.Name</h1>
+    <div class="row">
+        <h1>@_title.Name</h1>
+        @if (Auth.May(UserPermissions.Download) && _title.Status != TitleStatus.Owned)
+        {
+            <button @onclick="() => _getting = (null, _title.Name)" title="Find it through the retrievers">Get</button>
+        }
+    </div>
     @if (_title.Status != TitleStatus.Missing)
     {
         <p><span class="badge @Format.Badge(_title.Status)">@Format.Label(_title.Status)</span></p>
@@ -43,6 +50,11 @@ else
             </div>
         </details>
     }
+
+    @if (_getting is { } getting)
+    {
+        <GetDialog TitleId="Id" DumpId="getting.DumpId" Name="@getting.Name" OnClose="() => _getting = null" />
+    }
 }
 
 @code {
@@ -50,6 +62,7 @@ else
 
     private TitleDetail? _title;
     private bool _notFound;
+    private (Guid? DumpId, string Name)? _getting;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -57,7 +70,7 @@ else
         _notFound = _title is null;
     }
 
-    private static RenderFragment Dump(DumpInfo dump) => __builder =>
+    private RenderFragment Dump(DumpInfo dump) => __builder =>
     {
         <div class="dump">
             <div class="dump-head">
@@ -65,6 +78,10 @@ else
                 @if (dump.Status != DumpStatus.Missing)
                 {
                     <span class="badge @Format.Badge(dump.Status)">@(dump.Status == DumpStatus.Good ? "Verified" : dump.Status.ToString())</span>
+                }
+                @if (dump.Status != DumpStatus.Good && Auth.May(UserPermissions.Download))
+                {
+                    <button class="small" @onclick="() => _getting = (dump.Id, dump.Name)" title="Find this dump through the retrievers">Get this dump</button>
                 }
             </div>
             <div class="muted small">

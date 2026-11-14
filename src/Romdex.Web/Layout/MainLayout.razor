@@ -11,14 +11,18 @@
 @* On a phone, the pages go on a line of their own under the rest, as icons with the current page's name. Elsewhere, where the pages' names don't fit on their line, they're icons. *@
 <header class="topbar" @ref="_topbar">
     <a class="brand" href=""><Logo />Romdex</a>
-    @* Intake joins these with the phase that brings it. *@
     <nav class="nav">
         <NavLink href="" Match="NavLinkMatch.All" class="@(OnLibrary ? "active" : null)" title="Library">@PageIcon("library")<span class="nav-label">Library</span></NavLink>
-        <NavLink href="search" title="Search">@PageIcon("search")<span class="nav-label">Search</span></NavLink>
-        <NavLink href="review" title="Review">@PageIcon("review")<span class="nav-label">Review</span></NavLink>
         <NavLink href="activity" title="Activity">@PageIcon("activity")<span class="nav-label">Activity</span></NavLink>
+        <NavLink href="downloads" title="Downloads">@PageIcon("downloads")<span class="nav-label">Downloads</span></NavLink>
+        @if (Auth.May(UserPermissions.Review))
+        {
+            <NavLink href="review" title="Review">@PageIcon("review")<span class="nav-label">Review</span></NavLink>
+        }
+        <NavLink href="search" title="Search">@PageIcon("search")<span class="nav-label">Search</span></NavLink>
     </nav>
     <span class="spacer"></span>
+    <ScanStatus />
     @* Settings sits with the account, as a gear. *@
     <NavLink href="@SettingsHref" Match="NavLinkMatch.Prefix" class="topbar-icon" title="Settings" aria-label="Settings">
         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -47,6 +51,9 @@
                     break;
                 case "search":
                     <circle cx="11" cy="11" r="6" /><path d="M20 20l-4.5-4.5" />
+                    break;
+                case "downloads":
+                    <path d="M12 4v10" /><path d="M7.5 9.5L12 14l4.5-4.5" /><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
                     break;
                 case "review":
                     <path d="M4 13l2.5-7h11L20 13v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z" /><path d="M4 13h4.5l1 2h5l1-2H20" />

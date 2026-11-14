@@ -35,7 +35,7 @@ public static class SystemEndpoints
                 Contracts: new Dictionary<string, string>
                 {
                     ["index"] = ContractVersions.Index.ToString(),
-                    ["intake"] = ContractVersions.Intake.ToString(),
+                    ["retrieval"] = ContractVersions.Retrieval.ToString(),
                     ["connector"] = ContractVersions.Connector.ToString(),
                 }))
             .AllowAnyone()
@@ -46,7 +46,7 @@ public static class SystemEndpoints
                 new LogPage(log.After(after, Math.Clamp(limit, 1, ActivityLog.PageLimit)), log.Latest))
             .RequireScope(Scopes.Settings)
             .WithName("GetLog")
-            .WithSummary("Recent activity, as far back as the log settings keep in memory: scans, intake, tasks, warnings and errors.");
+            .WithSummary("Recent activity, as far back as the log settings keep in memory: scans, downloads, tasks, warnings and errors.");
 
         var settings = api.MapGroup("/settings").WithTags("Settings").RequireScope(Scopes.Settings);
         settings.MapGet("/log", (SettingsService s, CancellationToken ct) => s.GetLogAsync(ct)).WithName("GetLogSettings");

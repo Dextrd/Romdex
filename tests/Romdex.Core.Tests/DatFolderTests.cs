@@ -51,6 +51,26 @@ public sealed class DatFolderTests : IDisposable
     }
 
     [Fact]
+    [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
+    public async Task A_folder_Romdex_may_not_read_says_so_rather_than_looking_empty()
+    {
+        File.Copy(Fixture, Path.Combine(_folder, "handheld.dat"));
+        File.SetUnixFileMode(_folder, UnixFileMode.None);
+        try
+        {
+            var plugin = Create();
+            var health = await plugin.CheckHealthAsync(default);
+            Assert.Equal(HealthStatus.Unhealthy, health.Status);
+            Assert.Contains("isn't allowed to read", health.Message);
+            await Assert.ThrowsAsync<UnauthorizedAccessException>(() => plugin.ListSystemsAsync(default));
+        }
+        finally
+        {
+            File.SetUnixFileMode(_folder, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+    }
+
+    [Fact]
     public async Task The_folder_keeps_the_newest_DAT_per_system_zipped_or_not()
     {
         var plugin = Create();

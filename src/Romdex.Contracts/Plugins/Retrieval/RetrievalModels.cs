@@ -1,23 +1,26 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Romdex.Contracts.Plugins.Intake;
+namespace Romdex.Contracts.Plugins.Retrieval;
 
-// The intake contract (version 1.0) as DTOs. Intake plugins run in their own containers and answer over HTTP, as
+// The retrieval contract (version 1.0) as DTOs. Retriever plugins run in their own containers and answer over HTTP, as
 // Melodex's retrieval plugins do; settings travel with every call, so a container keeps no setup of its own. A plugin
 // finds dumps for a game the core asks about, or hands over what arrived by itself, such as an inbox folder's files.
 // Either way the core works out what the files are by hash, and files nothing it can't verify. Romdex ships no plugin
 // that fetches commercial games.
 //
-//   GET    /v1/manifest             the plugin's PluginManifest, with type intake
+//   GET    /v1/manifest             the plugin's PluginManifest, with type retrieval
 //   POST   /v1/health               HealthRequest → HealthReport
 //   POST   /v1/checks/{id}          HealthRequest → CheckResult, for each check the manifest offers
 //   POST   /v1/search               SearchRequest → SearchResponse, with the search capability
-//   POST   /v1/fetch                FetchRequest → FetchStatus, with the search capability; returns once accepted
+//   POST   /v1/list                 ListRequest → ListResponse, with the list capability
+//   POST   /v1/fetch                FetchRequest → FetchStatus; returns once accepted
 //   GET    /v1/fetch/{jobId}        → FetchStatus
 //   DELETE /v1/fetch/{jobId}        with the cancel capability
 //
-// Listing what arrived by itself comes with Phase 2, which adds it here as the list capability.
+// Search and list both answer with candidates, and either kind is staged the same way, through /v1/fetch: a listed one
+// has no target. The core stages a listed candidate once, by its ID, so one that's kept in place and listed again
+// should get a new ID only when it changes.
 
 /// <summary>Body of <c>POST /v1/health</c> and <c>POST /v1/checks/{id}</c>.</summary>
 /// <param name="Settings">The instance's settings.</param>
@@ -31,7 +34,7 @@ public sealed record CheckResult(bool Passed, string Message);
 /// <param name="Title">The game's name without regions or versions.</param>
 /// <param name="Dumps">Its dumps, the one the user prefers first. Any of them will do unless <paramref name="DumpName"/> says otherwise.</param>
 /// <param name="DumpName">The one dump wanted, when the user picked one.</param>
-public sealed record IntakeTarget(string System, string Title, IReadOnlyList<TargetDump> Dumps, string? DumpName = null);
+public sealed record RetrievalTarget(string System, string Title, IReadOnlyList<TargetDump> Dumps, string? DumpName = null);
 
 /// <summary>One dump of a target, as the DAT lists it.</summary>
 /// <param name="Name">Its full name, with regions and versions, such as <c>Game (USA) (Rev 1)</c>.</param>
@@ -52,7 +55,7 @@ public sealed record TargetFile(string Name, long Size, string? Crc32, string? M
 /// <param name="Settings">The instance's settings.</param>
 /// <param name="Target">What to find.</param>
 /// <param name="Limit">The most candidates to return.</param>
-public sealed record SearchRequest(JsonElement Settings, IntakeTarget Target, int Limit = 10);
+public sealed record SearchRequest(JsonElement Settings, RetrievalTarget Target, int Limit = 10);
 
 /// <summary>Answer to <c>POST /v1/search</c>.</summary>
 /// <param name="Candidates">What the plugin could fetch, best first.</param>
@@ -71,6 +74,9 @@ public sealed record SearchResponse(IReadOnlyList<Candidate> Candidates);
 /// <param name="Size">Its size in bytes, if known.</param>
 /// <param name="Verified">Whether the source gives checksums that match the target's, so it's known to be a good dump.</param>
 /// <param name="Score">The plugin's confidence from 0 to 1 that it's the target.</param>
+/// <param name="Notes">
+/// Anything that helps someone reviewing it, such as a dumper's log or a ripper's own hash report, as plain text.
+/// </param>
 public sealed record Candidate(
     string CandidateId,
     string Name,
@@ -80,17 +86,30 @@ public sealed record Candidate(
     string? Format = null,
     long? Size = null,
     bool? Verified = null,
-    double? Score = null);
+    double? Score = null,
+    string? Notes = null);
+
+/// <summary>Body of <c>POST /v1/list</c>.</summary>
+/// <param name="Settings">The instance's settings.</param>
+public sealed record ListRequest(JsonElement Settings);
+
+/// <summary>Answer to <c>POST /v1/list</c>.</summary>
+/// <param name="Candidates">
+/// What's arrived and not yet staged, oldest first. A candidate's ID must stay the same while it's listed, so the
+/// core doesn't stage it twice; one that changes, such as a file still being copied in, is best left off until it's
+/// settled.
+/// </param>
+public sealed record ListResponse(IReadOnlyList<Candidate> Candidates);
 
 /// <summary>Body of <c>POST /v1/fetch</c>.</summary>
 /// <param name="Settings">The instance's settings.</param>
 /// <param name="JobId">The core's ID for the job, for <c>GET</c> and <c>DELETE /v1/fetch/{jobId}</c>.</param>
-/// <param name="Target">What the candidate was chosen for.</param>
-/// <param name="Candidate">The candidate chosen, as search returned it.</param>
+/// <param name="Target">What the candidate was chosen for; null for one from <c>/v1/list</c>.</param>
+/// <param name="Candidate">The candidate chosen, as search or list returned it.</param>
 /// <param name="StagingDirectory">
 /// The folder to write into, relative to the staging volume. The core makes it; the plugin writes only inside it.
 /// </param>
-public sealed record FetchRequest(JsonElement Settings, string JobId, IntakeTarget Target, Candidate Candidate, string StagingDirectory);
+public sealed record FetchRequest(JsonElement Settings, string JobId, RetrievalTarget? Target, Candidate Candidate, string StagingDirectory);
 
 /// <summary>Where a fetch is.</summary>
 public enum FetchState
@@ -124,23 +143,26 @@ public sealed record FetchStatus(string JobId, FetchState State, double? Progres
 /// <param name="Size">Its size in bytes.</param>
 public sealed record FetchedFile(string Path, long Size);
 
-/// <summary>Capabilities an intake plugin can declare in its manifest.</summary>
-public static class IntakeCapabilities
+/// <summary>Capabilities a retriever can declare in its manifest.</summary>
+public static class RetrievalCapabilities
 {
     /// <summary>Searches for a game and fetches what it finds: <c>/v1/search</c> and <c>/v1/fetch</c>.</summary>
     public const string Search = "search";
+
+    /// <summary>Hands over what arrived by itself, such as an inbox folder's files: <c>/v1/list</c> and <c>/v1/fetch</c>.</summary>
+    public const string List = "list";
 
     /// <summary>Can stop a fetch: <c>DELETE /v1/fetch/{jobId}</c>.</summary>
     public const string Cancel = "cancel";
 }
 
-/// <summary>An error from an intake plugin, as JSON with a 4xx or 5xx status.</summary>
+/// <summary>An error from a retriever, as JSON with a 4xx or 5xx status.</summary>
 /// <param name="Error">What went wrong, for people.</param>
 /// <param name="Code">A stable code for programs, if there is one.</param>
-public sealed record IntakeError(string Error, string? Code = null);
+public sealed record RetrievalError(string Error, string? Code = null);
 
-/// <summary>Serializer options matching the intake plugins' wire format.</summary>
-public static class IntakeJson
+/// <summary>Serializer options matching the retrievers' wire format.</summary>
+public static class RetrievalJson
 {
     /// <summary>Serializer options matching the wire format.</summary>
     public static JsonSerializerOptions Options { get; } = new(JsonSerializerDefaults.Web)

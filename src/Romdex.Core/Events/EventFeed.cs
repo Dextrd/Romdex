@@ -8,7 +8,7 @@ using Romdex.Client;
 namespace Romdex.Core.Events;
 
 /// <summary>
-/// What changed, for <c>GET /events</c>: for now, background tasks. Events say only what kind of thing changed, and
+/// What changed, for <c>GET /events</c>: background tasks and downloads. Events say only what kind of thing changed, and
 /// clients reload what they show. It watches database writes as an interceptor, so no write path can forget to announce
 /// itself.
 /// </summary>
@@ -19,6 +19,7 @@ namespace Romdex.Core.Events;
 public sealed class EventFeed : DbCommandInterceptor
 {
     public const string Tasks = "tasks";
+    public const string Downloads = "downloads";
 
     /// <summary>How long changes of one kind are gathered into one event.</summary>
     public static readonly TimeSpan Coalesce = TimeSpan.FromMilliseconds(250);
@@ -26,6 +27,7 @@ public sealed class EventFeed : DbCommandInterceptor
     private static readonly (string Table, string[] Kinds)[] Tables =
     [
         ("\"BackgroundTasks\"", [Tasks]),
+        ("\"Downloads\"", [Downloads]),
     ];
 
     private readonly ConcurrentDictionary<Channel<Message>, byte> _subscribers = new();

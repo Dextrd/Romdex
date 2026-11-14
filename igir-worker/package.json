@@ -1,0 +1,19 @@
+{
+  "name": "romdex-igir-worker",
+  "version": "0.1.0",
+  "description": "Romdex's igir worker: files arrivals into the library with igir, converts them with chdman and DolphinTool, and reads CHDs and RVZs.",
+  "private": true,
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "igir": "5.8.0"
+  }
+}

@@ -14,7 +14,7 @@ out everywhere else.
 | Permission | Allows |
 | --- | --- |
 | **Browse** | Seeing the systems, what's in the library, what's arriving and what's running |
-| **Intake** | Accepting, rejecting and retrying dumps as they arrive, setting what each system prefers, and ignoring titles |
+| **Download** | Getting games through the retrievers, accepting, rejecting and retrying downloads, setting what each system prefers, and ignoring titles |
 | **Play** | Playing games from the library in the browser |
 | **Review** | Looking over unknown files and bad dumps, and keeping or deleting them |
 | **Tidy files** | Renaming, moving and converting files in the library |

@@ -35,7 +35,7 @@ public sealed record TaskEventData(TaskInfo Task);
 public sealed record PingEventData(string Message);
 
 /// <summary>A server-sent event from <c>GET /events</c>: what changed, so a client can reload what it shows.</summary>
-/// <param name="Type"><c>tasks</c> for now; later phases add the library and intake.</param>
+/// <param name="Type"><c>tasks</c> for now; later phases add the library and downloads.</param>
 public sealed record ServerEvent(string Type, DateTime At);
 
 // ---- Webhooks ----

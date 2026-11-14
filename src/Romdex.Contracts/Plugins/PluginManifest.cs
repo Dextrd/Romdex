@@ -11,7 +11,7 @@ public enum PluginType
     Index,
 
     /// <summary>Finds dumps of a game, or hands over ones that arrived, into staging. Runs out of process behind the HTTP contract.</summary>
-    Intake,
+    Retrieval,
 
     /// <summary>Tells an app that uses the library, such as RomM, about new games, and opens games there.</summary>
     Connector,
@@ -19,7 +19,7 @@ public enum PluginType
 
 /// <summary>
 /// Describes a plugin to the core and the web app. Every plugin ships one: .NET plugins return it from
-/// <see cref="IPluginFactory.Manifest"/>, intake plugins serve it at <c>GET /v1/manifest</c>.
+/// <see cref="IPluginFactory.Manifest"/>, retrievers serve it at <c>GET /v1/manifest</c>.
 /// </summary>
 public sealed record PluginManifest
 {
@@ -45,7 +45,7 @@ public sealed record PluginManifest
     public string? Homepage { get; init; }
 
     /// <summary>
-    /// Capability names from <see cref="Index.IndexCapabilities"/>, <see cref="Intake.IntakeCapabilities"/> or
+    /// Capability names from <see cref="Index.IndexCapabilities"/>, <see cref="Retrieval.RetrievalCapabilities"/> or
     /// <see cref="Connectors.ConnectorCapabilities"/>.
     /// The core and API only offer what is declared here.
     /// </summary>
@@ -70,7 +70,7 @@ public sealed record PluginManifest
     public double? MaxRequestsPerSecond { get; init; }
 
     /// <summary>
-    /// Intake plugins only: checks the plugin's settings offer as buttons, each answered by
+    /// Retriever plugins only: checks the plugin's settings offer as buttons, each answered by
     /// <c>POST /v1/checks/{id}</c>, for things the health check doesn't cover.
     /// </summary>
     public IReadOnlyList<PluginCheck> Checks { get; init; } = [];

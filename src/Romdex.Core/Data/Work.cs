@@ -23,10 +23,10 @@ public class PluginInstance
     /// <summary>Settings as JSON, validated against the manifest's schema.</summary>
     public string SettingsJson { get; set; } = "{}";
 
-    /// <summary>For intake plugins, the base URL of the plugin's container.</summary>
+    /// <summary>For retrievers, the base URL of the plugin's container.</summary>
     public string? Endpoint { get; set; }
 
-    /// <summary>For intake plugins, the manifest as the container last served it, so capabilities are known offline.</summary>
+    /// <summary>For retrievers, the manifest as the container last served it, so capabilities are known offline.</summary>
     public string? ManifestJson { get; set; }
 
     /// <summary>Lower runs first: which index plugin's DAT wins when two have the same system.</summary>

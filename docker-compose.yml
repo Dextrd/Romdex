@@ -2,16 +2,27 @@
 # file, and start it.
 #
 # Settings, from the environment or a .env file beside this one:
-#   ROMS_PATH        your game library (needed)
-#   DATS_PATH        a folder of No-Intro and Redump DATs (default ./dats)
-#   ROMDEX_PORT      the port the web app is on (default 8788)
-#   ROMDEX_VERSION   the release, such as 1.0.0; latest follows each one
+#   ROMS_PATH         your game library (needed)
+#   DATS_PATH         a folder of No-Intro and Redump DATs (default ./dats)
+#   PUID, PGID        the user and group that own the library, as `id` shows them (default 1000)
+#   ROMDEX_PORT       the port the web app is on (default 8788)
+#   ROMDEX_VERSION    the release, such as 1.0.0; latest follows each one
+#   INBOX_PATH        a folder to drop dumps into for the inbox plugin (default ./inbox)
+#   COMPOSE_PROFILES  more retrievers, comma-separated: dumps
+#   DUMPS_PATH        your dumping tools' output folder, for dumps (default ./dumps)
 #
-# Open http://your-server:8788 and setup walks you through the rest.
+# Open http://your-server:8788 and setup walks you through the rest. Add the retrievers under Settings → Plugins,
+# where they're among the templates.
 # To build from source instead: docker compose -f docker-compose.yml -f docker-compose.build.yml up --build
 #
-# The igir worker (the only thing that writes the library), the intake plugins and EmulatorJS join this file in
-# later phases. Until then Romdex only reads.
+# On SELinux hosts, label the folders you mount for containers first: chcon -R -t container_file_t <folder>.
+# With podman, files carry the categories of the container that wrote them, and dumps pass from a
+# plugin through staging to the igir worker. Give every container here the same
+# `security_opt: ["label=level:s0:c100,c200"]` so they can read each other's files.
+
+x-plugin: &plugin
+  user: "${PUID:-1000}:${PGID:-1000}"
+  restart: unless-stopped
 
 services:
   core:
@@ -19,13 +30,47 @@ services:
     container_name: romdex-core
     ports:
       - "${ROMDEX_PORT:-8788}:8080"
+    environment:
+      Romdex__WorkerUrl: http://igir-worker:8080
     volumes:
       - config:/config
       - ${ROMS_PATH:?Set ROMS_PATH to your game library}:/roms:ro
       - ${DATS_PATH:-./dats}:/dats:ro
       - staging:/staging
+    depends_on:
+      - igir-worker
     # A factory reset stops Romdex for it to start afresh, so it has to come back by itself.
     restart: unless-stopped
+
+  # Files what arrives with igir, and makes and reads CHDs and RVZs. The only thing that writes the library; the core
+  # only reads it. It's GPL, as igir, chdman and DolphinTool are, so it's a container of its own.
+  igir-worker:
+    <<: *plugin
+    image: ghcr.io/dextrd/romdex-igir-worker:${ROMDEX_VERSION:-latest}
+    container_name: romdex-igir-worker
+    volumes:
+      - ${ROMS_PATH:?Set ROMS_PATH to your game library}:/roms
+      - staging:/staging
+
+  # Retriever plugins, one container each.
+  retriever-inbox:
+    <<: *plugin
+    image: ghcr.io/dextrd/romdex-retriever-inbox:${ROMDEX_VERSION:-latest}
+    container_name: romdex-retriever-inbox
+    volumes:
+      - ${INBOX_PATH:-./inbox}:/inbox
+      - staging:/staging
+
+  # The rest only run when named in COMPOSE_PROFILES.
+  retriever-dumps:
+    <<: *plugin
+    profiles: [dumps]
+    image: ghcr.io/dextrd/romdex-retriever-dumps:${ROMDEX_VERSION:-latest}
+    container_name: romdex-retriever-dumps
+    volumes:
+      # Read-only, as it copies by default; make it writable to have dumps moved out.
+      - ${DUMPS_PATH:-./dumps}:/dumps:ro
+      - staging:/staging
 
 volumes:
   config:

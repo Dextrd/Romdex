@@ -26,7 +26,7 @@ LABEL org.opencontainers.image.title="Romdex" \
       org.opencontainers.image.source="https://github.com/dextrd/Romdex" \
       org.opencontainers.image.licenses="MIT"
 WORKDIR /app
-# Staging is shared with the igir worker and the intake plugins, which run as other users. Whichever image first
+# Staging is shared with the igir worker and the retrievers, which run as other users. Whichever image first
 # mounts a new volume sets its owner, so every image makes it writable by all, sticky so nobody removes another's jobs.
 RUN mkdir -p /config /roms /dats /staging /plugins \
     && chown -R $APP_UID /config /plugins \

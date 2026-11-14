@@ -55,7 +55,16 @@ public sealed class DatFolder(string folder) : IIndexPlugin
     {
         if (!Directory.Exists(folder))
             return Task.FromResult(new HealthReport(HealthStatus.Unhealthy, $"There's no folder {folder}, or Romdex can't see it."));
-        var (systems, unreadable) = Read(cancellationToken);
+        (Dictionary<string, (IndexSystem System, string File)> Systems, List<string> Unreadable) read;
+        try
+        {
+            read = Read(cancellationToken);
+        }
+        catch (UnauthorizedAccessException e)
+        {
+            return Task.FromResult(new HealthReport(HealthStatus.Unhealthy, e.Message));
+        }
+        var (systems, unreadable) = read;
         var skipped = unreadable.Count == 0 ? "" : $" {Count(unreadable.Count, "file")} couldn't be read as DATs: {string.Join(", ", unreadable.Take(3))}{(unreadable.Count > 3 ? "…" : "")}.";
         return Task.FromResult(systems.Count == 0
             ? new HealthReport(HealthStatus.Degraded, $"No DATs in {folder} yet. Drop No-Intro or Redump DATs in.{skipped}")
@@ -83,6 +92,15 @@ public sealed class DatFolder(string folder) : IIndexPlugin
         var unreadable = new List<string>();
         if (!Directory.Exists(folder))
             return (systems, unreadable);
+        // Unreadable subfolders are skipped below, but an unreadable DAT folder would look empty.
+        try
+        {
+            _ = Directory.EnumerateFileSystemEntries(folder).Any();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            throw new UnauthorizedAccessException($"Romdex isn't allowed to read the DAT folder {folder}. Check its permissions, and on SELinux hosts its label.");
+        }
         var files = Directory.EnumerateFiles(folder, "*", new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true })
             .Where(f => Extensions.Contains(Path.GetExtension(f), StringComparer.OrdinalIgnoreCase));
         foreach (var file in files)

@@ -28,8 +28,8 @@ public static class ContractVersions
     /// <summary>Index plugins: what exists.</summary>
     public static readonly ContractVersion Index = new(1, 0);
 
-    /// <summary>Intake plugins: how dumps arrive (HTTP contract).</summary>
-    public static readonly ContractVersion Intake = new(1, 0);
+    /// <summary>Retriever plugins: how dumps arrive (HTTP contract).</summary>
+    public static readonly ContractVersion Retrieval = new(1, 0);
 
     /// <summary>Connectors: where games are used.</summary>
     public static readonly ContractVersion Connector = new(1, 0);
@@ -38,7 +38,7 @@ public static class ContractVersions
     public static ContractVersion For(PluginType type) => type switch
     {
         PluginType.Index => Index,
-        PluginType.Intake => Intake,
+        PluginType.Retrieval => Retrieval,
         PluginType.Connector => Connector,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, null),
     };

@@ -43,7 +43,7 @@ public class ApiTests(RomdexFactory factory) : IClassFixture<RomdexFactory>
         var version = await _client.GetFromJsonAsync<VersionResponse>("/api/v1/version");
 
         Assert.Equal("v1", version!.ApiVersion);
-        Assert.Equal(["connector", "index", "intake"], version.Contracts.Keys.Order());
+        Assert.Equal(["connector", "index", "retrieval"], version.Contracts.Keys.Order());
     }
 
     [Fact]

@@ -3,7 +3,7 @@ using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 using Romdex.Client;
 using Romdex.Contracts.Plugins;
-using Romdex.Contracts.Plugins.Intake;
+using Romdex.Contracts.Plugins.Retrieval;
 using Romdex.Core.Access;
 using Romdex.Core.Data;
 using Romdex.Core.Plugins;
@@ -22,31 +22,31 @@ public static class PluginEndpoints
             .WithName("ListPlugins").WithSummary("Configured plugins by type, in the order they're used. Secrets are left out.");
 
         plugins.MapGet("/available", (PluginCatalog catalog) => catalog.All
-                .Where(p => p.Manifest.Type != PluginType.Intake)
+                .Where(p => p.Manifest.Type != PluginType.Retrieval)
                 .Select(p => new AvailablePlugin(p.Manifest, p.Source, p.Rejection)).ToList())
             .WithName("ListAvailablePlugins")
-            .WithSummary("Index plugins and connectors loaded into the core. Intake plugins run in their own containers and are added by URL.");
+            .WithSummary("Index plugins and connectors loaded into the core. Retriever plugins run in their own containers and are added by URL.");
 
-        plugins.MapPost("", async (AddPlugin body, RomdexDbContext db, PluginCatalog catalog, IntakePlugins intake, CancellationToken ct) =>
+        plugins.MapPost("", async (AddPlugin body, RomdexDbContext db, PluginCatalog catalog, RetrievalPlugins retrievers, CancellationToken ct) =>
             {
                 PluginManifest manifest;
                 string? endpoint = null;
                 if (body.Endpoint is { Length: > 0 } url)
                 {
                     if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https"))
-                        return Problem("endpoint", "Must be an http or https URL, for example http://intake-inbox:8080.");
+                        return Problem("endpoint", "Must be an http or https URL, for example http://retriever-inbox:8080.");
                     try
                     {
-                        manifest = await IntakeClient.GetManifestAsync(intake.Client(url), ct);
+                        manifest = await RetrievalClient.GetManifestAsync(retrievers.Client(url), ct);
                     }
-                    catch (Exception e) when (e is HttpRequestException or IntakeException or JsonException or TaskCanceledException && !ct.IsCancellationRequested)
+                    catch (Exception e) when (e is HttpRequestException or RetrievalException or JsonException or TaskCanceledException && !ct.IsCancellationRequested)
                     {
                         return Problem("endpoint", $"Couldn't read the plugin's manifest from {url}: {e.Message}");
                     }
-                    if (manifest.Type != PluginType.Intake)
-                        return Problem("endpoint", $"{manifest.Name} is a {manifest.Type.ToString().ToLowerInvariant()} plugin, not an intake plugin.");
-                    if (!ContractVersions.Intake.Supports(ContractVersion.Parse(manifest.ContractVersion)))
-                        return Problem("endpoint", $"{manifest.Name} is built for intake contract {manifest.ContractVersion}; this Romdex supports {ContractVersions.Intake}.");
+                    if (manifest.Type != PluginType.Retrieval)
+                        return Problem("endpoint", $"{manifest.Name} is a {manifest.Type.ToString().ToLowerInvariant()} plugin, not a retriever.");
+                    if (!ContractVersions.Retrieval.Supports(ContractVersion.Parse(manifest.ContractVersion)))
+                        return Problem("endpoint", $"{manifest.Name} is built for retrieval contract {manifest.ContractVersion}; this Romdex supports {ContractVersions.Retrieval}.");
                     endpoint = url.TrimEnd('/');
                 }
                 else if (body.PluginId is { } pluginId && catalog.Find(pluginId) is { } found)
@@ -59,7 +59,7 @@ public static class PluginEndpoints
                 }
                 else
                 {
-                    return Problem("pluginId", "Give an intake plugin's endpoint, or the ID of a plugin from /plugins/available.");
+                    return Problem("pluginId", "Give a retriever's endpoint, or the ID of a plugin from /plugins/available.");
                 }
 
                 var settings = SettingsSchema.Defaults(manifest.SettingsSchema);
@@ -78,7 +78,7 @@ public static class PluginEndpoints
                     Name = string.IsNullOrWhiteSpace(body.Name) ? manifest.Name : body.Name.Trim(),
                     ContractVersion = manifest.ContractVersion,
                     Endpoint = endpoint,
-                    ManifestJson = endpoint is null ? null : JsonSerializer.Serialize(manifest, IntakeJson.Options),
+                    ManifestJson = endpoint is null ? null : JsonSerializer.Serialize(manifest, RetrievalJson.Options),
                     SettingsJson = settings.ToJsonString(),
                     Priority = last + 1,
                 };
@@ -86,7 +86,7 @@ public static class PluginEndpoints
                 await db.SaveChangesAsync(ct);
                 return Results.Created($"/api/v1/plugins/{instance.Id}", ToInfo(instance, catalog));
             })
-            .WithName("AddPlugin").WithSummary("Set up a plugin: an intake plugin by its container URL, or a loaded one by ID. It goes last in the order.")
+            .WithName("AddPlugin").WithSummary("Set up a plugin: a retriever by its container URL, or a loaded one by ID. It goes last in the order.")
             .Produces<PluginInfo>(StatusCodes.Status201Created).ProducesValidationProblem();
 
         plugins.MapPut("/{id:guid}", async (Guid id, UpdatePlugin body, RomdexDbContext db, PluginCatalog catalog, CancellationToken ct) =>
@@ -107,7 +107,7 @@ public static class PluginEndpoints
                     instance.Name = name.Trim();
                 if (body.Enabled is { } enabled)
                     instance.Enabled = enabled;
-                if (body.Endpoint is { } endpoint && instance.Type == PluginType.Intake)
+                if (body.Endpoint is { } endpoint && instance.Type == PluginType.Retrieval)
                 {
                     if (!Uri.TryCreate(endpoint, UriKind.Absolute, out var uri) || uri.Scheme is not ("http" or "https"))
                         return Problem("endpoint", "Must be an http or https URL.");
@@ -131,19 +131,19 @@ public static class PluginEndpoints
             })
             .WithName("OrderPlugins").WithSummary("Set the order plugins of one type are used in: for index plugins, whose DAT wins when two have the same system.");
 
-        plugins.MapPost("/{id:guid}/test", async (Guid id, RomdexDbContext db, PluginCatalog catalog, PluginHost host, IntakePlugins intake, CancellationToken ct) =>
+        plugins.MapPost("/{id:guid}/test", async (Guid id, RomdexDbContext db, PluginCatalog catalog, PluginHost host, RetrievalPlugins retrievers, CancellationToken ct) =>
             {
                 if (await db.PluginInstances.FindAsync([id], ct) is not { } instance)
                     return Results.NotFound();
                 HealthReport report;
                 try
                 {
-                    if (instance.Type == PluginType.Intake)
+                    if (instance.Type == PluginType.Retrieval)
                     {
                         // Testing also picks up a newer manifest, for example after the container was updated.
-                        var manifest = await IntakeClient.GetManifestAsync(intake.Client(instance.Endpoint!), ct);
-                        instance.ManifestJson = JsonSerializer.Serialize(manifest, IntakeJson.Options);
-                        report = await intake.Create(instance).CheckHealthAsync(ct);
+                        var manifest = await RetrievalClient.GetManifestAsync(retrievers.Client(instance.Endpoint!), ct);
+                        instance.ManifestJson = JsonSerializer.Serialize(manifest, RetrievalJson.Options);
+                        report = await retrievers.Create(instance).CheckHealthAsync(ct);
                     }
                     else if (await host.ResolveAsync(db, instance, ct) is { } running)
                     {
@@ -170,25 +170,25 @@ public static class PluginEndpoints
             .Produces<PluginInfo>();
 
         plugins.MapPost("/{id:guid}/checks/{check}", async (Guid id, string check, RunPluginCheck body, RomdexDbContext db, PluginCatalog catalog,
-                IntakePlugins intake, CancellationToken ct) =>
+                RetrievalPlugins retrievers, CancellationToken ct) =>
             {
                 if (await db.PluginInstances.FindAsync([id], ct) is not { } instance)
                     return Results.NotFound();
                 var manifest = Manifest(instance, catalog);
-                if (instance.Type != PluginType.Intake || manifest?.Checks.Any(c => c.Id == check) != true)
+                if (instance.Type != PluginType.Retrieval || manifest?.Checks.Any(c => c.Id == check) != true)
                     return Problem("check", "This plugin has no such check.");
                 // Checked with the settings as they are in the form, saved or not.
                 var settings = JsonNode.Parse(instance.SettingsJson)!.AsObject();
                 if (body.Settings is { ValueKind: JsonValueKind.Object } given)
                     settings = SettingsSchema.Merge(manifest.SettingsSchema, settings, JsonNode.Parse(given.GetRawText())!.AsObject());
-                var client = new IntakeClient(intake.Client(instance.Endpoint!), JsonSerializer.SerializeToElement(settings));
+                var client = new RetrievalClient(retrievers.Client(instance.Endpoint!), JsonSerializer.SerializeToElement(settings));
                 PluginCheckResult result;
                 try
                 {
                     var found = await client.RunCheckAsync(check, ct);
                     result = new PluginCheckResult(found.Passed, found.Message);
                 }
-                catch (Exception e) when (e is IntakeException or HttpRequestException)
+                catch (Exception e) when (e is RetrievalException or HttpRequestException)
                 {
                     result = new PluginCheckResult(false, $"Couldn't check: {e.Message}");
                 }
@@ -212,7 +212,7 @@ public static class PluginEndpoints
 
     private static PluginManifest? Manifest(PluginInstance instance, PluginCatalog catalog) =>
         instance.ManifestJson is not null
-            ? JsonSerializer.Deserialize<PluginManifest>(instance.ManifestJson, IntakeJson.Options)
+            ? JsonSerializer.Deserialize<PluginManifest>(instance.ManifestJson, RetrievalJson.Options)
             : catalog.Find(instance.PluginId)?.Manifest;
 
     public static PluginInfo ToInfo(PluginInstance p, PluginCatalog catalog)

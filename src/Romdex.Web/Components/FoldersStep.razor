@@ -9,7 +9,7 @@ else
 {
     <div class="card setup-card">
         <h2>ROM library</h2>
-        <p>Romdex reads <code>@_status.LibraryPath</code>. It never changes your files without asking.</p>
+        <p>Romdex reads <code>@_status.LibraryPath</code>. Only the igir worker writes it, filing the games you download.</p>
         @if (!_status.LibraryReadable)
         {
             <p class="error">Romdex can't open it. Check <code>ROMS_PATH</code> in your compose file, and that the folder can be read by the container.</p>

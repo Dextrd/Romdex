@@ -1,6 +1,7 @@
 @page "/search"
 @inject RomdexClient Api
 @inject NavigationManager Nav
+@inject AuthState Auth
 
 <PageTitle>Search · Romdex</PageTitle>
 
@@ -18,7 +19,8 @@
             }
         </select>
     }
-    <Segmented T="string" Value="_have" Options="HaveOptions" OnChange="HaveAsync" Label="In your library" />
+    @* Coloured like the library's owned, all and missing, in the same order. *@
+    <Segmented T="string" Value="_have" Options="HaveOptions" OnChange="HaveAsync" Label="In your library" Class="@($"ownership {(_have == "" ? "all" : _have)}")" />
 </div>
 
 @if (_error is not null)
@@ -51,6 +53,7 @@ else
                     <th class="hide-narrow">System</th>
                     <th>In your library</th>
                     <th class="hide-narrow">Dumps</th>
+                    @if (CanGet) { <th></th> }
                 </tr>
             </thead>
             <tbody>
@@ -66,6 +69,12 @@ else
                         <td class="hide-narrow muted small" title="@((title.Have ?? title.Preferred).Name)">
                             @Format.Count(title.Dumps, "dump", "dumps")@(Regions(title) is { Length: > 0 } regions ? $" · {regions}" : "")
                         </td>
+                        @if (CanGet)
+                        {
+                            <td class="actions">
+                                @if (title.Status != TitleStatus.Owned) { <button @onclick="() => _getting = title">Get</button> }
+                            </td>
+                        }
                     </tr>
                 }
             </tbody>
@@ -80,10 +89,15 @@ else
     }
 }
 
+@if (_getting is not null)
+{
+    <GetDialog TitleId="_getting.Id" Name="@_getting.Name" OnClose="() => _getting = null" />
+}
+
 @code {
     private const int PageSize = 50;
     private static readonly IReadOnlyList<(string Value, string Label, string? Hint)> HaveOptions =
-        [("", "All", null), ("yes", "Have", "Games in your library"), ("no", "Don't have", "Games that aren't")];
+        [("owned", "Owned", "Only what you have"), ("", "All", "Whether you have it or not"), ("missing", "Missing", "Only what you don't have")];
 
     [SupplyParameterFromQuery(Name = "q")] public string? QueryParameter { get; set; }
 
@@ -98,6 +112,10 @@ else
     private List<TitleSummary> _titles = [];
     private string? _error;
     private int _search;
+    private TitleSummary? _getting;
+
+    // Getting a game asks the retrievers that search for it.
+    private bool CanGet => Auth.May(UserPermissions.Download);
 
     protected override async Task OnInitializedAsync()
     {
@@ -152,7 +170,7 @@ else
         }
         try
         {
-            var have = _have switch { "yes" => true, "no" => false, _ => (bool?)null };
+            var have = _have switch { "owned" => true, "missing" => false, _ => (bool?)null };
             var page = await Api.SearchCatalogueAsync(_query.Trim(), _system, have, skip, PageSize);
             _page = page;
             _titles = skip == 0 ? [.. page.Items] : [.. _titles, .. page.Items];

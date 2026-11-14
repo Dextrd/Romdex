@@ -12,16 +12,22 @@ the first wins.
 - **Redump** (built in, off until you add it) downloads Redump's DATs for the systems you list, such as `PSX, GC`,
   and their BIOS DATs, and checks for new ones every week.
 
-## Intake
+## Retrievers
 
-Intake plugins bring dumps in, as Melodex's retrievers bring music. One can search for a game you found under
-**Search** and fetch it, or hand over files that arrived by themselves, such as those dropped into an inbox folder.
-Each runs in its own container and speaks a small HTTP contract, so anyone can write one in any language. Every file
-is checked by its hash before it's filed, whatever the plugin says it is. Romdex comes with none that fetch commercial
-games; fetching and filing arrive in a later version.
+Retrievers bring dumps in, as Melodex's bring music. One can search for a game you found under
+**Search** and fetch it, or hand over files that arrived by themselves. Each runs in its own container and speaks a
+small HTTP contract, so anyone can [write one](writing-a-retriever-plugin.md) in any language. Every file is checked by
+its hash before it's filed, whatever the plugin says it is. Romdex comes with none that fetch commercial games.
+
+- **Inbox folder** (`retriever-inbox`, in the compose file) takes what you drop into a folder, one dump per file or
+  folder. It also finds games in it when you search, by checksum or by name.
+- **Dumping tools** (`retriever-dumps`, the `dumps` profile) takes finished dumps from disc rippers' and cartridge
+  dumpers' output folders, with their logs. A disc is taken once every track is there.
+
+See [Downloads and filing](downloads-and-filing.md) for what happens to what they bring.
 
 ## Connected apps
 
 Connectors tell another app, such as RomM, when the library changes. They're optional.
 
-Next: [Configuration](configuration.md).
+Next: [Downloads and filing](downloads-and-filing.md).

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Makes a library of made-up games, with DATs to match, for the Phase 1 gate.
+"""Makes a library of made-up games, with DATs to match, for the Phase 1 and Phase 2 gates.
 
 The plan's four systems each test a way of matching: plain cartridges (Game Boy), headered cartridges (NES), discs of
 several tracks with a BIOS (PlayStation) and large discs (GameCube). Every game, file and checksum here is made up.
@@ -11,8 +11,13 @@ be: FOUND, INCOMPLETE or MISSING, as igir's report says it). Then scan out/roms 
 
     igir copy extract report --dat out/dats --input out/roms --output out/igir-out --allow-incomplete-sets --report-output out/igir.csv
 
-and compare the two with tools/compare-igir.py (which says why igir needs those options). Anything else in out, such as
-Romdex's saved reports, is left alone. Needs 7z for the 7-Zip case.
+and compare the two with tools/compare-igir.py (which says why igir needs those options).
+
+It also writes out/arrivals, for the Phase 2 gate: for each system, a new dump of a game the library doesn't have, as it
+would arrive, and out/arrivals.csv, what each should be filed as. tools/downloads-gate.py drops them into Romdex's inbox and
+checks each one files itself.
+
+Anything else in out, such as Romdex's saved reports, is left alone. Needs 7z for the 7-Zip case.
 """
 
 import argparse
@@ -72,8 +77,8 @@ def cartridge(name, ext, size=32768):
 
 
 def disc(name, tracks):
-    """A cue sheet and its tracks, each a few sectors long."""
-    bins = [(f"{name} (Track {i + 1}).bin" if tracks > 1 else f"{name}.bin", data(f"{name} track {i + 1}", SECTOR * (8 + i)))
+    """A cue sheet and its tracks, each a few dozen sectors long: chdman can't read back a CHD of a disc much shorter."""
+    bins = [(f"{name} (Track {i + 1}).bin" if tracks > 1 else f"{name}.bin", data(f"{name} track {i + 1}", SECTOR * (40 + i)))
             for i in range(tracks)]
     cue = "".join(f'FILE "{b}" BINARY\r\n  TRACK {i + 1:02d} {"MODE2/2352" if i == 0 else "AUDIO"}\r\n    INDEX 01 00:00:00\r\n'
                   for i, (b, _) in enumerate(bins))
@@ -87,7 +92,8 @@ def main():
 
     out = args.out
     dats, roms = os.path.join(out, "dats"), os.path.join(out, "roms")
-    for folder in (dats, roms, os.path.join(out, "igir-out")):
+    arrivals = os.path.join(out, "arrivals")
+    for folder in (dats, roms, os.path.join(out, "igir-out"), arrivals):
         if os.path.exists(folder):
             shutil.rmtree(folder)
     os.makedirs(dats)
@@ -101,6 +107,18 @@ def main():
 
     def expect(dat, game, status):
         expected.append((dat.name, game, status))
+
+    # What arrives for the Phase 2 gate: an item in the inbox (a file or a folder), and the dump it should be filed as.
+    arriving = []
+
+    def arrive(path, content, dat, game):
+        target = os.path.join(arrivals, path)
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        with open(target, "wb") as f:
+            f.write(content)
+        item = path.split("/")[0]
+        if (item, dat.name, game) not in arriving:
+            arriving.append((item, dat.name, game))
 
     # Game Boy: plain cartridges, loose, zipped, 7-Zipped, renamed, and one with a dump's name but other contents.
     gb = Dat("Gate - Game Boy")
@@ -125,13 +143,16 @@ def main():
                          ("Lantern Run (World)", "FOUND"), ("Quiet Quarry (USA)", "MISSING"), ("Tide Bell (USA) (Rev 1)", "FOUND"),
                          ("Paper Kite (Europe) (Demo)", "MISSING")]:
         expect(gb, game, status)
+    # Under a name of its own, as a dumper might save it.
+    kite = gb.games[-1][3]
+    arrive("kite.gb", kite[0][1], gb, "Paper Kite (Europe) (Demo)")
 
     # NES: the DAT lists cartridges without the 16-byte iNES header that dumps carry.
     nes = Dat("Gate - NES")
     rabbit = nes.game("Rocket Rabbit (USA)", cartridge("Rocket Rabbit (USA)", ".nes", 40960))
     rabbit_eu = nes.game("Rocket Rabbit (Europe)", cartridge("Rocket Rabbit (Europe)", ".nes", 40960), cloneof="Rocket Rabbit (USA)")
     canal = nes.game("Canal Kings (Japan)", cartridge("Canal Kings (Japan)", ".nes", 24576))
-    nes.game("Night Owl (USA)", cartridge("Night Owl (USA)", ".nes", 24576))
+    owl = nes.game("Night Owl (USA)", cartridge("Night Owl (USA)", ".nes", 24576))
     header = b"NES\x1a" + bytes([2, 1, 1, 0]) + bytes(8)
     put("NES/Rocket Rabbit (USA).nes", header + rabbit[0][1])
     with zipfile.ZipFile(os.path.join(roms, "NES", "Rocket Rabbit (Europe).zip"), "w", zipfile.ZIP_DEFLATED) as z:
@@ -140,6 +161,13 @@ def main():
     for game, status in [("Rocket Rabbit (USA)", "FOUND"), ("Rocket Rabbit (Europe)", "FOUND"), ("Canal Kings (Japan)", "FOUND"),
                          ("Night Owl (USA)", "MISSING")]:
         expect(nes, game, status)
+    # Headered, in a zip: it has to be written out of the zip for the header to be found.
+    memory = os.path.join(out, "night-owl.zip")
+    with zipfile.ZipFile(memory, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("night owl.nes", header + owl[0][1])
+    with open(memory, "rb") as f:
+        arrive("Night Owl.zip", f.read(), nes, "Night Owl (USA)")
+    os.remove(memory)
 
     # PlayStation: discs of several tracks, a track two regions share, a disc with a track missing, a game of two discs
     # with one of them here, and the BIOS from a DAT of its own.
@@ -151,7 +179,7 @@ def main():
     ps.game("Signal Lost (Europe)", europe)
     harbor = ps.game("Harbor Lights (Japan)", disc("Harbor Lights (Japan)", 3))
     night1 = ps.game("Long Night (USA) (Disc 1)", disc("Long Night (USA) (Disc 1)", 1))
-    ps.game("Long Night (USA) (Disc 2)", disc("Long Night (USA) (Disc 2)", 1))
+    night2 = ps.game("Long Night (USA) (Disc 2)", disc("Long Night (USA) (Disc 2)", 1))
     for name, content in signal:
         put(f"PlayStation/Signal Lost (USA)/{name}", content)
     for name, content in harbor[:2]:
@@ -161,6 +189,10 @@ def main():
     for game, status in [("Signal Lost (USA)", "FOUND"), ("Signal Lost (Europe)", "INCOMPLETE"), ("Harbor Lights (Japan)", "INCOMPLETE"),
                          ("Long Night (USA) (Disc 1)", "FOUND"), ("Long Night (USA) (Disc 2)", "MISSING")]:
         expect(ps, game, status)
+    # A ripper's folder: the cue sheet and track, with its log.
+    for name, content in night2:
+        arrive(f"Long Night Disc 2/{name}", content, ps, "Long Night (USA) (Disc 2)")
+    arrive("Long Night Disc 2/Long Night (USA) (Disc 2).log", b"A made-up ripper's log.\nErrors: 0\n", ps, "Long Night (USA) (Disc 2)")
 
     bios = Dat("Gate - PlayStation - BIOS Images")
     firmware = bios.game("Gate BIOS (USA) (v1.0)", [("Gate BIOS (USA) (v1.0).bin", data("gate bios", 131072))])
@@ -174,10 +206,11 @@ def main():
     glass = gc.game("Glass Garden (USA)", [("Glass Garden (USA).iso", data("Glass Garden (USA)", 1 << 20))])
     gc.game("Glass Garden (Europe) (En,Fr,De)", [("Glass Garden (Europe) (En,Fr,De).iso", data("Glass Garden (Europe)", 1 << 20))],
             cloneof="Glass Garden (USA)")
-    gc.game("Ember Isle (Japan)", [("Ember Isle (Japan).iso", data("Ember Isle (Japan)", 1 << 20))])
+    ember = gc.game("Ember Isle (Japan)", [("Ember Isle (Japan).iso", data("Ember Isle (Japan)", 1 << 20))])
     put(f"GameCube/{glass[0][0]}", glass[0][1])
     for game, status in [("Glass Garden (USA)", "FOUND"), ("Glass Garden (Europe) (En,Fr,De)", "MISSING"), ("Ember Isle (Japan)", "MISSING")]:
         expect(gc, game, status)
+    arrive("ember.iso", ember[0][1], gc, "Ember Isle (Japan)")
 
     for dat in (gb, nes, ps, bios, gc):
         dat.write(dats)
@@ -185,7 +218,11 @@ def main():
         writer = csv.writer(f)
         writer.writerow(["DAT Name", "Game Name", "Status"])
         writer.writerows(expected)
-    print(f"{len(expected)} dumps in {len([gb, nes, ps, bios, gc])} DATs, library in {roms}")
+    with open(os.path.join(out, "arrivals.csv"), "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["Item", "DAT Name", "Game Name"])
+        writer.writerows(arriving)
+    print(f"{len(expected)} dumps in {len([gb, nes, ps, bios, gc])} DATs, library in {roms}, {len(arriving)} arrivals in {arrivals}")
     return 0
 
 

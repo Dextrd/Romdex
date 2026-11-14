@@ -33,8 +33,8 @@ the newest. Redump's can be fetched for you instead: see [Plugins](plugins.md).
 ## Your library
 
 **Library**, the home page, has two views. **Systems** lists every system you have games for; **Games** lists every
-game in the library together, to filter and search. **Update catalogue** reads the DATs again (Romdex also does this
-by itself once a day), and **Scan library** reads your library. A scan hashes each file once; later scans only hash
+game in the library together, to filter and search. **Scan**, at the top, reads your library, and
+**Update the catalogue**, in the menu beside it, reads the DATs again (Romdex also does this by itself once a day). A scan hashes each file once; later scans only hash
 what's new or changed.
 
 A file counts only when its checksums match a dump in the DAT, whatever it's called. Files can be loose, zipped,
