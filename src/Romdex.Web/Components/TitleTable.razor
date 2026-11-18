@@ -14,7 +14,13 @@
             @foreach (var title in Titles)
             {
                 <tr @key="title.Id">
-                    <td><a href="titles/@title.Id">@title.Name</a></td>
+                    <td>
+                        @if (title.Cover is { } cover)
+                        {
+                            <img class="thumb" src="@cover" alt="" loading="lazy" />
+                        }
+                        <a href="titles/@title.Id">@title.Name</a>
+                    </td>
                     @if (Systems is not null)
                     {
                         <td class="hide-narrow small nowrap"><a class="muted" href="systems/@title.SystemId">@Systems.GetValueOrDefault(title.SystemId)</a></td>

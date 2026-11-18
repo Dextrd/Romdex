@@ -1,10 +1,12 @@
+using Romdex.Core.Catalogue;
 using Romdex.Core.Data;
+using Romdex.Core.Plugins;
 using Romdex.Core.Tasks;
 
 namespace Romdex.Core.Library;
 
 /// <summary>Hashes what's new or changed in the library, then matches it all against the catalogue.</summary>
-public sealed class LibraryScanTask(LibraryScanner scanner, LibraryMatcher matcher, RomdexDbContext db) : ITaskHandler
+public sealed class LibraryScanTask(LibraryScanner scanner, LibraryMatcher matcher, RomdexDbContext db, PluginCatalog catalog, TaskQueue queue) : ITaskHandler
 {
     public const string TaskKind = "library-scan";
 
@@ -24,6 +26,8 @@ public sealed class LibraryScanTask(LibraryScanner scanner, LibraryMatcher match
             notes.Add($"{Count(scan.Removed, "file")} gone");
         if (scan.Unreadable > 0)
             notes.Add($"{Count(scan.Unreadable, "file")} couldn't be read");
+        if (scan.Hashed > 0)
+            await ArtLookupTask.QueueIfUsefulAsync(db, catalog, queue, ct);
         progress.Report($"{Count(scan.Files, "file")}: {scan.Hashed:N0} hashed ({LibraryScanner.Size(scan.HashedBytes)})" + string.Concat(notes.Select(n => "; " + n)));
     }
 

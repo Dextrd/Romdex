@@ -297,6 +297,32 @@ namespace Romdex.Core.Data.Migrations
                     b.ToTable("Dumps");
                 });
 
+            modelBuilder.Entity("Romdex.Core.Data.DumpArt", b =>
+                {
+                    b.Property<Guid>("DumpId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CoverFile")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Error")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("IdsJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("LookedUpAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("DumpId");
+
+                    b.ToTable("DumpArt");
+                });
+
             modelBuilder.Entity("Romdex.Core.Data.DumpFile", b =>
                 {
                     b.Property<Guid>("Id")
@@ -385,6 +411,12 @@ namespace Romdex.Core.Data.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("AppConnectorId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AppGameId")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Container")
@@ -737,6 +769,15 @@ namespace Romdex.Core.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Title");
+                });
+
+            modelBuilder.Entity("Romdex.Core.Data.DumpArt", b =>
+                {
+                    b.HasOne("Romdex.Core.Data.Dump", null)
+                        .WithOne()
+                        .HasForeignKey("Romdex.Core.Data.DumpArt", "DumpId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Romdex.Core.Data.DumpFile", b =>

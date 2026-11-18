@@ -9,6 +9,9 @@ services:
   igir-worker:
     image: romdex-igir-worker:dev
     build: igir-worker
+  emulatorjs:
+    image: romdex-emulatorjs:dev
+    build: emulatorjs
   retriever-inbox:
     image: romdex-retriever-inbox:dev
     build: plugins/retriever-inbox

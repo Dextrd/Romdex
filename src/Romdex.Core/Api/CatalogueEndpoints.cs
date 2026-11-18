@@ -4,6 +4,7 @@ using Romdex.Core.Access;
 using Romdex.Core.Catalogue;
 using Romdex.Core.Data;
 using Romdex.Core.Library;
+using Romdex.Core.Play;
 using Romdex.Core.Tasks;
 
 namespace Romdex.Core.Api;
@@ -35,9 +36,12 @@ public static class CatalogueEndpoints
             .WithSummary("A system's titles, by name. By default the ones its preferences list and nobody ignored; ignored=true lists the ignored ones, hidden=true adds those the preferences leave out, and have=true lists only what the library has some of.")
             .Produces<TitlePage>().Produces(StatusCodes.Status404NotFound);
 
-        systems.MapGet("/{id:guid}/bios", async (Guid id, LibraryViewBuilder views, RomdexDbContext db, CancellationToken ct) =>
-                await views.GetAsync(id, ct) is { } view ? Results.Ok(new BiosList(await DumpInfosAsync(db, view.Bios, null, ct))) : Results.NotFound())
-            .WithName("ListBios").WithSummary("A system's BIOS and firmware files, which many of its games need to run.")
+        systems.MapGet("/{id:guid}/bios", async (Guid id, LibraryViewBuilder views, RomdexDbContext db, PlayService play, CancellationToken ct) =>
+                await views.GetAsync(id, ct) is { } view
+                    ? Results.Ok(new BiosList(await DumpInfosAsync(db, view.Bios, null, ct), await play.BiosNeedAsync(view, ct)))
+                    : Results.NotFound())
+            .WithName("ListBios")
+            .WithSummary("A system's BIOS and firmware files, which many of its games need to run, and the BIOS its emulator in the browser looks for.")
             .Produces<BiosList>().Produces(StatusCodes.Status404NotFound);
 
         systems.MapGet("/{id:guid}/preferences", async (Guid id, RomdexDbContext db, Preferences preferences, CancellationToken ct) =>
@@ -105,6 +109,17 @@ public static class CatalogueEndpoints
                 await DetailAsync(id, db, views, ct) is { } detail ? Results.Ok(detail) : Results.NotFound())
             .WithName("GetTitle").WithSummary("A title with every dump of it, their hashes, which one 1G1R prefers, and where the library has them.")
             .Produces<TitleDetail>().Produces(StatusCodes.Status404NotFound);
+
+        titles.MapGet("/{id:guid}/cover", async (Guid id, HttpContext http, RomdexDbContext db, Microsoft.Extensions.Options.IOptions<RomdexOptions> options,
+                CancellationToken ct) =>
+            {
+                if (await ArtLookupTask.BestAsync(db, id, ct) is not { CoverFile: { } file } || ArtLookupTask.CoverPath(options.Value, file) is not { } path)
+                    return Results.NotFound();
+                http.Response.Headers.CacheControl = "private, max-age=86400";
+                return Results.File(path, ArtLookupTask.ContentType(file));
+            })
+            .WithName("GetTitleCover").WithSummary("The title's cover, as a hash-lookup plugin such as Hasheous found it: the one for a dump the library has, if any.")
+            .Produces(StatusCodes.Status200OK, contentType: "image/png").Produces(StatusCodes.Status404NotFound);
 
         titles.MapPost("/{id:guid}/ignore", (Guid id, RomdexDbContext db, LibraryViews cache, LibraryViewBuilder views, CancellationToken ct) =>
                 SetIgnoredAsync(id, true, db, cache, views, ct))
@@ -180,7 +195,9 @@ public static class CatalogueEndpoints
     }
 
     public static TitleSummary Summary(Guid systemId, TitleView t) =>
-        new(t.Id, systemId, t.Name, t.Status, t.Preferred.Ref, t.Have?.Ref, t.Ignored, t.Dumps.Count);
+        new(t.Id, systemId, t.Name, t.Status, t.Preferred.Ref, t.Have?.Ref, t.Ignored, t.Dumps.Count, t.HasCover ? CoverPath(t.Id) : null);
+
+    public static string CoverPath(Guid titleId) => $"api/v1/titles/{titleId}/cover";
 
     public static TitlePage Page(IEnumerable<TitleSummary> items, int? skip, int? take)
     {
@@ -208,7 +225,10 @@ public static class CatalogueEndpoints
             return null;
         var preferred = titleView.Dumps.Where(d => d.Release == titleView.Preferred.Release).Select(d => d.Id).ToHashSet();
         var dumps = await DumpInfosAsync(db, titleView.Dumps.OrderBy(d => !preferred.Contains(d.Id)).ThenBy(d => d.Name, StringComparer.OrdinalIgnoreCase), preferred, ct);
-        return new TitleDetail(title.Id, title.SystemId, title.System!.Name, title.Name, titleView.Status, titleView.Ignored, title.PreferredDumpId, dumps);
+        var art = await ArtLookupTask.BestAsync(db, id, ct);
+        var knownAs = art?.Name is { } name && !DumpNames.TitleKey(name).Equals(title.Key, StringComparison.Ordinal) ? name : null;
+        return new TitleDetail(title.Id, title.SystemId, title.System!.Name, title.Name, titleView.Status, titleView.Ignored, title.PreferredDumpId, dumps,
+            art?.CoverFile is null ? null : CoverPath(id), knownAs);
     }
 
     /// <summary>Dumps with their files, hashes and library places, in the order given.</summary>

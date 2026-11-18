@@ -11,6 +11,8 @@ the first wins.
 - **DAT folder** (built in, set up from the start) reads the No-Intro and Redump DATs in your DAT folder.
 - **Redump** (built in, off until you add it) downloads Redump's DATs for the systems you list, such as `PSX, GC`,
   and their BIOS DATs, and checks for new ones every week.
+- **Hasheous** (built in, off until you add it) looks up the games you have by their checksums, for covers and the
+  names people know them by. See [Covers](playing-and-apps.md#covers).
 
 ## Retrievers
 
@@ -28,6 +30,9 @@ See [Downloads and filing](downloads-and-filing.md) for what happens to what the
 
 ## Connected apps
 
-Connectors tell another app, such as RomM, when the library changes. They're optional.
+Connectors tell another app, such as RomM, when the library changes. They're optional; one is used at a time.
+
+- **RomM** (built in) asks RomM to scan what's filed, and adds **Open in RomM** to a game's page. See
+  [Opening games in another app](playing-and-apps.md#opening-games-in-another-app).
 
 Next: [Downloads and filing](downloads-and-filing.md).

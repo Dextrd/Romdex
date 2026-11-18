@@ -25,6 +25,9 @@ and open `http://your-server:8788`. Setup walks you through the rest.
 | (a volume) | `/staging` | Where dumps wait between arriving and being filed, shared by the core, the worker and the plugins. |
 | `INBOX_PATH` | `/inbox` | Drop dumps here for the inbox plugin (default `./inbox`). |
 
+The compose file also runs the igir worker, which files dumps, the inbox plugin, and `emulatorjs`, which plays games
+in the browser. Each is GPL or stands alone, so each is a container of its own; leave out any you don't want.
+
 The library's owner, `PUID` and `PGID` in the `.env` file (default 1000), is who the igir worker and the plugins run
 as, so the files they write are yours.
 

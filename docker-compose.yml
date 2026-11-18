@@ -32,6 +32,7 @@ services:
       - "${ROMDEX_PORT:-8788}:8080"
     environment:
       Romdex__WorkerUrl: http://igir-worker:8080
+      Romdex__EmulatorUrl: http://emulatorjs:8080
     volumes:
       - config:/config
       - ${ROMS_PATH:?Set ROMS_PATH to your game library}:/roms:ro
@@ -51,6 +52,14 @@ services:
     volumes:
       - ${ROMS_PATH:?Set ROMS_PATH to your game library}:/roms
       - staging:/staging
+
+  # EmulatorJS, which plays games in the browser. It's GPL and about 700 MB, almost all of it emulators, so it's a
+  # container of its own; the core passes its files on, so it needs no port. To go without, leave this out and
+  # Romdex__EmulatorUrl above, and games open only in RomM, if it's connected.
+  emulatorjs:
+    image: ghcr.io/dextrd/romdex-emulatorjs:${ROMDEX_VERSION:-latest}
+    container_name: romdex-emulatorjs
+    restart: unless-stopped
 
   # Retriever plugins, one container each.
   retriever-inbox:

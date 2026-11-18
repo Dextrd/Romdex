@@ -74,10 +74,10 @@ def main():
     romdex.run("POST", "/library/scan")
     systems = {s["name"]: s for s in romdex.call("GET", "/systems")}
     if not args.no_convert:
-        ps = systems["Gate - PlayStation"]
+        ps = systems["Sony - PlayStation"]
         filing = romdex.call("GET", f"/systems/{ps['id']}/filing")
         romdex.call("PUT", f"/systems/{ps['id']}/filing", {**filing, "storage": "chd"})
-        print("Gate - PlayStation's discs will be stored as CHD")
+        print("The PlayStation's discs will be stored as CHD")
     if not any(p.get("type") == "retrieval" and p.get("enabled", True) for p in romdex.call("GET", "/plugins")):
         raise SystemExit("There's no retriever set up: add the inbox folder under Settings → Plugins.")
 

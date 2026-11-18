@@ -50,23 +50,62 @@ else
         }
     }
 
-    @if (_bios.Count > 0)
+    @if (_bios is { } biosList && (biosList.Items.Count > 0 || biosList.Needed is not null))
     {
+        var held = biosList.Items.Where(b => b.Status != DumpStatus.Missing).ToList();
+        var missing = biosList.Items.Where(b => b.Status == DumpStatus.Missing).ToList();
         <h2>BIOS and firmware</h2>
-        <p class="muted small">The system's BIOS files in the library. Emulators need some of these to start games.</p>
-        <div class="card">
-            <table class="table">
-                <tbody>
-                    @foreach (var bios in _bios)
-                    {
-                        <tr>
-                            <td>@bios.Name</td>
-                            <td><span class="badge @Format.Badge(bios.Status)">@(bios.Status == DumpStatus.Good ? "Verified" : bios.Status.ToString())</span></td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
+        @if (biosList.Needed is { } need)
+        {
+            var names = string.Join(" or ", need.Files);
+            <p class="small bios-need">
+                @if (need.Ready)
+                {
+                    <span class="badge owned">Ready</span> <span>The library has a BIOS the browser's emulator can use.</span>
+                }
+                else if (need.Required)
+                {
+                    <span class="badge missing">Needed</span> <span>Games won't start in the browser without a BIOS. The emulator looks for @names.</span>
+                }
+                else
+                {
+                    <span class="badge neutral">Optional</span> <span>The browser's emulator plays most games without a BIOS, using a stand-in, and more with one. It looks for @names.</span>
+                }
+            </p>
+        }
+        <p class="muted small">The BIOS and firmware the system's DATs list. Emulators need some of them to start games.</p>
+        @if (held.Count > 0)
+        {
+            <div class="card">
+                <table class="table">
+                    <tbody>
+                        @foreach (var bios in held)
+                        {
+                            <tr>
+                                <td>@bios.Name</td>
+                                <td><span class="badge @Format.Badge(bios.Status)">@(bios.Status == DumpStatus.Good ? "Verified" : bios.Status.ToString())</span></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        @if (missing.Count > 0)
+        {
+            <details>
+                <summary>Not in the library (@missing.Count)</summary>
+                <div class="card">
+                    <table class="table">
+                        <tbody>
+                            @foreach (var bios in missing)
+                            {
+                                <tr><td>@bios.Name</td><td class="muted small">@string.Join(", ", bios.Regions)</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </details>
+        }
     }
 
     @if (_filing is not null)
@@ -141,7 +180,7 @@ else
 
     private SystemSummary? _system;
     private bool _notFound;
-    private IReadOnlyList<DumpInfo> _bios = [];
+    private BiosList? _bios;
     private TitlePage? _page;
     private List<TitleSummary> _titles = [];
     private string _filter = "All";
@@ -215,7 +254,7 @@ else
         _notFound = _system is null;
         if (_system is null)
             return;
-        _bios = (await Api.ListBiosAsync(Id)).Items.Where(b => b.Status != DumpStatus.Missing).ToList();
+        _bios = await Api.ListBiosAsync(Id);
         if (_filing is null)
         {
             _filing = await Api.GetFilingAsync(Id);

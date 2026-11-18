@@ -5,6 +5,10 @@ using Romdex.Client;
 using Romdex.Core.Data;
 using DownloadState = Romdex.Core.Data.DownloadState;
 using Romdex.Core.Library;
+using Romdex.Core.Apps;
+using Romdex.Core.Catalogue;
+using Romdex.Core.Plugins;
+using Romdex.Core.Tasks;
 
 namespace Romdex.Core.Downloads;
 
@@ -21,6 +25,10 @@ public sealed class DownloadPipeline(
     LibraryViewBuilder views,
     LibraryScanner scanner,
     LibraryMatcher matcher,
+    ConnectorPlugins connectors,
+    AppSync appSync,
+    PluginCatalog catalog,
+    TaskQueue tasks,
     IOptions<RomdexOptions> options,
     ILogger<DownloadPipeline> logger)
 {
@@ -153,6 +161,11 @@ public sealed class DownloadPipeline(
         DeleteStaging(directory);
         notes.Insert(0, $"Filed {Names(toFile.Select(f => f.Dump.Name))}");
         await SetAsync(item, DownloadState.Filed, Sentence(notes), ct);
+
+        // The connected app, if any, scans for it and gives its ID; a hash-lookup plugin, if any, finds its cover.
+        if (await connectors.GetActiveAsync(ct) is not null)
+            appSync.Add(filed);
+        await ArtLookupTask.QueueIfUsefulAsync(db, catalog, tasks, ct);
     }
 
     /// <summary>

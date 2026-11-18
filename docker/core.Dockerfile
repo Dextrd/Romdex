@@ -7,6 +7,8 @@ COPY src/Romdex.Client/Romdex.Client.csproj src/Romdex.Client/
 COPY src/Romdex.Web/Romdex.Web.csproj src/Romdex.Web/
 COPY src/Romdex.Plugins.DatFolder/Romdex.Plugins.DatFolder.csproj src/Romdex.Plugins.DatFolder/
 COPY src/Romdex.Plugins.Redump/Romdex.Plugins.Redump.csproj src/Romdex.Plugins.Redump/
+COPY src/Romdex.Plugins.Hasheous/Romdex.Plugins.Hasheous.csproj src/Romdex.Plugins.Hasheous/
+COPY src/Romdex.Plugins.Romm/Romdex.Plugins.Romm.csproj src/Romdex.Plugins.Romm/
 COPY src/Romdex.Core/Romdex.Core.csproj src/Romdex.Core/
 RUN dotnet restore src/Romdex.Core/Romdex.Core.csproj
 COPY src/ src/

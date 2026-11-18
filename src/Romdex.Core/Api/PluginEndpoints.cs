@@ -6,6 +6,8 @@ using Romdex.Contracts.Plugins;
 using Romdex.Contracts.Plugins.Retrieval;
 using Romdex.Core.Access;
 using Romdex.Core.Data;
+using Romdex.Core.Tasks;
+using Romdex.Core.Catalogue;
 using Romdex.Core.Plugins;
 
 namespace Romdex.Core.Api;
@@ -27,7 +29,7 @@ public static class PluginEndpoints
             .WithName("ListAvailablePlugins")
             .WithSummary("Index plugins and connectors loaded into the core. Retriever plugins run in their own containers and are added by URL.");
 
-        plugins.MapPost("", async (AddPlugin body, RomdexDbContext db, PluginCatalog catalog, RetrievalPlugins retrievers, CancellationToken ct) =>
+        plugins.MapPost("", async (AddPlugin body, RomdexDbContext db, PluginCatalog catalog, RetrievalPlugins retrievers, TaskQueue queue, CancellationToken ct) =>
             {
                 PluginManifest manifest;
                 string? endpoint = null;
@@ -84,6 +86,8 @@ public static class PluginEndpoints
                 };
                 db.PluginInstances.Add(instance);
                 await db.SaveChangesAsync(ct);
+                // A new source of covers looks up what the library already has.
+                await ArtLookupTask.QueueIfUsefulAsync(db, catalog, queue, ct);
                 return Results.Created($"/api/v1/plugins/{instance.Id}", ToInfo(instance, catalog));
             })
             .WithName("AddPlugin").WithSummary("Set up a plugin: a retriever by its container URL, or a loaded one by ID. It goes last in the order.")

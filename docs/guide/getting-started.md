@@ -46,7 +46,8 @@ A file counts only when its checksums match a dump in the DAT, whatever it's cal
   but with other checksums.
 
 A game's page shows the dump you have, with each file's checksums and where it is, and the other dumps the DAT lists
-for it, such as other regions and revisions.
+for it, such as other regions and revisions. **Play** plays it in the browser, and **Open in RomM** opens it there:
+see [Playing, covers and apps](playing-and-apps.md).
 
 **Search** finds any game the DATs list, whether or not you have it. Words can come in any order, and regions and
 versions count too, so *kart japan* finds the Japanese releases of a kart game. A game's page shows its dumps with

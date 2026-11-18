@@ -21,11 +21,17 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Romdex.Core.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Romdex.Contracts\Romdex.Contracts.csproj" />
     <ProjectReference Include="..\Romdex.Client\Romdex.Client.csproj" />
     <ProjectReference Include="..\Romdex.Web\Romdex.Web.csproj" />
     <ProjectReference Include="..\Romdex.Plugins.DatFolder\Romdex.Plugins.DatFolder.csproj" />
     <ProjectReference Include="..\Romdex.Plugins.Redump\Romdex.Plugins.Redump.csproj" />
+    <ProjectReference Include="..\Romdex.Plugins.Hasheous\Romdex.Plugins.Hasheous.csproj" />
+    <ProjectReference Include="..\Romdex.Plugins.Romm\Romdex.Plugins.Romm.csproj" />
   </ItemGroup>
 
 </Project>

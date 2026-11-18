@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Romdex.Plugins.Romm</RootNamespace>
+    <Description>Romdex connector that tells RomM about new games and opens games there.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Romdex.Contracts\Romdex.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

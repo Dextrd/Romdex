@@ -12,6 +12,8 @@ using Romdex.Core.Diagnostics;
 using Romdex.Core.Events;
 using Romdex.Core.Downloads;
 using Romdex.Core.Plugins;
+using Romdex.Core.Apps;
+using Romdex.Core.Play;
 using Romdex.Core.Settings;
 using Romdex.Core.Tasks;
 
@@ -70,6 +72,13 @@ builder.Services.AddScoped<LibraryScanner>();
 builder.Services.AddSingleton<ContainerReader>();
 builder.Services.AddScoped<ITaskHandler, CatalogueRefreshTask>();
 builder.Services.AddScoped<ITaskHandler, LibraryScanTask>();
+builder.Services.AddScoped<ITaskHandler, ArtLookupTask>();
+builder.Services.AddHttpClient(ArtLookupTask.HttpClientName, http =>
+{
+    http.Timeout = TimeSpan.FromSeconds(30);
+    foreach (var product in PluginHttp.UserAgent)
+        http.DefaultRequestHeaders.UserAgent.Add(product);
+});
 builder.Services.AddHostedService<CatalogueSchedule>();
 
 // Downloads: what arrives through the retriever plugins, identified here and filed by the igir worker.
@@ -82,6 +91,15 @@ builder.Services.AddScoped<DownloadPipeline>();
 builder.Services.AddScoped<ITaskHandler, DownloadTask>();
 builder.Services.AddSingleton<DownloadSignal>();
 builder.Services.AddHostedService<DownloadWatcher>();
+
+// Playing games in the browser, through the emulatorjs container, and opening them in the connected app.
+builder.Services.AddSingleton<StreamSigner>();
+builder.Services.AddSingleton<EmulatorCheck>();
+builder.Services.AddScoped<PlayService>();
+builder.Services.AddHttpClient(PlayEndpoints.EmulatorClient, http => http.Timeout = TimeSpan.FromMinutes(5));
+builder.Services.AddScoped<AppLinks>();
+builder.Services.AddSingleton<AppSync>();
+builder.Services.AddHostedService(services => services.GetRequiredService<AppSync>());
 
 // Events: announced on the event stream and sent to webhooks
 builder.Services.AddHttpClient(WebhookSender.HttpClientName, http => http.Timeout = TimeSpan.FromSeconds(15));
@@ -102,6 +120,7 @@ using (var scope = app.Services.CreateScope())
     // Write-ahead logging, so pages keep reading while a scan writes. It's stored in the file, so this is once.
     await db.Database.ExecuteSqlRawAsync("PRAGMA journal_mode=WAL;");
     await IndexPlugins.EnsureDefaultAsync(db, scope.ServiceProvider.GetRequiredService<PluginCatalog>(), options);
+    await app.Services.GetRequiredService<StreamSigner>().InitialiseAsync(db);
 }
 
 // The way back in when the admin's password is lost: start once with Romdex__ResetLogin=true, then set a new one.
@@ -156,9 +175,11 @@ api.MapTaskEndpoints();
 api.MapCatalogueEndpoints();
 api.MapLibraryEndpoints();
 api.MapDownloadEndpoints();
+api.MapPlayEndpoints();
 api.MapPluginEndpoints();
 api.MapAccessEndpoints();
 api.MapWebhookEndpoints();
+app.MapEmulator();
 
 // The web app: Blazor WebAssembly, served from the same origin and talking only to the public API.
 app.MapStaticAssets();

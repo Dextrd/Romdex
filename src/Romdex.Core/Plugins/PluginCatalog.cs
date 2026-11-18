@@ -3,7 +3,9 @@ using System.Runtime.Loader;
 using Microsoft.Extensions.Options;
 using Romdex.Contracts.Plugins;
 using Romdex.Plugins.DatFolder;
+using Romdex.Plugins.Hasheous;
 using Romdex.Plugins.Redump;
+using Romdex.Plugins.Romm;
 
 namespace Romdex.Core.Plugins;
 
@@ -21,7 +23,7 @@ public sealed record DiscoveredPlugin(PluginManifest Manifest, IPluginFactory? F
 /// </summary>
 public sealed class PluginCatalog
 {
-    private static readonly Assembly[] BuiltIn = [typeof(DatFolderFactory).Assembly, typeof(RedumpFactory).Assembly];
+    private static readonly Assembly[] BuiltIn = [typeof(DatFolderFactory).Assembly, typeof(RedumpFactory).Assembly, typeof(HasheousFactory).Assembly, typeof(RommFactory).Assembly];
 
     private readonly Dictionary<string, DiscoveredPlugin> _plugins = new(StringComparer.Ordinal);
 

@@ -1,6 +1,7 @@
 @page "/titles/{Id:guid}"
 @inject RomdexClient Api
 @inject AuthState Auth
+@inject NavigationManager Nav
 
 <PageTitle>@(_title?.Name ?? "Game") · Romdex</PageTitle>
 
@@ -17,17 +18,29 @@ else
     var held = _title.Dumps.Where(d => d.Status != DumpStatus.Missing).ToList();
     var others = _title.Dumps.Where(d => d.Status == DumpStatus.Missing).ToList();
     <p class="small"><a href="">Library</a> / <a href="systems/@_title.SystemId">@_title.SystemName</a></p>
-    <div class="row">
-        <h1>@_title.Name</h1>
-        @if (Auth.May(UserPermissions.Download) && _title.Status != TitleStatus.Owned)
+    <div class="title-head">
+        @if (_title.Cover is { } cover)
         {
-            <button @onclick="() => _getting = (null, _title.Name)" title="Find it through the retrievers">Get</button>
+            <img class="cover" src="@cover" alt="" />
         }
+        <div>
+            <div class="row">
+                <h1>@_title.Name</h1>
+                @if (Auth.May(UserPermissions.Download) && _title.Status != TitleStatus.Owned)
+                {
+                    <button @onclick="() => _getting = (null, _title.Name)" title="Find it through the retrievers">Get</button>
+                }
+            </div>
+            @if (_title.KnownAs is { } knownAs)
+            {
+                <p class="muted">Also known as @knownAs</p>
+            }
+            @if (_title.Status != TitleStatus.Missing)
+            {
+                <p><span class="badge @Format.Badge(_title.Status)">@Format.Label(_title.Status)</span></p>
+            }
+        </div>
     </div>
-    @if (_title.Status != TitleStatus.Missing)
-    {
-        <p><span class="badge @Format.Badge(_title.Status)">@Format.Label(_title.Status)</span></p>
-    }
 
     @if (held.Count == 0)
     {
@@ -63,11 +76,45 @@ else
     private TitleDetail? _title;
     private bool _notFound;
     private (Guid? DumpId, string Name)? _getting;
+    private readonly Dictionary<Guid, PlayInfo> _play = [];
+    private readonly Dictionary<Guid, string> _opening = [];
 
     protected override async Task OnParametersSetAsync()
     {
         _title = await Api.GetTitleAsync(Id);
         _notFound = _title is null;
+        _play.Clear();
+        _opening.Clear();
+        if (_title is null || !Auth.May(UserPermissions.Play))
+            return;
+        foreach (var dump in _title.Dumps.Where(d => d.Status == DumpStatus.Good))
+            if (await Api.GetPlayAsync(dump.Id) is { } play)
+                _play[dump.Id] = play;
+    }
+
+    // The player is a page of its own, outside the app: EmulatorJS is loaded there, and only there.
+    private void Play(PlayInfo play) => Nav.NavigateTo(play.PlayerUrl!, forceLoad: true);
+
+    private async Task OpenInAppAsync(PlayInfo play)
+    {
+        _opening[play.DumpId] = $"Finding it in {play.App}…";
+        try
+        {
+            var link = await Api.OpenInAppAsync(play.DumpId);
+            if (link.Url is { } url)
+            {
+                _opening.Remove(play.DumpId);
+                Nav.NavigateTo(url, forceLoad: true);
+            }
+            else
+            {
+                _opening[play.DumpId] = link.Waiting ?? $"{link.App} hasn't found it yet.";
+            }
+        }
+        catch (RomdexApiException e)
+        {
+            _opening[play.DumpId] = e.Message;
+        }
     }
 
     private RenderFragment Dump(DumpInfo dump) => __builder =>
@@ -84,6 +131,27 @@ else
                     <button class="small" @onclick="() => _getting = (dump.Id, dump.Name)" title="Find this dump through the retrievers">Get this dump</button>
                 }
             </div>
+            @if (_play.GetValueOrDefault(dump.Id) is { } play)
+            {
+                <div class="dump-actions">
+                    @if (play.PlayerUrl is not null)
+                    {
+                        <button class="primary" @onclick="() => Play(play)" title="@(play.Bios is { } bios ? $"Plays in the browser, with {bios}" : "Plays in the browser")">Play</button>
+                    }
+                    @if (play.App is { } app)
+                    {
+                        <button @onclick="() => OpenInAppAsync(play)" title="Play it there, with its saves and states">Open in @app</button>
+                    }
+                    @if (_opening.GetValueOrDefault(dump.Id) is { } opening)
+                    {
+                        <span class="muted small">@opening</span>
+                    }
+                    else if (play.PlayerUrl is null && play.Unplayable is { } why)
+                    {
+                        <span class="muted small">@why</span>
+                    }
+                </div>
+            }
             <div class="muted small">
                 @string.Join(", ", dump.Regions)@(dump.Languages.Count > 0 ? $" · {string.Join(", ", dump.Languages)}" : "")
                 @if (dump.Serial is not null) { <span> · @dump.Serial</span> }

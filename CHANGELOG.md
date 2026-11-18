@@ -31,5 +31,15 @@
   dumping tools as the `dumps` profile.
 - The retrieval contract gains `list`, for plugins that hand over what arrived by themselves, and candidates gain notes.
 - Guide pages: downloads and filing, and writing a retriever.
+- Play in the browser: **Play** on a game's page opens it in EmulatorJS, a container of its own, through a link
+  that's good for 12 hours. A disc of several files goes to it as one zip. A system's page lists the BIOS files its
+  emulator looks for, each known by its checksum, and whether you have them. Every dump in a DAT of BIOS files, such as
+  Redump's, counts as a BIOS, whether or not the DAT marks it as one.
+- The Hasheous plugin looks up the games you have by checksum, for covers and the names people know them by. Covers
+  show on a game's page and in a system's list.
+- The RomM connector: each dump filed is passed to RomM, which scans only that system, and **Open in RomM** shows on a
+  game's page. Telling RomM runs beside the task queue, so a slow scan holds up nothing else.
+- `tools/play-gate.py` and `tools/romm-gate.compose.yml`, to check playing and RomM on a gate install, with
+  homebrew games. The gate's made-up DATs now carry real system names, so they map to emulators and RomM's folders.
 - The top bar has **Scan**, with **Update the catalogue** in its menu, as Melodex has; the pages are in Melodex's
   order, and Search filters by owned, all and missing in the library's colours.

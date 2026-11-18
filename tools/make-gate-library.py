@@ -2,7 +2,8 @@
 """Makes a library of made-up games, with DATs to match, for the Phase 1 and Phase 2 gates.
 
 The plan's four systems each test a way of matching: plain cartridges (Game Boy), headered cartridges (NES), discs of
-several tracks with a BIOS (PlayStation) and large discs (GameCube). Every game, file and checksum here is made up.
+several tracks with a BIOS (PlayStation) and large discs (GameCube). Every game, file and checksum here is made up; the
+DATs only take the real ones' system names, which is what tells Romdex how a system plays.
 
     tools/make-gate-library.py out/
 
@@ -121,7 +122,7 @@ def main():
             arriving.append((item, dat.name, game))
 
     # Game Boy: plain cartridges, loose, zipped, 7-Zipped, renamed, and one with a dump's name but other contents.
-    gb = Dat("Gate - Game Boy")
+    gb = Dat("Nintendo - Game Boy")
     pond = gb.game("Pixel Pond (USA)", cartridge("Pixel Pond (USA)", ".gb"))
     gb.game("Pixel Pond (Europe)", cartridge("Pixel Pond (Europe)", ".gb"), cloneof="Pixel Pond (USA)")
     maze = gb.game("Moss Maze (Japan)", cartridge("Moss Maze (Japan)", ".gb"))
@@ -148,7 +149,7 @@ def main():
     arrive("kite.gb", kite[0][1], gb, "Paper Kite (Europe) (Demo)")
 
     # NES: the DAT lists cartridges without the 16-byte iNES header that dumps carry.
-    nes = Dat("Gate - NES")
+    nes = Dat("Nintendo - Nintendo Entertainment System (Headerless)")
     rabbit = nes.game("Rocket Rabbit (USA)", cartridge("Rocket Rabbit (USA)", ".nes", 40960))
     rabbit_eu = nes.game("Rocket Rabbit (Europe)", cartridge("Rocket Rabbit (Europe)", ".nes", 40960), cloneof="Rocket Rabbit (USA)")
     canal = nes.game("Canal Kings (Japan)", cartridge("Canal Kings (Japan)", ".nes", 24576))
@@ -171,7 +172,7 @@ def main():
 
     # PlayStation: discs of several tracks, a track two regions share, a disc with a track missing, a game of two discs
     # with one of them here, and the BIOS from a DAT of its own.
-    ps = Dat("Gate - PlayStation")
+    ps = Dat("Sony - PlayStation")
     signal = ps.game("Signal Lost (USA)", disc("Signal Lost (USA)", 2))
     europe = disc("Signal Lost (Europe)", 2)
     # Europe's audio track is the same as America's.
@@ -194,7 +195,7 @@ def main():
         arrive(f"Long Night Disc 2/{name}", content, ps, "Long Night (USA) (Disc 2)")
     arrive("Long Night Disc 2/Long Night (USA) (Disc 2).log", b"A made-up ripper's log.\nErrors: 0\n", ps, "Long Night (USA) (Disc 2)")
 
-    bios = Dat("Gate - PlayStation - BIOS Images")
+    bios = Dat("Sony - PlayStation - BIOS Images")
     firmware = bios.game("Gate BIOS (USA) (v1.0)", [("Gate BIOS (USA) (v1.0).bin", data("gate bios", 131072))])
     bios.game("Gate BIOS (Japan) (v1.0)", [("Gate BIOS (Japan) (v1.0).bin", data("gate bios japan", 131072))])
     put(f"PlayStation/bios/{firmware[0][0]}", firmware[0][1])
@@ -202,7 +203,7 @@ def main():
     expect(bios, "Gate BIOS (Japan) (v1.0)", "MISSING")
 
     # GameCube: one large disc image each. Kept small here; size makes no difference to matching.
-    gc = Dat("Gate - GameCube")
+    gc = Dat("Nintendo - GameCube")
     glass = gc.game("Glass Garden (USA)", [("Glass Garden (USA).iso", data("Glass Garden (USA)", 1 << 20))])
     gc.game("Glass Garden (Europe) (En,Fr,De)", [("Glass Garden (Europe) (En,Fr,De).iso", data("Glass Garden (Europe)", 1 << 20))],
             cloneof="Glass Garden (USA)")

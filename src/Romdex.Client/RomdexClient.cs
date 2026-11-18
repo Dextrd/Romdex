@@ -146,6 +146,17 @@ public sealed class RomdexClient(HttpClient http)
 
     public Task<TitleDetail?> GetTitleAsync(Guid id, CancellationToken ct = default) => GetOrNullAsync<TitleDetail>($"{Api}/titles/{id}", ct);
 
+    /// <summary>How to play a dump the library has: the player's link, or why it can't play in the browser.</summary>
+    public Task<PlayInfo?> GetPlayAsync(Guid dumpId, CancellationToken ct = default) => GetOrNullAsync<PlayInfo>($"{Api}/play/{dumpId}", ct);
+
+    /// <summary>Where a dump is in the connected app; asks the app to scan when it hasn't found it yet.</summary>
+    public async Task<AppLink> OpenInAppAsync(Guid dumpId, CancellationToken ct = default)
+    {
+        using var response = await http.PostAsync($"{Api}/play/{dumpId}/app", null, ct);
+        await EnsureAsync(response, ct);
+        return (await response.Content.ReadFromJsonAsync<AppLink>(RomdexJson.Options, ct))!;
+    }
+
     public async Task<TitleDetail> IgnoreTitleAsync(Guid id, bool ignore = true, CancellationToken ct = default)
     {
         using var response = ignore ? await http.PostAsync($"{Api}/titles/{id}/ignore", null, ct) : await http.DeleteAsync($"{Api}/titles/{id}/ignore", ct);

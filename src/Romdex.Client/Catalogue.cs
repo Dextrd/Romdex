@@ -98,7 +98,9 @@ public sealed record SystemSummary(
 /// <summary>One title in a system's list.</summary>
 /// <param name="Preferred">The dump 1G1R picks, or the one someone chose instead.</param>
 /// <param name="Have">The dump owned, when one is; the preferred one when that's owned.</param>
-public sealed record TitleSummary(Guid Id, Guid SystemId, string Name, TitleStatus Status, DumpRef Preferred, DumpRef? Have, bool Ignored, int Dumps);
+/// <param name="Cover">Its cover, relative to the app's base, when a hash-lookup plugin found one.</param>
+public sealed record TitleSummary(Guid Id, Guid SystemId, string Name, TitleStatus Status, DumpRef Preferred, DumpRef? Have, bool Ignored, int Dumps,
+    string? Cover = null);
 
 /// <summary>A dump, named.</summary>
 public sealed record DumpRef(Guid Id, string Name, IReadOnlyList<string> Regions);
@@ -108,6 +110,8 @@ public sealed record TitlePage(IReadOnlyList<TitleSummary> Items, int Total);
 
 /// <summary>A title with every dump the DAT lists for it.</summary>
 /// <param name="ChosenDumpId">The dump someone chose to prefer over what 1G1R picks; null to let 1G1R pick.</param>
+/// <param name="Cover">Its cover, relative to the app's base, when a hash-lookup plugin found one.</param>
+/// <param name="KnownAs">Its name as people know it, from a hash-lookup plugin, where that differs from the DAT's.</param>
 public sealed record TitleDetail(
     Guid Id,
     Guid SystemId,
@@ -116,7 +120,9 @@ public sealed record TitleDetail(
     TitleStatus Status,
     bool Ignored,
     Guid? ChosenDumpId,
-    IReadOnlyList<DumpInfo> Dumps);
+    IReadOnlyList<DumpInfo> Dumps,
+    string? Cover = null,
+    string? KnownAs = null);
 
 /// <summary>One dump of a title, as the DAT lists it, and whether the library has it.</summary>
 /// <param name="Preferred">The one 1G1R picks, or someone chose.</param>
@@ -142,7 +148,8 @@ public sealed record DumpFileInfo(string Name, long Size, string? Crc32, string?
 public sealed record LibraryPlace(Guid FileId, string Path, string? Entry);
 
 /// <summary>A system's BIOS and firmware.</summary>
-public sealed record BiosList(IReadOnlyList<DumpInfo> Items);
+/// <param name="Needed">What the system's emulator looks for, when it plays in the browser and uses a BIOS.</param>
+public sealed record BiosList(IReadOnlyList<DumpInfo> Items, BiosNeed? Needed = null);
 
 /// <summary>A library file, or a file inside one, that matches nothing in the catalogue, or couldn't be read.</summary>
 /// <param name="LooksLike">A dump with a file of this name, whose hashes differ: likely a bad or modified dump.</param>

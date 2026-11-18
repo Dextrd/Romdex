@@ -14,6 +14,7 @@ when running Romdex outside Docker.
 | `Romdex__HashThreads` | `2` | How many files a scan hashes at once |
 | `Romdex__WorkerUrl` | (none) | The igir worker, such as `http://igir-worker:8080`. Downloads need it to file anything |
 | `Romdex__DownloadCheckMinutes` | `5` | How often plugins that list what arrived are asked; `0` turns it off |
+| `Romdex__EmulatorUrl` | (none) | The EmulatorJS container, such as `http://emulatorjs:8080`. Playing in the browser needs it |
 | `Romdex__ChdmanPath` | `chdman` | The `chdman` that reads CHDs, without a worker |
 | `Romdex__DolphinToolPath` | `dolphin-tool` | The `dolphin-tool` that reads RVZs, without a worker |
 | `Romdex__ResetLogin` | `false` | Lets you set a new admin password; see [Users and permissions](users-and-permissions.md) |

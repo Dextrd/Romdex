@@ -79,6 +79,7 @@ public partial class RomdexDbContext(DbContextOptions<RomdexDbContext> options) 
     public DbSet<Title> Titles => Set<Title>();
     public DbSet<Dump> Dumps => Set<Dump>();
     public DbSet<DumpFile> DumpFiles => Set<DumpFile>();
+    public DbSet<DumpArt> DumpArt => Set<DumpArt>();
     public DbSet<LibraryFile> LibraryFiles => Set<LibraryFile>();
     public DbSet<LibraryContent> LibraryContents => Set<LibraryContent>();
     public DbSet<LibraryMatch> LibraryMatches => Set<LibraryMatch>();
@@ -131,6 +132,12 @@ public partial class RomdexDbContext(DbContextOptions<RomdexDbContext> options) 
         {
             e.HasOne(t => t.System).WithMany(s => s.Titles).HasForeignKey(t => t.SystemId).OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(t => new { t.SystemId, t.Key }).IsUnique();
+        });
+
+        modelBuilder.Entity<DumpArt>(e =>
+        {
+            e.HasKey(a => a.DumpId);
+            e.HasOne<Dump>().WithOne().HasForeignKey<DumpArt>(a => a.DumpId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Dump>(e =>

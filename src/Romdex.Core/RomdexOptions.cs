@@ -41,6 +41,12 @@ public class RomdexOptions
     /// <summary>How often retrievers that hand over what arrived by themselves are asked, in minutes; 0 leaves only the button.</summary>
     public int DownloadCheckMinutes { get; set; } = 5;
 
+    /// <summary>
+    /// The emulatorjs container's address, such as <c>http://emulatorjs:8080</c>. The core passes its files on at
+    /// <c>/emulator/</c>, so the player loads them from Romdex itself. Empty, games don't play in the browser.
+    /// </summary>
+    public string EmulatorUrl { get; set; } = "";
+
     /// <summary>MAME's chdman, which reads CHDs where there's no igir worker. The worker's image has it.</summary>
     public string ChdmanPath { get; set; } = "chdman";
 

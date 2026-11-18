@@ -31,6 +31,12 @@ public class LibraryFile
     /// <summary>Why it couldn't be read, such as a damaged archive or a missing tool.</summary>
     public string? Error { get; set; }
 
+    /// <summary>The connected app's ID for the game in it, such as RomM's, once the app has found it.</summary>
+    public string? AppGameId { get; set; }
+
+    /// <summary>The connector that gave <see cref="AppGameId"/>: another one's IDs mean nothing.</summary>
+    public Guid? AppConnectorId { get; set; }
+
     public List<LibraryContent> Contents { get; set; } = [];
 }
 

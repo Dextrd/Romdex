@@ -66,4 +66,4 @@ The igir worker is the only part of Romdex that writes the library; the core onl
 [igir](https://igir.io) to file each dump, with a DAT of just that dump, and chdman and DolphinTool to make and read
 CHDs and RVZs. These are GPL programs, so they run in a container of their own, beside the core.
 
-Next: [Writing a retriever](writing-a-retriever-plugin.md).
+Next: [Playing, covers and apps](playing-and-apps.md).

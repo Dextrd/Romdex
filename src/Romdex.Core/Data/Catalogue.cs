@@ -86,6 +86,28 @@ public class Dump
     public List<DumpFile> Files { get; set; } = [];
 }
 
+/// <summary>
+/// What a hash-lookup plugin, such as Hasheous, knows of a dump: its name as people know it, and its cover, kept in
+/// the data folder. Kept apart from the dump, which the DATs define.
+/// </summary>
+public class DumpArt
+{
+    public Guid DumpId { get; set; }
+    public DateTime LookedUpAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>The game's name as people know it, which a DAT's name may not be.</summary>
+    public string? Name { get; set; }
+
+    /// <summary>The cover's file in the data folder's <c>art</c> folder, such as <c>{dumpId}.png</c>; null when there's none.</summary>
+    public string? CoverFile { get; set; }
+
+    /// <summary>The source's IDs for the game, such as IGDB's, by scheme, as JSON.</summary>
+    public string IdsJson { get; set; } = "{}";
+
+    /// <summary>Why the lookup failed, when it did: it's tried again later.</summary>
+    public string? Error { get; set; }
+}
+
 /// <summary>One file of a dump: a cartridge image, or a disc's cue sheet or one of its tracks.</summary>
 public class DumpFile
 {

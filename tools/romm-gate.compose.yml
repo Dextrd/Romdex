@@ -1,0 +1,52 @@
+# A throwaway RomM for the Phase 3 gate, reading the gate library as Romdex files it. Not part of Romdex's stack:
+# RomM stays wherever its owner runs it, and Romdex talks to it through its API. It joins the network of Romdex's own
+# stack, so Romdex reaches it at http://romm:8080; start Romdex's first.
+#   docker compose -f tools/romm-gate.compose.yml up -d    then open http://localhost:8790
+# tools/play-gate.py makes its admin and a token for Romdex.
+name: romdex-gate-romm
+
+services:
+  romm:
+    image: rommapp/romm:5.4.1
+    container_name: romdex-gate-romm
+    depends_on:
+      romm-db:
+        condition: service_healthy
+    environment:
+      DB_HOST: romm-db
+      DB_NAME: romm
+      DB_USER: romm-user
+      DB_PASSWD: gate-only-password
+      ROMM_AUTH_SECRET_KEY: 4f1c0e5d0c3b6a9e8d7f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d
+      HASHEOUS_API_ENABLED: "false"
+    volumes:
+      - ../gate/roms:/romm/library/roms:ro
+      - romm-resources:/romm/resources
+      - romm-redis:/redis-data
+    ports:
+      - "8790:8080"
+
+  romm-db:
+    image: mariadb:11.8
+    container_name: romdex-gate-romm-db
+    environment:
+      MARIADB_ROOT_PASSWORD: gate-only-root-password
+      MARIADB_DATABASE: romm
+      MARIADB_USER: romm-user
+      MARIADB_PASSWORD: gate-only-password
+    volumes:
+      - romm-db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      retries: 10
+
+networks:
+  default:
+    name: romdex_default
+    external: true
+
+volumes:
+  romm-resources:
+  romm-redis:
+  romm-db:

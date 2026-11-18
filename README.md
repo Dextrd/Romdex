@@ -4,7 +4,8 @@ Romdex manages your game library: it matches every file by its hash against the 
 so it knows what each one is and whether it's a good dump. It's part of the dextrd family, alongside Melodex for music.
 
 Romdex is early. This version verifies the library, and brings new dumps in: from a folder you drop them into, or
-your dumping tools' output, each checked against the DATs and filed by igir. Tidying the library you have comes next.
+your dumping tools' output, each checked against the DATs and filed by igir. It plays games in the browser with
+EmulatorJS, finds covers with Hasheous, and opens games in RomM. Tidying the library you have comes next.
 
 ## Running it
 
@@ -29,7 +30,8 @@ The core serves the web app and the API on http://localhost:5072, with the API r
 The rest are containers of their own, each with its own README and tests:
 
 - `igir-worker` (Node): files dumps with igir, and makes and reads CHDs and RVZs;
-- `plugins/retriever-inbox` and `plugins/retriever-dumps` (Python): the retrievers.
+- `plugins/retriever-inbox` and `plugins/retriever-dumps` (Python): the retrievers;
+- `emulatorjs`: EmulatorJS, served by nginx, for playing in the browser.
 
 ## Licence
 
