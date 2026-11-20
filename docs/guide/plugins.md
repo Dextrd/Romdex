@@ -20,7 +20,7 @@ Index plugins say which systems and dumps exist, from No-Intro's and Redump's DA
 them by checksum. Romdex asks them in order; where two have a DAT for the same system, the first wins.
 
 - **DAT folder** (built in, set up from the start) reads the No-Intro and Redump DATs in your DAT folder.
-- **Redump** (built in, off until you add it) downloads Redump's DATs for the systems you list, such as `PSX, GC`,
+- **Redump** (built in, off until you add it) downloads Redump's DATs for the disc systems you tick, from the PlayStation to the PlayStation 5 and Xbox Series X,
   and their BIOS DATs, and checks for new ones every week. It also fetches [Retool's](https://github.com/unexpectedpanda/retool-clonelists-metadata)
   clone lists for them, unless you turn **Retool's clone lists** off.
 

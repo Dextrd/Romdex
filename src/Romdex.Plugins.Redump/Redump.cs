@@ -15,7 +15,7 @@ public sealed class RedumpFactory : IPluginFactory
     {
         Id = PluginId,
         Name = "Redump",
-        Version = "0.1.0",
+        Version = "0.2.0",
         Type = PluginType.Index,
         ContractVersion = ContractVersions.Index.ToString(),
         Description = "Fetches Redump's DATs for the disc systems you choose, and their BIOS DATs where Redump has them, and checks for new "
@@ -30,10 +30,36 @@ public sealed class RedumpFactory : IPluginFactory
               "required": ["systems"],
               "properties": {
                 "systems": {
-                  "type": "string",
-                  "default": "PSX, GC",
+                  "type": "array",
+                  "default": ["PSX", "GC"],
                   "title": "Systems",
-                  "description": "Redump's codes for them, comma-separated, as on redump.info/downloads: PSX is the PlayStation, PS2 the PlayStation 2, GC the GameCube, WII the Wii, SS the Saturn, DC the Dreamcast, MCD the Mega CD, PCE the PC Engine CD."
+                  "description": "The disc systems to fetch DATs for. Cartridge systems' DATs are No-Intro's: download them from DAT-o-MATIC into the DAT folder.",
+                  "items": {
+                    "type": "string",
+                    "oneOf": [
+                      { "const": "PSX", "title": "PlayStation" },
+                      { "const": "PS2", "title": "PlayStation 2" },
+                      { "const": "PS3", "title": "PlayStation 3" },
+                      { "const": "PS4", "title": "PlayStation 4" },
+                      { "const": "PS5", "title": "PlayStation 5" },
+                      { "const": "PSP", "title": "PlayStation Portable" },
+                      { "const": "GC", "title": "GameCube" },
+                      { "const": "WII", "title": "Wii" },
+                      { "const": "WIIU", "title": "Wii U" },
+                      { "const": "XBOX", "title": "Xbox" },
+                      { "const": "XBOX360", "title": "Xbox 360" },
+                      { "const": "XBOXONE", "title": "Xbox One" },
+                      { "const": "XBOXSX", "title": "Xbox Series X" },
+                      { "const": "MCD", "title": "Mega CD & Sega CD" },
+                      { "const": "SS", "title": "Saturn" },
+                      { "const": "DC", "title": "Dreamcast" },
+                      { "const": "PCE", "title": "PC Engine CD & TurboGrafx CD" },
+                      { "const": "PC-FX", "title": "PC-FX & PC-FXGA" },
+                      { "const": "NGCD", "title": "Neo Geo CD" },
+                      { "const": "3DO", "title": "3DO Interactive Multiplayer" }
+                    ]
+                  },
+                  "uniqueItems": true
                 },
                 "bios": {
                   "type": "boolean",
@@ -69,8 +95,11 @@ public sealed class RedumpFactory : IPluginFactory
     {
         var settings = context.Settings;
         string Text(string name, string fallback) => settings.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String && v.GetString() is { Length: > 0 } s ? s : fallback;
-        var systems = Text("systems", "PSX, GC").Split([',', ' ', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(s => s.ToUpperInvariant()).Distinct().ToList();
+        // A list of codes, or, as earlier versions kept them, the codes typed out with commas.
+        var chosen = settings.TryGetProperty("systems", out var listed) && listed.ValueKind == JsonValueKind.Array
+            ? listed.EnumerateArray().Where(e => e.ValueKind == JsonValueKind.String).Select(e => e.GetString()!)
+            : Text("systems", "PSX, GC").Split([',', ' ', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var systems = chosen.Select(s => s.Trim().ToUpperInvariant()).Where(s => s.Length > 0).Distinct().ToList();
         var bios = !settings.TryGetProperty("bios", out var b) || b.ValueKind != JsonValueKind.False;
         var days = settings.TryGetProperty("everyDays", out var d) && d.TryGetInt32(out var n) ? Math.Clamp(n, 1, 90) : 7;
         var cloneLists = !settings.TryGetProperty("cloneLists", out var c) || c.ValueKind != JsonValueKind.False ? CloneListsUrl : null;
@@ -100,7 +129,7 @@ public sealed class Redump(HttpClient http, string folder, string baseUrl, IRead
     public async Task<HealthReport> CheckHealthAsync(CancellationToken cancellationToken)
     {
         if (systems.Count == 0)
-            return new HealthReport(HealthStatus.Unhealthy, "No systems chosen. Add Redump's codes for them, such as PSX or GC.");
+            return new HealthReport(HealthStatus.Unhealthy, "No systems chosen. Tick the ones to fetch DATs for in its settings.");
         var state = ReadState();
         var have = (await _dats.ListSystemsAsync(cancellationToken)).Count;
         if (state.Error is { } error)

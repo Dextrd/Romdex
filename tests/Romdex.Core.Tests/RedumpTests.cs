@@ -116,10 +116,26 @@ public sealed class RedumpTests : IDisposable
         Assert.Equal(HealthStatus.Degraded, (await redump.CheckHealthAsync(default)).Status);
     }
 
+    [Fact]
+    public async Task Systems_are_ticked_from_a_list_of_Redumps_codes()
+    {
+        _site.Dats["/datfile/PS4"] = Zip("Sony - PlayStation 4", "2026-11-01 10-00-00");
+        _site.Dats["/datfile/XBOXSX"] = Zip("Microsoft - Xbox Series X", "2026-11-01 10-00-00");
+        var redump = Create("""["PS4", "XBOXSX"]""");
+
+        Assert.Equal(["Microsoft - Xbox Series X", "Sony - PlayStation 4"], (await redump.FetchAsync(default)).Select(s => s.Name).Order());
+        var schema = new RedumpFactory().Manifest.SettingsSchema!.Value.GetProperty("properties").GetProperty("systems");
+        Assert.Contains(schema.GetProperty("items").GetProperty("oneOf").EnumerateArray(), o => o.GetProperty("const").GetString() == "WIIU");
+    }
+
+    // Systems as the settings keep them: a JSON list, or as earlier versions did, codes typed out with commas.
     private Redump Create(string systems, int days = 7, bool bios = false) =>
+        Create(systems.StartsWith('[') ? systems : System.Text.Json.JsonSerializer.Serialize(systems), days, bios, 0);
+
+    private Redump Create(string systemsJson, int days, bool bios, int _) =>
         (Redump)new RedumpFactory().Create(new PluginContext
         {
-            Settings = System.Text.Json.JsonDocument.Parse($$"""{"systems":"{{systems}}","bios":{{(bios ? "true" : "false")}},"everyDays":{{Math.Max(days, 1)}},"baseUrl":"https://redump.test"}""").RootElement,
+            Settings = System.Text.Json.JsonDocument.Parse($$"""{"systems":{{systemsJson}},"bios":{{(bios ? "true" : "false")}},"everyDays":{{Math.Max(days, 1)}},"baseUrl":"https://redump.test"}""").RootElement,
             HttpClient = new HttpClient(_site),
             LoggerFactory = Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance,
             DataDirectory = _folder,

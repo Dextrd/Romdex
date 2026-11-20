@@ -18,6 +18,16 @@
         {
             <label><input type="checkbox" checked="@((Values[name]?.GetValue<bool>() ?? (field.TryGetProperty("default", out var on) && on.ValueKind == JsonValueKind.True)))" @onchange="e => Values[name] = (bool)e.Value!" /> @title</label>
         }
+        else if (type == "array" && Choices(field) is { Count: > 0 } choices)
+        {
+            <div class="field-label">@title@(Required.Contains(name) ? " *" : "")</div>
+            <div class="choices">
+                @foreach (var (value, label) in choices)
+                {
+                    <label class="check-line"><input type="checkbox" checked="@Ticked(name, value)" @onchange="e => Tick(name, value, (bool)e.Value!)" /> @label</label>
+                }
+            </div>
+        }
         else
         {
             <label class="field-label" for="@($"{_prefix}-{name}")">@title@(Required.Contains(name) ? " *" : "")</label>
@@ -97,6 +107,36 @@
             if (value is not null && !(value is JsonValue v && v.TryGetValue<string>(out var text) && text.Length == 0))
                 result[name] = value.DeepClone();
         return JsonDocument.Parse(result.ToJsonString()).RootElement.Clone();
+    }
+
+    // A list's choices, as its items' oneOf gives them with titles, or their enum.
+    private static List<(string Value, string Label)> Choices(JsonElement field)
+    {
+        if (!field.TryGetProperty("items", out var items))
+            return [];
+        if (items.TryGetProperty("oneOf", out var oneOf) && oneOf.ValueKind == JsonValueKind.Array)
+            return [.. oneOf.EnumerateArray().Where(o => Text(o, "const") is not null).Select(o => (Text(o, "const")!, Text(o, "title") ?? Text(o, "const")!))];
+        if (items.TryGetProperty("enum", out var options) && options.ValueKind == JsonValueKind.Array)
+            return [.. options.EnumerateArray().Select(o => (o.ToString(), o.ToString()))];
+        return [];
+    }
+
+    // What's ticked: a list, or as some plugins kept it before, values typed out with commas.
+    private List<string> Listed(string name) => Values[name] switch
+    {
+        JsonArray list => [.. list.Select(v => v?.ToString() ?? "")],
+        JsonValue v when v.TryGetValue<string>(out var text) => [.. text.Split([',', ' ', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)],
+        _ => [],
+    };
+
+    private bool Ticked(string name, string value) => Listed(name).Contains(value, StringComparer.OrdinalIgnoreCase);
+
+    private void Tick(string name, string value, bool on)
+    {
+        var list = Listed(name).Where(v => !v.Equals(value, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (on)
+            list.Add(value);
+        Values[name] = new JsonArray([.. list.Select(v => (JsonNode)v)]);
     }
 
     private static string? Text(JsonElement element, string name) =>

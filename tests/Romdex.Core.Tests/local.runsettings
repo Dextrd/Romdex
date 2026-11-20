@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Tests run on your own computer, outside CI: two test classes at a time, as most start a whole Romdex, so a laptop
+  doesn't run out of memory. CI, which sets CI=true, runs as many as it has cores. The csproj picks this file.
+-->
+<RunSettings>
+  <xUnit>
+    <MaxParallelThreads>2</MaxParallelThreads>
+  </xUnit>
+</RunSettings>

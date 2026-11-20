@@ -47,6 +47,13 @@ compose file: see [installing](docs/guide/installing.md).
   verified waits on the new Downloads page to be accepted, rejected or retried. They show on the Activity page too.
 - The igir worker, the only thing that writes the library: it files each dump with igir, and makes and reads CHDs
   (chdman) and RVZs (DolphinTool). It's GPL, so it's a container of its own.
+- Systems Romdex knows by name, in one list: the main Nintendo, Sega, Sony and Microsoft consoles and handhelds from the
+  NES to the PlayStation 5 and Xbox Series X, Wii U, 3DS and Vita among them, and the NEC, SNK, Bandai, Atari, Coleco
+  and 3DO systems. Each gets its short name in lists, whichever way No-Intro, Redump or libretro spell its DAT, and
+  the storage formats that suit it: discs nothing plays from a CHD, such as the Xbox's, are kept as they come. Any
+  other system with a DAT works as before.
+- Redump's systems are ticked from a list, from the PlayStation to the PlayStation 5 and Xbox Series X; settings
+  saved as typed codes still work.
 - The library's layout, under Settings: system folders named as RomM, ES-DE and EmuDeck, Batocera, RetroDECK or MiSTer
   name them, or as the DATs are; a games folder, such as `roms`; and a BIOS folder, by system or all together.
   **Match my library** works it out from where your games are. Everything Downloads files follows it.

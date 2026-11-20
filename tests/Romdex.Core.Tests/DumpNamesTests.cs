@@ -83,7 +83,37 @@ public sealed class DumpNamesTests
     [InlineData("Nintendo - Game Boy Color", "GBC")]
     [InlineData("Test - Handheld", "Handheld")]
     [InlineData("Homebrew Things", "Homebrew Things")]
+    [InlineData("Sony - PlayStation 4", "PS4")]
+    [InlineData("Sony - PlayStation 3 (PSN)", "PS3")]
+    [InlineData("Microsoft - Xbox Series X", "XSX")]
+    [InlineData("Microsoft - XBOX 360 (Games on Demand)", "X360")]
+    [InlineData("Nintendo - Nintendo 3DS (Decrypted)", "3DS")]
+    [InlineData("Nintendo - New Nintendo 3DS", "3DS")]
+    [InlineData("Nintendo - Wii U (Digital)", "Wii U")]
+    [InlineData("SNK - Neo Geo Pocket Color", "NGPC")]
+    [InlineData("Sega - Mega-CD - Sega CD", "MCD")]
+    [InlineData("NEC - PC Engine CD - TurboGrafx-CD", "PCECD")]
     public void Systems_have_short_names(string name, string expected) => Assert.Equal(expected, SystemNames.Short(name));
+
+    [Fact]
+    public void Each_DAT_name_is_one_system()
+    {
+        var names = KnownSystems.All.SelectMany(s => s.Dats.Select(d => (Dat: d, s.Short))).ToList();
+        Assert.All(names, n => Assert.Equal(n.Short, KnownSystems.Find(n.Dat)!.Short));
+        Assert.Equal(KnownSystems.All.Count, KnownSystems.All.Select(s => s.Short).Distinct().Count());
+    }
+
+    [Fact]
+    public void Systems_play_and_keep_their_games_as_suits_them()
+    {
+        Assert.Equal("psx", Romdex.Core.Play.Emulators.For("Sony - PlayStation")!.Core);
+        Assert.Null(Romdex.Core.Play.Emulators.For("Sony - PlayStation 2"));
+        Assert.Equal([Romdex.Client.StorageFormat.Keep], KnownSystems.Find("Microsoft - Xbox One")!.Formats);
+        Assert.Null(KnownSystems.Find("Sony - PlayStation 2")!.Formats);
+        Assert.True(SystemNames.IsPlatform("PS5"));
+        Assert.True(SystemNames.IsPlatform("Switch 2"));
+        Assert.Contains("Game Boy Colour", SystemNames.Names("Nintendo - Game Boy Color"));
+    }
 
     [Theory]
     [InlineData("(GC & Xbox) 4.8/10 · (PS2) 4.7/10", "Nintendo - GameCube", "4.8/10")]

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Romdex.Client;
+using Romdex.Core.Catalogue;
 using Romdex.Core.Data;
 
 namespace Romdex.Core.Downloads;
@@ -54,9 +55,14 @@ public sealed class Filing(RomdexDbContext db)
         return string.Join('/', parts);
     }
 
-    /// <summary>The storage formats that make sense for a system: CHD for discs, RVZ for GameCube and Wii, zip for cartridges.</summary>
+    /// <summary>
+    /// The storage formats that make sense for a system: CHD for discs, RVZ for GameCube and Wii, zip for cartridges, and
+    /// as they come for discs nothing plays from a CHD, such as the Xbox's and the PlayStation 3's.
+    /// </summary>
     public async Task<IReadOnlyList<StorageFormat>> FormatsForAsync(CatalogueSystem system, CancellationToken ct)
     {
+        if (KnownSystems.Find(system.Name)?.Formats is { } known)
+            return known;
         var names = await db.DumpFiles.Where(f => f.Dump!.SystemId == system.Id).Select(f => f.Name).Take(200).ToListAsync(ct);
         var discs = names.Count > 0 && names.Count(n => DiscExtensions.Contains(Path.GetExtension(n), StringComparer.OrdinalIgnoreCase)) * 2 >= names.Count;
         if (!discs)

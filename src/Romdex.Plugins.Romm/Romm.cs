@@ -114,8 +114,12 @@ public sealed class Romm(HttpClient http, string url, string publicUrl, string l
 
     public async Task TriggerScanAsync(IReadOnlyCollection<string> paths, CancellationToken cancellationToken)
     {
-        // The platform folders the paths are in; RomM scans those for what's new, or every platform given none.
-        var platforms = paths.Where(p => p.Contains('/')).Select(p => p.Split('/')[0]).Distinct(StringComparer.Ordinal).ToList();
+        // The platform folders the paths are in; RomM scans those for what's new, or every platform given none. The
+        // library may keep them in a games folder, such as roms/gb, so it's the folder RomM knows as a platform; a new
+        // platform it doesn't know yet is any folder the file's in.
+        var known = await PlatformsAsync(cancellationToken);
+        var platforms = paths.SelectMany(p => Folders(p).FirstOrDefault(known.ContainsKey) is { } platform ? [platform] : Folders(p))
+            .Distinct(StringComparer.Ordinal).ToList();
         using var response = await http.PostAsJsonAsync($"{url}/api/tasks/scan", new { type = "quick", platform_fs_slugs = platforms }, cancellationToken);
         // A scan already running picks up what's new on the platforms it hasn't reached; the core asks again if not.
         if (response.StatusCode != HttpStatusCode.Conflict)
@@ -127,10 +131,8 @@ public sealed class Romm(HttpClient http, string url, string publicUrl, string l
     {
         if (lookup.Path is { } path && path.Contains('/'))
         {
-            var platforms = _platforms ??= (await http.GetFromJsonAsync<List<Platform>>($"{url}/api/platforms", Json, cancellationToken) ?? [])
-                .Where(p => p.FsSlug is not null).GroupBy(p => p.FsSlug!, StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(g => g.Key, g => g.First().Id, StringComparer.OrdinalIgnoreCase);
-            if (platforms.TryGetValue(path.Split('/')[0], out var platform))
+            var platforms = await PlatformsAsync(cancellationToken);
+            if (Folders(path).FirstOrDefault(platforms.ContainsKey) is { } folder && platforms.TryGetValue(folder, out var platform))
             {
                 var full = libraryFolder.Length == 0 ? path : $"{libraryFolder}/{path}";
                 var name = Path.GetFileNameWithoutExtension(path);
@@ -154,6 +156,15 @@ public sealed class Romm(HttpClient http, string url, string publicUrl, string l
         }
         return null;
     }
+
+    // RomM's platforms, by their folders' names.
+    private async Task<Dictionary<string, int>> PlatformsAsync(CancellationToken ct) =>
+        _platforms ??= (await http.GetFromJsonAsync<List<Platform>>($"{url}/api/platforms", Json, ct) ?? [])
+            .Where(p => p.FsSlug is not null).GroupBy(p => p.FsSlug!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First().Id, StringComparer.OrdinalIgnoreCase);
+
+    // The folders a library path is in, outermost first.
+    private static string[] Folders(string path) => path.Split('/')[..^1];
 
     public Uri LaunchUri(string gameId) => new($"{publicUrl}/rom/{Uri.EscapeDataString(gameId)}");
 

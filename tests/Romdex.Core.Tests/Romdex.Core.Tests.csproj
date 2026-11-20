@@ -4,6 +4,11 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
+  <!-- Fewer tests at once on your own computer; CI sets CI=true and runs them all at once. -->
+  <PropertyGroup Condition="'$(CI)' != 'true'">
+    <RunSettingsFilePath>$(MSBuildThisFileDirectory)local.runsettings</RunSettingsFilePath>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.14" />

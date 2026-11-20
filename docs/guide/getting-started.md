@@ -30,6 +30,34 @@ a file is without trusting its name.
 Drop them into your DAT folder as they come, zipped or not. When there are two DATs for the same system, Romdex uses
 the newest. Redump's can be fetched for you instead: see [Plugins](plugins.md).
 
+## Systems
+
+Any system with a DAT works. These Romdex knows by name, so they get short names in lists, such as PS2, folders in each
+[library layout](downloads-and-filing.md#the-librarys-layout) and the storage formats that suit them:
+
+| Maker | Systems | DATs from |
+|---|---|---|
+| Nintendo | NES, Famicom Disk System, SNES, Nintendo 64, 64DD, Game Boy, Game Boy Color, Game Boy Advance, Virtual Boy, DS, DSi, 3DS | No-Intro |
+| Nintendo | GameCube, Wii, Wii U | Redump |
+| Nintendo | Switch | No-Intro no longer publishes it; a Switch DAT from elsewhere works |
+| Sega | Master System, Game Gear, Mega Drive and Genesis, 32X | No-Intro |
+| Sega | Mega CD and Sega CD, Saturn, Dreamcast | Redump |
+| Sony | PlayStation, PlayStation 2, 3, 4 and 5, PlayStation Portable | Redump |
+| Sony | PlayStation Vita, and the PlayStation 3's and Portable's downloads | No-Intro |
+| Microsoft | Xbox, Xbox 360, Xbox One, Xbox Series X | Redump |
+| NEC | PC Engine and TurboGrafx-16 | No-Intro |
+| NEC | PC Engine CD and TurboGrafx-CD, PC-FX | Redump |
+| SNK | Neo Geo Pocket and Pocket Color | No-Intro |
+| SNK | Neo Geo CD | Redump |
+| Bandai | WonderSwan and WonderSwan Color | No-Intro |
+| Atari | 2600, 7800, Lynx, Jaguar | No-Intro |
+| Others | ColecoVision (No-Intro), 3DO (Redump) | |
+
+Discs that nothing plays from a CHD, such as the Xbox's, the PlayStation 3's and the Wii U's, are kept as they come.
+Most cartridge systems up to the DS, and the PlayStation, Mega CD and PSP, play in the browser: see
+[Playing, covers and apps](playing-and-apps.md). Nothing plays the PlayStation 4 and 5's or the Xbox One and Series
+X's dumps, but Romdex checks and files them like any other.
+
 ## Your library
 
 **Library**, the home page, has two views. **Systems** lists every system you have games for; **Games** lists every

@@ -19,13 +19,13 @@ public sealed record EmulatorBios(bool Required, IReadOnlyDictionary<string, str
 public sealed record Emulator(string Core, EmulatorBios? Bios = null, bool Threads = false);
 
 /// <summary>
-/// The systems EmulatorJS plays, by their DAT names. Systems it can't run, such as the GameCube, aren't here: they only
-/// open in a connected app.
+/// The systems EmulatorJS plays, as <see cref="Catalogue.KnownSystems"/> says. Systems it can't run, such as the
+/// GameCube, only open in a connected app.
 /// </summary>
 public static class Emulators
 {
     // From the libretro cores' documentation of their system files.
-    private static readonly EmulatorBios PlayStation = new(false, new Dictionary<string, string>
+    internal static readonly EmulatorBios PlayStation = new(false, new Dictionary<string, string>
     {
         ["490f666e1afb15b7362b406ed1cea246"] = "scph5501.bin",
         ["32736f17079d0b2b7024407c39bd3050"] = "scph5502.bin",
@@ -35,44 +35,19 @@ public static class Emulators
         ["6e3735ff4c7dc899ee98981385f6f3d0"] = "scph101.bin",
     });
 
-    private static readonly EmulatorBios MegaCd = new(true, new Dictionary<string, string>
+    internal static readonly EmulatorBios MegaCd = new(true, new Dictionary<string, string>
     {
         ["2efd74e3232ff260e371b99f84024f7f"] = "bios_CD_U.bin",
         ["e66fa1dc5820d254611fdcdba0662372"] = "bios_CD_E.bin",
         ["278a9397d192149e84e820ac621a8edd"] = "bios_CD_J.bin",
     });
 
-    // By the start of the DAT's name: No-Intro adds what it leaves out of the files, such as "(Headered)".
-    private static readonly List<(string Name, Emulator Emulator)> Systems =
-    [
-        ("Nintendo - Game Boy", new("gb")),
-        ("Nintendo - Game Boy Color", new("gb")),
-        ("Nintendo - Game Boy Advance", new("gba", new EmulatorBios(false, new Dictionary<string, string> { ["a860e8c0b6d573d191e4ec7db1b1e4f6"] = "gba_bios.bin" }))),
-        ("Nintendo - Nintendo Entertainment System", new("nes")),
-        ("Nintendo - Family Computer Disk System", new("nes", new EmulatorBios(true, new Dictionary<string, string> { ["ca30b50f880eb660a320674ed365ef7a"] = "disksys.rom" }))),
-        ("Nintendo - Super Nintendo Entertainment System", new("snes")),
-        ("Nintendo - Nintendo 64", new("n64")),
-        ("Nintendo - Virtual Boy", new("vb")),
-        ("Nintendo - Nintendo DS", new("nds")),
-        ("Sega - Master System - Mark III", new("segaMS")),
-        ("Sega - Game Gear", new("segaGG")),
-        ("Sega - Mega Drive - Genesis", new("segaMD")),
-        ("Sega - 32X", new("sega32x")),
-        ("Sega - Mega CD & Sega CD", new("segaCD", MegaCd)),
-        ("Sega - Mega-CD - Sega CD", new("segaCD", MegaCd)),
-        ("Sony - PlayStation", new("psx", PlayStation)),
-        ("Sony - PlayStation Portable", new("psp", Threads: true)),
-        ("NEC - PC Engine - TurboGrafx-16", new("pce")),
-        ("Atari - 2600", new("atari2600")),
-        ("Atari - 7800", new("atari7800")),
-        ("Atari - Lynx", new("lynx")),
-        ("Atari - Jaguar", new("jaguar")),
-        ("Bandai - WonderSwan", new("ws")),
-        ("Bandai - WonderSwan Color", new("ws")),
-        ("SNK - NeoGeo Pocket", new("ngp")),
-        ("SNK - NeoGeo Pocket Color", new("ngp")),
-        ("Coleco - ColecoVision", new("coleco")),
-    ];
+    internal static readonly EmulatorBios GameBoyAdvance = new(false, new Dictionary<string, string> { ["a860e8c0b6d573d191e4ec7db1b1e4f6"] = "gba_bios.bin" });
+
+    internal static readonly EmulatorBios DiskSystem = new(true, new Dictionary<string, string> { ["ca30b50f880eb660a320674ed365ef7a"] = "disksys.rom" });
+
+    // Made-up systems the tests play, by their DAT names.
+    private static readonly List<(string Name, Emulator Emulator)> Systems = [];
 
     /// <summary>Adds a system ahead of the rest, for tests, whose made-up BIOS files no core knows.</summary>
     internal static void Register(string name, Emulator emulator) => Systems.Insert(0, (name, emulator));
@@ -81,5 +56,5 @@ public static class Emulators
     public static Emulator? For(string systemName) =>
         Systems.Where(s => systemName.Equals(s.Name, StringComparison.OrdinalIgnoreCase)
                            || systemName.StartsWith(s.Name + " (", StringComparison.OrdinalIgnoreCase))
-            .Select(s => s.Emulator).FirstOrDefault();
+            .Select(s => s.Emulator).FirstOrDefault() ?? Catalogue.KnownSystems.Find(systemName)?.Play;
 }
