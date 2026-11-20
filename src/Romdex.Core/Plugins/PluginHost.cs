@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using Romdex.Contracts.Plugins;
 using Romdex.Contracts.Plugins.Connectors;
 using Romdex.Contracts.Plugins.Index;
+using Romdex.Contracts.Plugins.Metadata;
 using Romdex.Core.Data;
 using Romdex.Plugins.DatFolder;
 
@@ -109,6 +110,19 @@ public sealed class IndexPlugins(RomdexDbContext db, PluginHost host)
             });
         }
         await db.SaveChangesAsync();
+    }
+}
+
+/// <summary>The sources of titles and covers that are on, in the user's order: the first that knows a dump wins.</summary>
+public sealed class MetadataPlugins(RomdexDbContext db, PluginHost host)
+{
+    public async Task<IReadOnlyList<(PluginInstance Instance, IMetadataPlugin Plugin)>> GetAllAsync(CancellationToken cancellationToken)
+    {
+        var instances = await db.PluginInstances
+            .Where(p => p.Type == PluginType.Metadata && p.Enabled)
+            .OrderBy(p => p.Priority)
+            .ToListAsync(cancellationToken);
+        return instances.Select(i => (i, host.Get<IMetadataPlugin>(i))).ToList();
     }
 }
 

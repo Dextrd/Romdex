@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Romdex.Plugins.ScreenScraper</RootNamespace>
+    <Description>Romdex metadata plugin that looks up games, their covers, details and screenshots on ScreenScraper, with a developer ID and your account.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Romdex.Contracts\Romdex.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

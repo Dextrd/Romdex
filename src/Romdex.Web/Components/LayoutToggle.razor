@@ -1,0 +1,15 @@
+@inject GameLayout Layout
+
+@* Switches lists of games between a grid of covers and a table: see GameLayout. *@
+<Segmented T="string" Value="Value" Options="GameLayout.Options" OnChange="ChangeAsync" Label="Layout" Class="layout-toggle" />
+
+@code {
+    [Parameter, EditorRequired] public string Value { get; set; } = GameLayout.Grid;
+    [Parameter] public EventCallback<string> OnChange { get; set; }
+
+    private async Task ChangeAsync(string layout)
+    {
+        await Layout.SetAsync(layout);
+        await OnChange.InvokeAsync(layout);
+    }
+}

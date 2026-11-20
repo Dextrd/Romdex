@@ -340,6 +340,8 @@ p.error { max-width: none; white-space: normal; }
     display: block; background: var(--bg); border: 1px solid var(--border); box-sizing: border-box; flex: none;
 }
 .cover img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+/* A game's: a box is taller than it's wide. */
+.cover.box { aspect-ratio: 3 / 4; }
 .cover svg {
     position: absolute; inset: 0; margin: auto; width: 45%; height: 45%;
     fill: none; stroke: var(--muted); stroke-width: 1.5; opacity: .7;
@@ -907,6 +909,8 @@ fieldset.row { border: 0; margin: 0; padding: 0; min-width: 0; }
 .segmented.ownership.owned button.selected { color: var(--owned); }
 .segmented.ownership.missing .thumb { background: var(--missing-bg); }
 .segmented.ownership.missing button.selected { color: var(--missing); }
+.segmented.consoles button.have { color: var(--owned); font-weight: 600; }
+.segmented.consoles.have .thumb { background: var(--owned-bg); }
 @media (prefers-reduced-motion: reduce) { .segmented.slider .thumb { transition: none; } }
 .ownership-busy { width: 1rem; height: 1rem; color: var(--accent); opacity: 0; transition: opacity 0s; }
 .ownership-busy.on { opacity: 1; transition-delay: .12s; }
@@ -1163,6 +1167,8 @@ svg.flip { transform: scaleY(-1); }
     background: linear-gradient(135deg, var(--light) 50%, var(--dark) 50%);
 }
 .mode-choices { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: .5rem; }
+.rating-choices { display: grid; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: .5rem; }
+.rating-choice img { flex: none; width: 2.25rem; height: 2.25rem; object-fit: contain; }
 
 /* Settings → Help: the guide, as written in docs/guide. */
 .help { padding: 1rem 1.4rem 1.5rem; }
@@ -1525,14 +1531,29 @@ table.slots thead th { height: 32px; box-sizing: border-box; }
 .badge.bad { color: var(--missing); background: var(--bg); border: 1px solid var(--missing); }
 .counts { display: flex; gap: 1.25rem; flex-wrap: wrap; margin: .5rem 0 1rem; }
 .counts span { white-space: nowrap; }
-.dump { padding: .9rem 1.1rem; border-bottom: 1px solid var(--border); }
+/* A game's dumps: each its name, regions and languages, opening onto its serial, files and hashes. Its status and
+   buttons sit to the right, outside what opens it. */
+.dump { display: flex; gap: .75rem; align-items: flex-start; padding: .75rem 1.1rem; border-bottom: 1px solid var(--border); }
 .dump:last-child { border-bottom: none; }
-.dump-head { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
-.dump-name { font-weight: 600; flex: 1; min-width: 12rem; overflow-wrap: anywhere; }
-.dump-files { margin-top: .5rem; font-size: .85rem; }
-.dump-files .file { margin-top: .35rem; overflow-wrap: anywhere; }
-.hashes { display: flex; gap: .4rem; flex-wrap: wrap; margin-top: .15rem; }
-.hashes code { font-size: .78rem; }
+.dump > details { flex: 1; min-width: 0; }
+.dump > details > summary { margin: 0; color: var(--text); list-style: none; display: grid; gap: .1rem; padding-left: 1.1rem; position: relative; }
+.dump > details > summary::-webkit-details-marker { display: none; }
+.dump > details > summary::before {
+    content: ""; position: absolute; left: 0; top: .45rem; width: .4rem; height: .4rem; border: solid var(--muted);
+    border-width: 0 2px 2px 0; transform: rotate(-45deg); transition: transform .15s;
+}
+.dump > details[open] > summary::before { transform: rotate(45deg); top: .3rem; }
+.dump-name { font-weight: 600; overflow-wrap: anywhere; }
+.dump-line { font-size: .85rem; }
+.dump-aside { display: flex; gap: .4rem; align-items: center; flex: none; }
+.dump-details { margin: .6rem 0 0 1.1rem; font-size: .85rem; }
+.dump-files { margin: .5rem 0 0 1.1rem; font-size: .85rem; }
+.dump-files .file { margin-top: .5rem; overflow-wrap: anywhere; }
+.hashes { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: .1rem .6rem; margin: .2rem 0 0; }
+.hashes dt { color: var(--muted); font-size: .78rem; }
+.hashes dd { margin: 0; }
+.hashes code { font-size: .78rem; overflow-wrap: anywhere; }
+@media (max-width: 640px) { .dump { flex-direction: column; gap: .4rem; } .dump-aside { padding-left: 1.1rem; } }
 .toolbar .search-box { flex: 1; min-width: 12rem; }
 
 /* Downloads: what's arriving, and getting a game through the plugins. */
@@ -1566,13 +1587,178 @@ table.slots thead th { height: 32px; box-sizing: border-box; }
 .scan-menu a:hover { background: var(--bg); }
 .scan-menu .small { white-space: normal; }
 
-/* Covers, from a hash-lookup plugin such as Hasheous. */
-.title-head { display: flex; gap: 1.25rem; align-items: flex-start; margin-bottom: 1rem; }
-.title-head h1 { margin: 0; }
+/* A game's page: its cover with what's known of it below; beside them, its name, what can be done with it, what it's
+   about and its reviews. On a phone, one after another: the cover, the rest, then the facts. */
+.game-page {
+    display: grid; grid-template-columns: 300px minmax(0, 1fr); grid-template-rows: auto 1fr; gap: 1rem 1.75rem;
+    grid-template-areas: "cover main" "facts main"; margin-bottom: 1.25rem;
+}
+.game-page > .cover { grid-area: cover; width: 100%; }
+.game-page > .game-facts { grid-area: facts; align-self: start; }
+.game-main { grid-area: main; display: flex; flex-direction: column; gap: .55rem; min-width: 0; }
+.game-main h1 { margin: 0; }
+/* The title with its age rating in the corner opposite. */
+.game-title { display: flex; align-items: flex-start; gap: 1rem; }
+.game-title-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .55rem; }
+.age-rating { flex: none; height: 4.5rem; width: auto; max-width: 4.5rem; object-fit: contain; }
+@media (max-width: 640px) { .age-rating { height: 3.25rem; } }
+.game-main .known-as { margin: -.35rem 0 0; }
+.game-meta { gap: .5rem .9rem; }
+.game-actions { margin-top: .25rem; }
+.game-links { margin-top: .15rem; }
+.game-links a:hover { text-decoration: none; }
+.game-links a:hover code { border-color: var(--accent); color: var(--accent); }
+@media (max-width: 800px) {
+    .game-page { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "cover" "main" "facts"; }
+    .game-page > .cover { width: 180px; }
+}
+/* The summary's first lines, fading out, until it's opened downwards to show the rest. */
+.game-summary { margin-top: .6rem; }
+.game-summary .placeholder { max-width: none; }
+.game-summary-text { height: auto; overflow: hidden; interpolate-size: allow-keywords; transition: height .35s ease; }
+.game-summary.clamped .game-summary-text { height: 9.4em; mask-image: linear-gradient(to bottom, #000 55%, transparent); }
+.game-summary-text p { margin: 0 0 .75rem; line-height: 1.55; }
+.game-summary-text p:last-child { margin-bottom: 0; }
+.game-summary-foot { display: flex; align-items: center; gap: 1rem; margin-top: .35rem; }
+.summary-toggle {
+    margin-left: auto; display: inline-flex; align-items: center; gap: .45rem; padding: .2rem .1rem; border: 0; background: none;
+    color: var(--accent); font: inherit; cursor: pointer;
+}
+.summary-toggle:hover { text-decoration: underline; }
+.summary-toggle .chevron { border-color: currentColor; }
+.chevron.down { transform: rotate(45deg); margin-top: -.25rem; }
+.chevron.down.open { transform: rotate(225deg); margin-top: .2rem; }
+.chevron.left { transform: rotate(135deg); }
+.chevron.right { transform: rotate(-45deg); }
+@media (prefers-reduced-motion: reduce) { .game-summary-text { transition: none; } }
+.game-facts {
+    display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: .45rem 1rem; margin: 0; padding: .9rem 1.1rem;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); font-size: .88rem;
+}
+.game-facts dt { color: var(--muted); }
+.game-facts dd { margin: 0; overflow-wrap: anywhere; white-space: pre-line; }
+/* Reviews: a row that scrolls sideways between its arrows, fading out at an edge with more past it. Each is coloured
+   green, amber or red where it reads as a score, with its reviewer's badge. */
+.game-reviews h2.section { margin-top: 1rem; }
+.carousel { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .4rem; --fade-start: 2.5rem; --fade-end: 2.5rem; }
+.carousel.at-start { --fade-start: 0px; }
+.carousel.at-end { --fade-end: 0px; }
+.carousel-track {
+    display: flex; gap: .6rem; overflow-x: auto; scroll-snap-type: x proximity; scroll-padding-inline: 2px; scrollbar-width: none; padding: 2px;
+    mask-image: linear-gradient(to right, transparent, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent);
+}
+.carousel-track::-webkit-scrollbar { display: none; }
+.carousel-track > * { flex: none; scroll-snap-align: start; }
+.carousel-arrow {
+    width: 2rem; height: 2rem; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--border);
+    background: var(--surface); cursor: pointer; transition: transform .12s ease, opacity .2s ease, border-color .15s;
+}
+.carousel-arrow .chevron { border-color: var(--text); }
+.carousel-arrow .chevron.left { margin-left: .2rem; }
+.carousel-arrow .chevron.right { margin-right: .2rem; }
+.carousel-arrow:hover { border-color: var(--accent); }
+.carousel-arrow:hover .chevron { border-color: var(--accent); }
+.carousel-arrow:active { transform: scale(.88); }
+.carousel.at-start .carousel-arrow[data-step="-1"], .carousel.at-end .carousel-arrow[data-step="1"] { opacity: .3; pointer-events: none; }
+/* Everything fits: no arrows. */
+.carousel.at-start.at-end { grid-template-columns: minmax(0, 1fr); }
+.carousel.at-start.at-end .carousel-arrow { display: none; }
+/* On a phone or anything touched rather than pointed at: swiped, without arrows taking its room. */
+@media (hover: none), (max-width: 640px) {
+    .carousel { grid-template-columns: minmax(0, 1fr); }
+    .carousel-arrow { display: none; }
+    .carousel-track { scroll-snap-type: x mandatory; }
+}
+.score {
+    width: 11rem; display: flex; flex-direction: column; align-items: flex-start; gap: .2rem; padding: .7rem .8rem;
+    border-radius: var(--radius); background: var(--surface); border: 1px solid var(--border); transition: transform .2s ease;
+}
+.score:hover { transform: translateY(-2px); }
+/* The reviewer, by its logo on white where Romdex has it, else by its letters in its own colour. */
+.score-logo, .score-icon { height: 2rem; margin-bottom: .35rem; display: inline-flex; align-items: center; border-radius: 6px; }
+.score-logo { max-width: 100%; padding: .3rem .5rem; background: #fff; }
+.score-logo img { display: block; max-height: 1.4rem; max-width: 100%; }
+.score-icon {
+    min-width: 2rem; padding: 0 .45rem; justify-content: center; background: hsl(var(--hue) 45% 38%); color: #fff;
+    font-size: .72rem; font-weight: 800; letter-spacing: .03em;
+}
+.score-value { font-size: 1.1rem; font-weight: 700; overflow-wrap: anywhere; line-height: 1.25; }
+.score-by { color: var(--muted); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Screenshots: a row of them, each opened bigger over the page. */
+.game-images h2.section { margin-top: 1rem; }
+.carousel-track.shots { gap: .75rem; margin-bottom: .4rem; }
+.carousel-track.shots > .shot { width: 18rem; }
+.shot[hidden] { display: none; }
+.game-images:not(:has(.shot:not([hidden]))) { display: none; }
+@media (max-width: 640px) { .carousel-track.shots > .shot { width: 15rem; } .score { width: 9.5rem; } }
+.shot {
+    position: relative; display: block; padding: 0; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
+    background: #000; cursor: zoom-in; transition: border-color .15s, transform .2s ease;
+}
+.shot:hover { border-color: var(--accent); transform: translateY(-2px); }
+.shot img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: contain; }
+.shot-label {
+    position: absolute; left: .5rem; bottom: .5rem; padding: .1rem .45rem; border-radius: 4px; background: rgb(0 0 0 / .65); color: #fff;
+}
+/* The rest of its series: a row of its games' tiles. */
+.game-series h2.section { margin-top: 1.5rem; }
+.series-track { gap: .9rem; padding-bottom: .4rem; }
+.series-track > .tile-wrap { width: 150px; }
+@media (max-width: 640px) { .series-track > .tile-wrap { width: 128px; } }
+.lightbox {
+    position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 2rem; background: rgb(0 0 0 / .85);
+    cursor: zoom-out; animation: lightbox-in .18s ease;
+}
+.lightbox img { max-width: 100%; max-height: 100%; min-width: min(640px, 100%); object-fit: contain; image-rendering: auto; border-radius: 4px; }
+.lightbox:focus { outline: none; }
+.lightbox-close {
+    position: absolute; top: 1rem; right: 1rem; width: 2.5rem; height: 2.5rem; border-radius: 50%; border: 0; background: rgb(255 255 255 / .15);
+    color: #fff; font-size: 1.5rem; line-height: 1; cursor: pointer;
+}
+@keyframes lightbox-in { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .lightbox { animation: none; } }
+.score.owned { background: var(--owned-bg); border-color: color-mix(in srgb, var(--owned) 35%, transparent); }
+.score.owned .score-value { color: var(--owned); }
+.score.partial { background: var(--partial-bg); border-color: color-mix(in srgb, var(--partial) 35%, transparent); }
+.score.partial .score-value { color: var(--partial); }
+.score.missing { background: var(--missing-bg); border-color: color-mix(in srgb, var(--missing) 35%, transparent); }
+.score.missing .score-value { color: var(--missing); }
 .cover { width: 132px; flex: none; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); }
-.thumb { width: 28px; height: 28px; object-fit: cover; border-radius: 4px; vertical-align: middle; margin-right: .5rem; }
+/* A game in a list: its cover, small, before its name. */
+.game-name { display: inline-flex; align-items: center; gap: .6rem; }
+.game-name > .cover { width: 1.75rem; border-radius: 3px; }
+.game-name > .cover svg { width: 75%; height: 75%; stroke-width: 1.75; }
 @media (max-width: 600px) { .cover { width: 88px; } }
 
-/* Playing a game, or opening it in the connected app. */
-.dump-actions { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin: .4rem 0; }
 .bios-need { display: flex; gap: .5rem; align-items: baseline; }
+
+/* Games as tiles: the whole tile is coloured for where the game stands, green in the library and red missing, with
+   its status written too, so it doesn't rest on colour alone. Five to a row on a laptop. */
+.game-tiles { grid-template-columns: repeat(auto-fill, minmax(185px, 1fr)); }
+@media (max-width: 640px) { .game-tiles { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); } }
+.game-tile { gap: .3rem; padding: .5rem; }
+.game-tile .tile-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.game-tile .tile-status { font-weight: 600; }
+.game-tile.owned { background: var(--owned-bg); border-color: color-mix(in srgb, var(--owned) 35%, transparent); }
+.game-tile.owned .tile-status { color: var(--owned); }
+.game-tile.missing { background: var(--missing-bg); border-color: color-mix(in srgb, var(--missing) 35%, transparent); }
+.game-tile.missing .tile-status { color: var(--missing); }
+.game-tile.partial, .game-tile.bad { background: var(--partial-bg); border-color: color-mix(in srgb, var(--partial) 35%, transparent); }
+.game-tile.partial .tile-status, .game-tile.bad .tile-status { color: var(--partial); }
+.game-tile:hover { border-color: var(--accent); }
+.game-tile .cover { width: 100%; }
+/* A button in a game tile's corner, such as to get it, over its cover: shown on hover or focus, always on a touch screen. */
+.tile-corner { position: absolute; top: .9rem; right: .9rem; opacity: 0; transition: opacity .15s; }
+.tile-wrap:hover .tile-corner, .tile-wrap:focus-within .tile-corner { opacity: 1; }
+@media (hover: none) { .tile-corner { opacity: 1; } }
+.tile-corner .icon-button { box-shadow: 0 1px 4px rgb(0 0 0 / .25); }
+
+/* A game's systems by short name: the theme's colour where the library has it, grey where it doesn't. */
+.system-list a { color: var(--muted); }
+.system-list a.have { color: var(--accent); font-weight: 600; }
+.system-list a.current { text-decoration: underline; text-underline-offset: 3px; }
+.versions { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem; }
+/* A game on many systems scrolls sideways rather than widen the page. */
+.versions:has(.consoles) { display: block; max-width: 100%; overflow-x: auto; scrollbar-width: none; margin-top: .4rem; }
+.versions .consoles { font-size: .85rem; }
+.toolbar .layout-toggle { margin-left: auto; }

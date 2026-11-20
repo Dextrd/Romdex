@@ -1,0 +1,21 @@
+@*
+    The systems a game is on, by short name, separated by commas: in the theme's colour where the library has it, grey
+    where it doesn't. Each links to the game's page on that system.
+*@
+<span class="system-list">
+    @for (var i = 0; i < Titles.Count; i++)
+    {
+        var (id, system, status, name) = Titles[i];
+        var owned = status != TitleStatus.Missing;
+        <a class="@(owned ? "have" : "") @(id == Current ? "current" : "")" href="titles/@id" aria-current="@(id == Current ? "page" : null)"
+           title="@($"{name} · {Format.OwnershipLabel(status)}")">@system</a>@(i < Titles.Count - 1 ? ", " : "")
+    }
+</span>
+
+@code {
+    /// <summary>The game's title on each system: its ID, the system's short name, where it stands, and a tooltip.</summary>
+    [Parameter, EditorRequired] public IReadOnlyList<(Guid Id, string System, TitleStatus Status, string Name)> Titles { get; set; } = [];
+
+    /// <summary>The title whose page this is, if any.</summary>
+    [Parameter] public Guid? Current { get; set; }
+}

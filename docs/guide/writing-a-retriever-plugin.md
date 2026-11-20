@@ -9,12 +9,14 @@ of these:
 Either way, it writes the files into a folder Romdex gives it, and Romdex works out what they are from their
 checksums. A plugin never has to identify anything, and Romdex files nothing it can't verify, whatever the plugin says.
 
-The plugins in the repository are short examples to start from:
+Romdex's own retrievers are short examples to start from, each in a repository of its own:
 
-- `plugins/retriever-inbox` (Python) lists and searches a folder;
-- `plugins/retriever-dumps` lists what dumping tools write.
+- [`romdex-retriever-inbox`](https://github.com/dextrd/romdex-retriever-inbox) (Python) lists and searches a folder;
+- [`romdex-retriever-dumps`](https://github.com/dextrd/romdex-retriever-dumps) lists what dumping tools write;
+- [`romdex-retriever-prowlarr`](https://github.com/dextrd/romdex-retriever-prowlarr) searches Prowlarr and downloads
+  with qBittorrent, with a check of its own.
 
-You're responsible for what your plugin fetches. Romdex comes with none that fetch commercial games.
+You're responsible for what your plugin fetches.
 
 ## The contract (version 1.0)
 

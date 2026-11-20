@@ -7,17 +7,14 @@
 #   PUID, PGID        the user and group that own the library, as `id` shows them (default 1000)
 #   ROMDEX_PORT       the port the web app is on (default 8788)
 #   ROMDEX_VERSION    the release, such as 1.0.0; latest follows each one
-#   INBOX_PATH        a folder to drop dumps into for the inbox plugin (default ./inbox)
-#   COMPOSE_PROFILES  more retrievers, comma-separated: dumps
-#   DUMPS_PATH        your dumping tools' output folder, for dumps (default ./dumps)
 #
-# Open http://your-server:8788 and setup walks you through the rest. Add the retrievers under Settings → Plugins,
-# where they're among the templates.
+# Retrievers, which bring dumps in, are added beside these: each retriever's README, linked from the guide's Plugins
+# page, has the lines to paste under services. Then open http://your-server:8788 and setup walks you through the rest.
 # To build from source instead: docker compose -f docker-compose.yml -f docker-compose.build.yml up --build
 #
 # On SELinux hosts, label the folders you mount for containers first: chcon -R -t container_file_t <folder>.
 # With podman, files carry the categories of the container that wrote them, and dumps pass from a
-# plugin through staging to the igir worker. Give every container here the same
+# plugin through staging to the igir worker. Give every container here, and the retrievers, the same
 # `security_opt: ["label=level:s0:c100,c200"]` so they can read each other's files.
 
 x-plugin: &plugin
@@ -60,26 +57,6 @@ services:
     image: ghcr.io/dextrd/romdex-emulatorjs:${ROMDEX_VERSION:-latest}
     container_name: romdex-emulatorjs
     restart: unless-stopped
-
-  # Retriever plugins, one container each.
-  retriever-inbox:
-    <<: *plugin
-    image: ghcr.io/dextrd/romdex-retriever-inbox:${ROMDEX_VERSION:-latest}
-    container_name: romdex-retriever-inbox
-    volumes:
-      - ${INBOX_PATH:-./inbox}:/inbox
-      - staging:/staging
-
-  # The rest only run when named in COMPOSE_PROFILES.
-  retriever-dumps:
-    <<: *plugin
-    profiles: [dumps]
-    image: ghcr.io/dextrd/romdex-retriever-dumps:${ROMDEX_VERSION:-latest}
-    container_name: romdex-retriever-dumps
-    volumes:
-      # Read-only, as it copies by default; make it writable to have dumps moved out.
-      - ${DUMPS_PATH:-./dumps}:/dumps:ro
-      - staging:/staging
 
 volumes:
   config:

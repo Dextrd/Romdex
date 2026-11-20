@@ -22,7 +22,9 @@ public static class CatalogueEndpoints
 
         systems.MapGet("/{id:guid}", async (Guid id, LibraryViewBuilder views, CancellationToken ct) =>
                 await views.GetAsync(id, ct) is { } view ? Results.Ok(view.Summary) : Results.NotFound())
-            .WithName("GetSystem").Produces<SystemSummary>().Produces(StatusCodes.Status404NotFound);
+            .WithName("GetSystem")
+            .WithSummary("A system: its DAT, and how much of it the library has, after its 1G1R preferences.")
+            .Produces<SystemSummary>().Produces(StatusCodes.Status404NotFound);
 
         systems.MapGet("/{id:guid}/titles", async (Guid id, LibraryViewBuilder views, TitleStatus? status, string? q, bool? ignored, bool? hidden,
                 bool? have, int? skip, int? take, CancellationToken ct) =>
@@ -51,7 +53,9 @@ public static class CatalogueEndpoints
                 var (found, own) = await preferences.GetAsync(system.Name, ct);
                 return Results.Ok(new SystemPreferencesInfo(found, own));
             })
-            .WithName("GetSystemPreferences").Produces<SystemPreferencesInfo>().Produces(StatusCodes.Status404NotFound);
+            .WithName("GetSystemPreferences")
+            .WithSummary("A system's 1G1R preferences: its own, or everyone's default when it has none.")
+            .Produces<SystemPreferencesInfo>().Produces(StatusCodes.Status404NotFound);
         systems.MapPut("/{id:guid}/preferences", async (Guid id, SystemPreferences body, RomdexDbContext db, Preferences preferences, CancellationToken ct) =>
             {
                 if (await db.Systems.FindAsync([id], ct) is not { } system)
@@ -89,6 +93,7 @@ public static class CatalogueEndpoints
                 return Results.Ok(body);
             })
             .RequireScope(Scopes.Download).WithTags("Catalogue").WithName("SetDefaultPreferences")
+            .WithSummary("Sets the 1G1R preferences every system without its own follows.")
             .Produces<SystemPreferences>().ProducesValidationProblem();
 
         var titles = api.MapGroup("/titles").WithTags("Catalogue");
@@ -105,21 +110,69 @@ public static class CatalogueEndpoints
             .WithName("ListAllTitles")
             .WithSummary("Every system's titles together, by name, filtered as a system's are.");
 
-        titles.MapGet("/{id:guid}", async (Guid id, RomdexDbContext db, LibraryViewBuilder views, CancellationToken ct) =>
-                await DetailAsync(id, db, views, ct) is { } detail ? Results.Ok(detail) : Results.NotFound())
+        titles.MapGet("/{id:guid}", async (Guid id, RomdexDbContext db, LibraryViewBuilder views, Games games, CancellationToken ct) =>
+                await DetailAsync(id, db, views, ct, games) is { } detail ? Results.Ok(detail) : Results.NotFound())
             .WithName("GetTitle").WithSummary("A title with every dump of it, their hashes, which one 1G1R prefers, and where the library has them.")
             .Produces<TitleDetail>().Produces(StatusCodes.Status404NotFound);
 
-        titles.MapGet("/{id:guid}/cover", async (Guid id, HttpContext http, RomdexDbContext db, Microsoft.Extensions.Options.IOptions<RomdexOptions> options,
-                CancellationToken ct) =>
+        titles.MapGet("/{id:guid}/cover", async (Guid id, HttpContext http, CoverCache covers, CancellationToken ct) =>
             {
-                if (await ArtLookupTask.BestAsync(db, id, ct) is not { CoverFile: { } file } || ArtLookupTask.CoverPath(options.Value, file) is not { } path)
+                // A cover not looked up yet can take a while, as sources are rate-limited. Browsers make only a few
+                // requests at once to a server, so a page of covers on their way would hold up everything else: answer
+                // 503 at once instead. The page asks after them all together (covers/status).
+                var finding = covers.GetAsync(id, ct);
+                if (await Task.WhenAny(finding, Task.Delay(CoverPatience, ct)) != finding)
+                {
+                    http.Response.Headers.RetryAfter = "2";
+                    return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+                }
+                if (await finding is not { } found)
                     return Results.NotFound();
-                http.Response.Headers.CacheControl = "private, max-age=86400";
-                return Results.File(path, ArtLookupTask.ContentType(file));
+                http.Response.Headers.CacheControl = "private, max-age=0, stale-while-revalidate=604800";
+                return Results.File(found.Path, found.ContentType, lastModified: found.UpdatedAt,
+                    entityTag: new Microsoft.Net.Http.Headers.EntityTagHeaderValue($"\"{found.UpdatedAt.Ticks:x}\""));
             })
-            .WithName("GetTitleCover").WithSummary("The title's cover, as a hash-lookup plugin such as Hasheous found it: the one for a dump the library has, if any.")
+            .WithName("GetTitleCover")
+            .WithSummary("The title's cover, from the metadata plugins, such as Hasheous, whether the library has the game or not: looked up the first time "
+                         + "it's asked for, then kept. 404 when there's none; 503 with Retry-After while it's still being looked up.")
+            .Produces(StatusCodes.Status200OK, contentType: "image/png").Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status503ServiceUnavailable);
+
+        titles.MapGet("/{id:guid}/images/{index:int}", async (Guid id, int index, HttpContext http, RomdexDbContext db, GameImages images, CancellationToken ct) =>
+            {
+                if (await GameDetailsCache.ImageAsync(db, id, index, ct) is not { } image || await images.GetAsync(image.Url, ct) is not { } found)
+                    return Results.NotFound();
+                http.Response.Headers.CacheControl = "private, max-age=604800";
+                return Results.File(found.Path, found.ContentType);
+            })
+            .WithName("GetGameImage")
+            .WithSummary("One of the pictures of the title's game listed with what it is (about): fetched from where the metadata plugin found it the first "
+                         + "time it's asked for, then kept.")
             .Produces(StatusCodes.Status200OK, contentType: "image/png").Produces(StatusCodes.Status404NotFound);
+
+        titles.MapGet("/{id:guid}/about", async (Guid id, bool? partial, RomdexDbContext db, GameDetailsCache details, CancellationToken ct) =>
+                !await db.Titles.AnyAsync(t => t.Id == id, ct) ? Results.NotFound()
+                : Results.Ok(partial == true ? await details.GetSoFarAsync(id, AboutPatience, ct) : await details.GetAsync(id, ct)))
+            .WithName("GetGameInfo")
+            .WithSummary("What the title's game is, from the metadata plugins, such as Hasheous and Wikipedia: what it's about, when it came out, who made it, "
+                         + "its reviews, age ratings, pictures, the other games in its series and pages about it elsewhere. Looked up the first time it's "
+                         + "asked for, which can take a few seconds, then kept. With partial=true, what's been found so far after a second at most, marked "
+                         + "loading until there's no more to come.")
+            .Produces<GameInfo>().Produces(StatusCodes.Status404NotFound);
+
+        titles.MapPost("/covers/status", async (string[] urls, CoverCache covers) =>
+            {
+                // Each is looked for at once, and those still on their way after a moment are pending.
+                var asked = urls.Distinct().Take(500).Select(url => (Url: url, Match: CoverUrl.Match(url))).ToList();
+                var finding = asked.Where(a => a.Match.Success).ToDictionary(a => a.Url, a => covers.GetAsync(Guid.Parse(a.Match.Groups[1].Value), CancellationToken.None));
+                await Task.WhenAny(Task.WhenAll(finding.Values), Task.Delay(CoverStatusPatience));
+                return asked.ToDictionary(a => a.Url, a => !finding.TryGetValue(a.Url, out var found) ? "none"
+                    : !found.IsCompleted ? "pending"
+                    : found.IsCompletedSuccessfully && found.Result is not null ? "ready" : "none");
+            })
+            .WithName("GetCoverStatus")
+            .WithSummary("For covers that answered 503, which are ready now, which there are none of, and which are still pending, by URL. "
+                         + "One request for a page of them, rather than one each.");
 
         titles.MapPost("/{id:guid}/ignore", (Guid id, RomdexDbContext db, LibraryViews cache, LibraryViewBuilder views, CancellationToken ct) =>
                 SetIgnoredAsync(id, true, db, cache, views, ct))
@@ -144,25 +197,38 @@ public static class CatalogueEndpoints
             .RequireScope(Scopes.Download).WithName("ChoosePreferredDump").WithSummary("Prefer one dump of a title over what 1G1R picks, or let 1G1R pick again.")
             .Produces<TitleDetail>().ProducesValidationProblem().Produces(StatusCodes.Status404NotFound);
 
-        api.MapGet("/catalogue/search", async (string q, LibraryViewBuilder views, Guid? system, bool? have, int? skip, int? take, CancellationToken ct) =>
+        api.MapGet("/catalogue/search", async (string q, Games games, Guid? system, bool? have, int? skip, int? take, CancellationToken ct) =>
             {
                 var words = q.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
                 if (words.Length == 0)
                     return Results.ValidationProblem(new Dictionary<string, string[]> { ["q"] = ["Say what to search for."] });
-                var found = new List<(TitleSummary Title, int Rank)>();
-                foreach (var view in await views.GetAllAsync(ct))
+                // A game matches when any of its titles does, as its name elsewhere may not be what was searched for. Its
+                // titles are put in order again: owned first, as before, then the one named as searched for, which names it.
+                var found = new List<(IReadOnlyList<GameTitle> Titles, int Rank)>();
+                var seen = new HashSet<Guid>();
+                foreach (var (_, game) in await games.GetAsync(ct))
                 {
-                    if (system is { } id && view.Summary.Id != id)
+                    if (!seen.Add(game[0].Title.Id))
                         continue;
-                    foreach (var title in view.Titles)
-                        if ((have is null || have == (title.Status != TitleStatus.Missing)) && SearchRank(title, q.Trim(), words) is { } rank)
-                            found.Add((Summary(view.Summary.Id, title), rank));
+                    var ranked = game.Select(t => (Title: t, Rank: SearchRank(t.Title, q.Trim(), words) ?? int.MaxValue)).ToList();
+                    var rank = ranked.Min(r => r.Rank);
+                    if (rank == int.MaxValue)
+                        continue;
+                    found.Add((ranked.OrderBy(r => r.Title.Title.Status).ThenBy(r => r.Rank).Select(r => r.Title).ToList(), rank));
                 }
-                return Results.Ok(Page(found.OrderBy(f => f.Rank).ThenBy(f => f.Title.Name, StringComparer.OrdinalIgnoreCase).Select(f => f.Title), skip, take));
+                var matched = found
+                    .Where(g => system is not { } id || g.Titles.Any(t => t.System.Summary.Id == id))
+                    .Where(g => have is null || have == (g.Titles[0].Title.Status != TitleStatus.Missing))
+                    .OrderBy(g => g.Rank).ThenBy(g => g.Titles[0].Title.Name, StringComparer.OrdinalIgnoreCase)
+                    .Select(g => Game(g.Titles))
+                    .ToList();
+                return Results.Ok(new GamePage(matched.Skip(Math.Max(0, skip ?? 0)).Take(Math.Clamp(take ?? 100, 1, 1000)).ToList(), matched.Count));
             })
             .WithTags("Catalogue").WithName("SearchCatalogue")
-            .WithSummary("Every game the DATs list, in the library or not, whose name or a dump's name has every word searched for. The closest names come first; system narrows it to one system, have to games the library has (true) or hasn't (false).")
-            .Produces<TitlePage>().ProducesValidationProblem();
+            .WithSummary("Every game the DATs list, in the library or not, whose name or a dump's name has every word searched for, once with its title on every "
+                         + "system it's on. The closest names come first; system narrows it to games on one system, have to games the library has on some "
+                         + "system (true) or on none (false).")
+            .Produces<GamePage>().ProducesValidationProblem();
 
         api.MapPost("/catalogue/refresh", async (TaskQueue queue, TaskTitles titles, CancellationToken ct) =>
                 titles.ToInfo(await queue.EnqueueAsync(CatalogueRefreshTask.TaskKind, null, ct)))
@@ -171,6 +237,16 @@ public static class CatalogueEndpoints
 
         return api;
     }
+
+    // How long a cover is waited for before answering 503, and how long the status waits for those it's asked about.
+    private static readonly TimeSpan CoverPatience = TimeSpan.FromMilliseconds(100);
+    private static readonly TimeSpan CoverStatusPatience = TimeSpan.FromMilliseconds(250);
+
+    // How long a game's page waits for its details before it's given what's been found so far.
+    private static readonly TimeSpan AboutPatience = TimeSpan.FromSeconds(1);
+
+    private static readonly System.Text.RegularExpressions.Regex CoverUrl =
+        new(@"titles/([0-9a-fA-F-]{36})/cover", System.Text.RegularExpressions.RegexOptions.Compiled);
 
     private static IEnumerable<TitleView> Filter(IEnumerable<TitleView> titles, TitleStatus? status, string? q, bool? ignored, bool hidden, bool have = false) =>
         titles.Where(t => (hidden || t.Shown)
@@ -195,7 +271,12 @@ public static class CatalogueEndpoints
     }
 
     public static TitleSummary Summary(Guid systemId, TitleView t) =>
-        new(t.Id, systemId, t.Name, t.Status, t.Preferred.Ref, t.Have?.Ref, t.Ignored, t.Dumps.Count, t.HasCover ? CoverPath(t.Id) : null);
+        new(t.Id, systemId, t.Name, t.Status, t.Preferred.Ref, t.Have?.Ref, t.Ignored, t.Dumps.Count, CoverPath(t.Id));
+
+    // A game, named and pictured as its best title, the one the library has if any.
+    public static GameSummary Game(IReadOnlyList<GameTitle> titles) =>
+        new(titles[0].Title.Id, titles[0].Title.Name, titles[0].Title.Status, CoverPath(titles[0].Title.Id),
+            titles.Select(t => Summary(t.System.Summary.Id, t.Title)).ToList());
 
     public static string CoverPath(Guid titleId) => $"api/v1/titles/{titleId}/cover";
 
@@ -218,17 +299,20 @@ public static class CatalogueEndpoints
         return Results.Ok(await DetailAsync(id, db, views, ct));
     }
 
-    private static async Task<TitleDetail?> DetailAsync(Guid id, RomdexDbContext db, LibraryViewBuilder views, CancellationToken ct)
+    // Its versions on other systems are listed when games are given: they're worked out across the whole catalogue.
+    private static async Task<TitleDetail?> DetailAsync(Guid id, RomdexDbContext db, LibraryViewBuilder views, CancellationToken ct, Games? games = null)
     {
         var title = await db.Titles.AsNoTracking().Include(t => t.System).FirstOrDefaultAsync(t => t.Id == id, ct);
         if (title is null || await views.GetAsync(title.SystemId, ct) is not { } view || !view.ById.TryGetValue(id, out var titleView))
             return null;
         var preferred = titleView.Dumps.Where(d => d.Release == titleView.Preferred.Release).Select(d => d.Id).ToHashSet();
         var dumps = await DumpInfosAsync(db, titleView.Dumps.OrderBy(d => !preferred.Contains(d.Id)).ThenBy(d => d.Name, StringComparer.OrdinalIgnoreCase), preferred, ct);
-        var art = await ArtLookupTask.BestAsync(db, id, ct);
+        var art = await CoverCache.BestAsync(db, id, ct);
         var knownAs = art?.Name is { } name && !DumpNames.TitleKey(name).Equals(title.Key, StringComparison.Ordinal) ? name : null;
+        var versions = games is null || !(await games.GetAsync(ct)).TryGetValue(id, out var game) ? null
+            : game.Select(t => new TitleVersion(t.Title.Id, t.System.Summary.Id, t.System.Summary.ShortName ?? t.System.Summary.Name, t.Title.Name, t.Title.Status)).ToList();
         return new TitleDetail(title.Id, title.SystemId, title.System!.Name, title.Name, titleView.Status, titleView.Ignored, title.PreferredDumpId, dumps,
-            art?.CoverFile is null ? null : CoverPath(id), knownAs);
+            CoverPath(id), knownAs, versions);
     }
 
     /// <summary>Dumps with their files, hashes and library places, in the order given.</summary>

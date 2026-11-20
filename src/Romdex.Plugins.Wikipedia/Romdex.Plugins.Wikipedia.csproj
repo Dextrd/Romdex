@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Romdex.Plugins.Wikipedia</RootNamespace>
+    <Description>Romdex metadata plugin that adds what Wikipedia and Wikidata know about games another plugin found.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Romdex.Contracts\Romdex.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -32,6 +32,10 @@
     <ProjectReference Include="..\Romdex.Plugins.Redump\Romdex.Plugins.Redump.csproj" />
     <ProjectReference Include="..\Romdex.Plugins.Hasheous\Romdex.Plugins.Hasheous.csproj" />
     <ProjectReference Include="..\Romdex.Plugins.Romm\Romdex.Plugins.Romm.csproj" />
+    <ProjectReference Include="..\Romdex.Plugins.Wikipedia\Romdex.Plugins.Wikipedia.csproj" />
+    <ProjectReference Include="..\Romdex.Plugins.Libretro\Romdex.Plugins.Libretro.csproj" />
+    <ProjectReference Include="..\Romdex.Plugins.TheGamesDb\Romdex.Plugins.TheGamesDb.csproj" />
+    <ProjectReference Include="..\Romdex.Plugins.ScreenScraper\Romdex.Plugins.ScreenScraper.csproj" />
   </ItemGroup>
 
 </Project>

@@ -43,7 +43,7 @@ public class ApiTests(RomdexFactory factory) : IClassFixture<RomdexFactory>
         var version = await _client.GetFromJsonAsync<VersionResponse>("/api/v1/version");
 
         Assert.Equal("v1", version!.ApiVersion);
-        Assert.Equal(["connector", "index", "retrieval"], version.Contracts.Keys.Order());
+        Assert.Equal(["connector", "index", "metadata", "retrieval"], version.Contracts.Keys.Order());
     }
 
     [Fact]
@@ -55,5 +55,26 @@ public class ApiTests(RomdexFactory factory) : IClassFixture<RomdexFactory>
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         Assert.StartsWith("3.1", document.RootElement.GetProperty("openapi").GetString());
         Assert.True(document.RootElement.GetProperty("paths").TryGetProperty("/api/v1/health", out _));
+
+        // Every operation is named, said what it's for, grouped, and says what it answers, so the reference and the
+        // clients made from it are whole.
+        var gaps = new List<string>();
+        foreach (var path in document.RootElement.GetProperty("paths").EnumerateObject())
+        foreach (var operation in path.Value.EnumerateObject())
+        {
+            var o = operation.Value;
+            var missing = new[] { "operationId", "summary", "tags", "responses" }.Where(k => !o.TryGetProperty(k, out var v) || Empty(v)).ToList();
+            if (missing.Count > 0)
+                gaps.Add($"{operation.Name.ToUpperInvariant()} {path.Name}: {string.Join(", ", missing)}");
+        }
+        Assert.Empty(gaps);
+
+        static bool Empty(JsonElement value) => value.ValueKind switch
+        {
+            JsonValueKind.String => string.IsNullOrWhiteSpace(value.GetString()),
+            JsonValueKind.Array => value.GetArrayLength() == 0,
+            JsonValueKind.Object => !value.EnumerateObject().Any(),
+            _ => true,
+        };
     }
 }

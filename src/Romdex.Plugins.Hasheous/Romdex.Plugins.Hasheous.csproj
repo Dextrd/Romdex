@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <RootNamespace>Romdex.Plugins.Hasheous</RootNamespace>
-    <Description>Romdex index plugin that looks up titles and cover art by hash on Hasheous.</Description>
+    <Description>Romdex metadata plugin that looks up titles, cover art and IDs by hash on Hasheous.</Description>
   </PropertyGroup>
 
   <ItemGroup>

@@ -115,6 +115,9 @@ namespace Romdex.Core.Data.Migrations
                     b.Property<Guid?>("BiosForId")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("CloneList")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime?>("DatDate")
                         .HasColumnType("TEXT");
 
@@ -156,6 +159,9 @@ namespace Romdex.Core.Data.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AnnouncedState")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("CandidateId")
@@ -305,10 +311,17 @@ namespace Romdex.Core.Data.Migrations
                     b.Property<string>("CoverFile")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Description")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Error")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("IdsJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LinksJson")
                         .IsRequired()
                         .HasColumnType("TEXT");
 
@@ -359,6 +372,32 @@ namespace Romdex.Core.Data.Migrations
                     b.HasIndex("Crc32", "Size");
 
                     b.ToTable("DumpFiles");
+                });
+
+            modelBuilder.Entity("Romdex.Core.Data.GameAbout", b =>
+                {
+                    b.Property<Guid>("TitleId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DetailsJson")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Error")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("IdsJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ImagesJson")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("LookedUpAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("TitleId");
+
+                    b.ToTable("GameAbout");
                 });
 
             modelBuilder.Entity("Romdex.Core.Data.LibraryContent", b =>
@@ -789,6 +828,15 @@ namespace Romdex.Core.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Dump");
+                });
+
+            modelBuilder.Entity("Romdex.Core.Data.GameAbout", b =>
+                {
+                    b.HasOne("Romdex.Core.Data.Title", null)
+                        .WithOne()
+                        .HasForeignKey("Romdex.Core.Data.GameAbout", "TitleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Romdex.Core.Data.LibraryContent", b =>

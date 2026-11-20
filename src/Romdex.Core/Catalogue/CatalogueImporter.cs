@@ -27,6 +27,7 @@ public sealed partial class CatalogueImporter(RomdexDbContext db)
         system.Source = source.Source;
         system.DatVersion = source.Version;
         system.DatDate = source.Date?.UtcDateTime;
+        system.CloneList = source.CloneList;
         system.PluginInstanceId = pluginInstanceId;
         system.PluginSystemId = source.Id;
         system.ImportedAt = DateTime.UtcNow;
@@ -35,7 +36,8 @@ public sealed partial class CatalogueImporter(RomdexDbContext db)
         var dumps = await db.Dumps.Where(d => d.SystemId == system.Id).Include(d => d.Files).ToDictionaryAsync(d => d.Name, ct);
 
         // A clone joins its parent's title; anything else is grouped by its name without tags, since Redump and
-        // No-Intro's standard DATs don't say which entries are clones.
+        // No-Intro's standard DATs don't say which entries are clones. A clone list, such as Retool's, applied by the
+        // plugin, makes clones of entries that are one game under other names.
         var names = detail.Dumps.GroupBy(d => d.Name).Select(g => g.First()).ToDictionary(d => d.Name, d => DumpNames.Parse(d.Name, d.Category, d.IsBios));
         string TitleOf(IndexDump dump) =>
             dump.CloneOf is { } parent && names.TryGetValue(parent, out var parentName) ? parentName.Title : names[dump.Name].Title;

@@ -14,10 +14,22 @@ public static class EventTypes
     /// <summary>A background task failed. Data: <see cref="TaskEventData"/>.</summary>
     public const string TaskFailed = "task.failed";
 
+    /// <summary>A download is in the library. Data: <see cref="DownloadEventData"/>.</summary>
+    public const string DownloadFiled = "download.filed";
+
+    /// <summary>
+    /// A download is held for someone to look at: it matched nothing, isn't whole, or is another dump of a game the
+    /// library has. Data: <see cref="DownloadEventData"/>.
+    /// </summary>
+    public const string DownloadNeedsReview = "download.needs_review";
+
+    /// <summary>A download failed: its plugin couldn't fetch it, or it couldn't be filed. Data: <see cref="DownloadEventData"/>.</summary>
+    public const string DownloadFailed = "download.failed";
+
     /// <summary>Sent by <c>POST /webhooks/{id}/test</c> only. Data: <see cref="PingEventData"/>.</summary>
     public const string Ping = "ping";
 
-    public static IReadOnlyList<string> All { get; } = [TaskCompleted, TaskFailed];
+    public static IReadOnlyList<string> All { get; } = [DownloadFiled, DownloadNeedsReview, DownloadFailed, TaskCompleted, TaskFailed];
 }
 
 /// <summary>Something that happened, as sent to webhooks and on the event stream.</summary>
@@ -32,10 +44,13 @@ public sealed record RomdexEvent(Guid Id, string Type, DateTime OccurredAt, Json
 /// <summary>A background task that finished or failed: its kind says what it was, its progress what it found.</summary>
 public sealed record TaskEventData(TaskInfo Task);
 
+/// <summary>A download that was filed, is held for review, or failed, as <c>GET /downloads/{id}</c> gives it.</summary>
+public sealed record DownloadEventData(DownloadInfo Download);
+
 public sealed record PingEventData(string Message);
 
 /// <summary>A server-sent event from <c>GET /events</c>: what changed, so a client can reload what it shows.</summary>
-/// <param name="Type"><c>tasks</c> for now; later phases add the library and downloads.</param>
+/// <param name="Type"><c>tasks</c> or <c>downloads</c>: which list changed.</param>
 public sealed record ServerEvent(string Type, DateTime At);
 
 // ---- Webhooks ----

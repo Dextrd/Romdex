@@ -2,13 +2,14 @@ namespace Romdex.Contracts.Plugins.Index;
 
 /// <summary>
 /// Index plugin contract (version 1.0): answers what exists, as preservation DATs (No-Intro, Redump) describe it.
+/// Titles and covers are not an index plugin's job: see <see cref="Metadata.IMetadataPlugin"/>.
 /// Caching and rate limiting live in the core, so implementations should read their source directly and not cache
 /// on their own.
 /// </summary>
 /// <remarks>
 /// Methods return <c>null</c> when something doesn't exist and throw for anything else, such as an unreadable file or
 /// an upstream error; <see cref="IndexUnavailableException"/> says to try again later. Optional features are separate
-/// interfaces (<see cref="IDatFetcher"/>, <see cref="IHashLookup"/>), each matched by a capability name in the manifest.
+/// interfaces (<see cref="IDatFetcher"/>), each matched by a capability name in the manifest.
 /// </remarks>
 public interface IIndexPlugin : IPlugin
 {
@@ -28,7 +29,12 @@ public interface IIndexPlugin : IPlugin
 /// <param name="Version">The DAT's version, as its header gives it, such as <c>20260930-102438</c>.</param>
 /// <param name="Date">When the DAT was made, if its header says.</param>
 /// <param name="Dumps">How many dumps it lists, if the plugin knows without loading them.</param>
-public sealed record IndexSystem(string Id, string Name, string Source, string Version, DateTimeOffset? Date = null, int? Dumps = null);
+/// <param name="CloneList">
+/// The version of a clone list the plugin applies to the DAT, such as Retool's, which makes clones of entries that are
+/// one game under different names. The system is imported again when this changes, as when its DAT's version does.
+/// </param>
+public sealed record IndexSystem(string Id, string Name, string Source, string Version, DateTimeOffset? Date = null, int? Dumps = null,
+    string? CloneList = null);
 
 /// <summary>A system with its dumps.</summary>
 public sealed record IndexSystemDetail(IndexSystem System, IReadOnlyList<IndexDump> Dumps);
@@ -75,24 +81,9 @@ public interface IDatFetcher
     Task<IReadOnlyList<IndexSystem>> FetchAsync(CancellationToken cancellationToken);
 }
 
-/// <summary>Optional: titles and cover art by a dump's hash. Capability <see cref="IndexCapabilities.HashLookup"/>.</summary>
-public interface IHashLookup
-{
-    /// <summary>What the source knows about the dump with this file, by its hashes. Null when it knows nothing.</summary>
-    Task<HashLookupResult?> LookUpAsync(IndexDumpFile file, CancellationToken cancellationToken);
-}
-
-/// <param name="Title">The game's name, as people know it.</param>
-/// <param name="CoverUrl">A picture of its box or cover, if there is one.</param>
-/// <param name="Ids">The source's own IDs, such as an IGDB ID, by scheme.</param>
-public sealed record HashLookupResult(string? Title, string? CoverUrl, IReadOnlyDictionary<string, string> Ids);
-
 /// <summary>Capability names an index plugin can declare in its manifest.</summary>
 public static class IndexCapabilities
 {
     /// <summary>Implements <see cref="IDatFetcher"/>.</summary>
     public const string FetchDats = "fetch-dats";
-
-    /// <summary>Implements <see cref="IHashLookup"/>.</summary>
-    public const string HashLookup = "hash-lookup";
 }

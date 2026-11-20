@@ -7,7 +7,7 @@
 
 @if (!InSetup)
 {
-    <p class="muted">What Romdex works through: the catalogue it checks your games against, where new dumps come in from, and the apps it tells about your library.</p>
+    <p class="muted">What Romdex works through, each kind with one job: the catalogue it checks your games against, where it finds their titles and covers, where new dumps come in from, and the apps it tells about your library.</p>
 }
 
 @if (_plugins is null)
@@ -20,10 +20,13 @@ else
 
     <div class="plugin-sections">
         @Section(PluginType.Index, "Catalogue",
-            "Where Romdex learns every verified dump of each system, from DATs, to tell what each of your files is. Romdex asks these in order and keeps the first match.",
+            "What exists: every verified dump of each system, from No-Intro and Redump DATs. Your files are matched against these by checksum, which decides what you have, what's missing and what's bad. Where two have the same system, the first wins.",
             "No catalogue. Romdex can list your files, but can't tell what any of them are until you add one.")
+        @Section(PluginType.Metadata, "Titles and covers",
+            "Look up the games you have by checksum, for the names people know them by and their covers. They only change how games are shown, never what exists or what you have. The first that knows a game is used.",
+            "None yet. Games show by their DAT names, without covers.")
         @Section(PluginType.Retrieval, "Retrievers",
-            "Retrievers run in their own containers and offer new dumps, such as files dropped into an inbox folder. Each is checked by its hash before it's filed.",
+            "Bring new dumps in, such as files dropped into an inbox folder. Each runs in its own container, and everything it brings is checked by its hash before it's filed.",
             "No retrievers yet. Your library is still read, but nothing new comes in through Romdex.")
         @Section(PluginType.Connector, "Connected apps",
             "Apps that show your games, such as RomM, told to scan when something is filed. The first one that's on is used.",
@@ -128,11 +131,12 @@ else
     /// <summary>Something that can be added: a retriever Romdex knows the usual address of, any other by its address, or a built-in plugin.</summary>
     public sealed record Template(string Key, string Name, string Description, PluginType Type, string? Endpoint = null, AvailablePlugin? BuiltIn = null);
 
-    // The retrievers that ship alongside Romdex, at the addresses the Compose file gives them.
+    // The retrievers with repositories of their own, at the addresses their READMEs' compose lines give them.
     public static readonly Template[] KnownSources =
     [
         new("inbox", "Inbox folder", "Takes the dumps you drop into a folder, and finds games in it when you search.", PluginType.Retrieval, "http://retriever-inbox:8080"),
         new("dumps", "Dumping tools", "Takes finished dumps from disc rippers' and cartridge dumpers' output, with their logs.", PluginType.Retrieval, "http://retriever-dumps:8080"),
+        new("prowlarr", "Prowlarr", "Searches the torrent indexers you've set up in Prowlarr, and downloads just the game's files with your qBittorrent.", PluginType.Retrieval, "http://retriever-prowlarr:8080"),
         new("other", "Another plugin", "Any plugin that speaks the retrieval contract, by its address.", PluginType.Retrieval, ""),
     ];
 
@@ -202,11 +206,12 @@ else
     private static string AddTitle(PluginType type) => type switch
     {
         PluginType.Index => "Add to the catalogue",
+        PluginType.Metadata => "Add a source of titles and covers",
         PluginType.Retrieval => "Add a retriever",
         _ => "Connect an app",
     };
 
-    private static bool Ordered(PluginType type) => type is PluginType.Retrieval or PluginType.Index;
+    private static bool Ordered(PluginType type) => type is PluginType.Retrieval or PluginType.Index or PluginType.Metadata;
 
     private RenderFragment Section(PluginType type, string title, string about, string empty) => __builder =>
     {

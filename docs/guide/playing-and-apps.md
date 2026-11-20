@@ -33,10 +33,13 @@ PlayStation emulator plays with its own stand-in, which runs most games.
 
 ## Covers
 
-The **Hasheous** plugin (built in, off until you add it, under **Settings → Plugins**) looks up the games you have by
-their checksums at [hasheous.org](https://hasheous.org), for a cover and the name people know the game by. It needs
-no account. It only sends checksums, one a second, and only of games you have. Covers are kept in Romdex's data
-folder, and each game is looked up once; one that isn't found is tried again after a month.
+Covers come from a plugin for titles and covers. The **Hasheous** one (built in, off until you add it, under
+**Settings → Plugins → Titles and covers**) looks up games by their checksums at [hasheous.org](https://hasheous.org),
+for a cover and the name people know the game by. It needs no account, and only sends checksums, one a second.
+
+The games you have are looked up as soon as it's added, and as they arrive. Any other game, such as one in Search,
+is looked up the first time it's shown; its cover shimmers until then. Covers are kept in Romdex's data folder, and
+each game is looked up once; one that isn't found is tried again after a month, and shows a placeholder meanwhile.
 
 ## Opening games in another app
 

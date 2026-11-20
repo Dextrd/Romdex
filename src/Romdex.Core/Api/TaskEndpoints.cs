@@ -90,7 +90,7 @@ public static class TaskEndpoints
             })
             .WithTags("System")
             .WithName("Events")
-            .WithSummary("Server-sent events. Unnamed kinds say what changed (tasks, for now), so you reload what you show; "
+            .WithSummary("Server-sent events. Unnamed kinds say what changed (tasks or downloads), so you reload what you show; "
                          + "named events such as task.completed carry what happened, as webhooks do.")
             .Produces(StatusCodes.Status200OK, contentType: "text/event-stream");
 

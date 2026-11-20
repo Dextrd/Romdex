@@ -17,9 +17,8 @@ public sealed class AboutPageTests
         var root = TestRepository.Root;
         var page = File.ReadAllText(Path.Combine(root, "src", "Romdex.Web", "Pages", "About.razor"));
         var plugins = Directory.GetDirectories(Path.Combine(root, "src"), "Romdex.Plugins.*").Select(d => Path.GetFileName(d)["Romdex.Plugins.".Length..])
-            .Concat(Directory.Exists(Path.Combine(root, "plugins"))
-                ? Directory.GetDirectories(Path.Combine(root, "plugins"), "retriever-*").Select(d => Path.GetFileName(d)["retriever-".Length..])
-                : [])
+            // The retrievers, which have repositories of their own, by their templates under Settings → Plugins.
+            .Concat(Romdex.Web.Pages.Plugins.KnownSources.Where(t => t.Endpoint is { Length: > 0 }).Select(t => t.Key))
             .ToList();
         Assert.NotEmpty(plugins);
         Assert.All(plugins, plugin => Assert.Contains(Named.GetValueOrDefault(plugin, plugin), page, StringComparison.OrdinalIgnoreCase));

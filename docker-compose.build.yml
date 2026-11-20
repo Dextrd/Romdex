@@ -12,9 +12,3 @@ services:
   emulatorjs:
     image: romdex-emulatorjs:dev
     build: emulatorjs
-  retriever-inbox:
-    image: romdex-retriever-inbox:dev
-    build: plugins/retriever-inbox
-  retriever-dumps:
-    image: romdex-retriever-dumps:dev
-    build: plugins/retriever-dumps

@@ -86,6 +86,10 @@ public sealed class SetupTests : IDisposable
         }
         Assert.False((await admin.GetSetupAsync()).Catalogue);
 
+        // Titles and covers aren't a catalogue: they don't say what exists.
+        await admin.AddPluginAsync(new AddPlugin("romdex.metadata.hasheous"));
+        Assert.False((await admin.GetSetupAsync()).Catalogue);
+
         // And can be added again.
         var added = await admin.AddPluginAsync(new AddPlugin(DatFolderFactory.PluginId));
         Assert.Equal(PluginType.Index, added.Type);

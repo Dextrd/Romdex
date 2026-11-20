@@ -67,7 +67,8 @@ public sealed class CatalogueRefreshTask(
                 if (!claimed.Add(system.Name))
                     continue;
                 var known = await db.Systems.AsNoTracking().FirstOrDefaultAsync(s => s.Name == system.Name, ct);
-                if (known is not null && known.PluginInstanceId == instance.Id && known.PluginSystemId == system.Id && known.DatVersion == system.Version)
+                if (known is not null && known.PluginInstanceId == instance.Id && known.PluginSystemId == system.Id && known.DatVersion == system.Version
+                    && known.CloneList == system.CloneList)
                 {
                     unchanged++;
                     continue;

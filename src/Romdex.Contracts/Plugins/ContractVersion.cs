@@ -28,6 +28,9 @@ public static class ContractVersions
     /// <summary>Index plugins: what exists.</summary>
     public static readonly ContractVersion Index = new(1, 0);
 
+    /// <summary>Metadata plugins: titles and covers, by hash.</summary>
+    public static readonly ContractVersion Metadata = new(1, 0);
+
     /// <summary>Retriever plugins: how dumps arrive (HTTP contract).</summary>
     public static readonly ContractVersion Retrieval = new(1, 0);
 
@@ -38,6 +41,7 @@ public static class ContractVersions
     public static ContractVersion For(PluginType type) => type switch
     {
         PluginType.Index => Index,
+        PluginType.Metadata => Metadata,
         PluginType.Retrieval => Retrieval,
         PluginType.Connector => Connector,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, null),

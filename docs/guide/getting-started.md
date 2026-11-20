@@ -45,13 +45,24 @@ A file counts only when its checksums match a dump in the DAT, whatever it's cal
 - **Bad**: you have files of it that don't verify, such as a disc with a track missing, or a file named like a dump
   but with other checksums.
 
-A game's page shows the dump you have, with each file's checksums and where it is, and the other dumps the DAT lists
-for it, such as other regions and revisions. **Play** plays it in the browser, and **Open in RomM** opens it there:
-see [Playing, covers and apps](playing-and-apps.md).
+A game's page shows what it is, when the Hasheous and Wikipedia plugins are on: what it's about, when it came out,
+who made it, what reviewers gave it, its age rating, and links to it on IGDB and other sites; with the libretro
+thumbnails plugin, its title screen and a screenshot. Whose age ratings it shows is yours to choose under
+**Settings → Appearance**. Below are the dumps you have and the
+others the DAT lists, such as other regions and revisions: each shows where it came out and in what languages, and
+opens to show its serial, files, checksums and where it is in your library. **Play** plays it in the browser, and
+**Open in RomM** opens it there: see [Playing, covers and apps](playing-and-apps.md).
 
 **Search** finds any game the DATs list, whether or not you have it. Words can come in any order, and regions and
-versions count too, so *kart japan* finds the Japanese releases of a kart game. A game's page shows its dumps with
-their checksums.
+versions count too, so *kart japan* finds the Japanese releases of a kart game. A game on more than one system, such
+as *Sonic Heroes* on the GameCube and the PlayStation 2, is listed once, with each system it's on, and counts as owned
+if you have it on any. Its page has a switch with each system it's on, green where you have a copy: pick one to see
+the game there, with the review scores given for that system. Scores given without saying which system they're for
+show on every system's page.
+
+The Library's games, a system's and Search can each be a **Grid** of covers or a **List**, as you choose beside them;
+the choice is kept for every list in this browser. In the grid, a game's tile is green when you have it and red when
+you don't.
 
 **Review** lists the files that match nothing, and any that couldn't be read.
 

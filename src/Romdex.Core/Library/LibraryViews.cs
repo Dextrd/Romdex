@@ -24,9 +24,7 @@ public sealed record DumpView(
 }
 
 /// <summary>One title, with where it stands and the dump 1G1R prefers. <see cref="Shown"/> is false for a title the preferences leave out.</summary>
-/// <see cref="HasCover"/> says a hash-lookup plugin found a cover for one of its dumps.
-public sealed record TitleView(Guid Id, string Name, TitleStatus Status, DumpView Preferred, DumpView? Have, bool Ignored, bool Shown, IReadOnlyList<DumpView> Dumps,
-    bool HasCover = false);
+public sealed record TitleView(Guid Id, string Name, TitleStatus Status, DumpView Preferred, DumpView? Have, bool Ignored, bool Shown, IReadOnlyList<DumpView> Dumps);
 
 /// <summary>A system worked out: its summary, its titles and its BIOS.</summary>
 public sealed record SystemView(SystemSummary Summary, IReadOnlyList<TitleView> Titles, IReadOnlyList<DumpView> Bios)
@@ -136,8 +134,6 @@ public sealed class LibraryViewBuilder(RomdexDbContext db, LibraryViews cache, P
         var views = dumps.Select(ViewOf).ToList();
 
         var titles = await db.Titles.AsNoTracking().Where(t => t.SystemId == system.Id).ToListAsync(ct);
-        var covered = (await db.DumpArt.AsNoTracking().Where(a => a.CoverFile != null)
-            .Join(db.Dumps.Where(d => d.SystemId == system.Id), a => a.DumpId, d => d.Id, (a, d) => d.TitleId).Distinct().ToListAsync(ct)).ToHashSet();
         var dumpsByTitle = views.Where(v => (v.Kinds & DumpKinds.Bios) == 0).ToLookup(v => v.TitleId);
         var titleViews = new List<TitleView>();
         foreach (var title in titles)
@@ -156,7 +152,7 @@ public sealed class LibraryViewBuilder(RomdexDbContext db, LibraryViews cache, P
             var preferred = chosen ?? Rank(visible.Count > 0 ? visible : releases, prefs).First();
             var have = complete.Contains(preferred) ? preferred : complete.Count > 0 ? Rank(complete, prefs).First() : null;
             titleViews.Add(new TitleView(title.Id, title.Name, status, preferred[0], have?[0], title.IgnoredAt is not null,
-                visible.Count > 0 || status != TitleStatus.Missing, own, covered.Contains(title.Id)));
+                visible.Count > 0 || status != TitleStatus.Missing, own));
         }
         titleViews.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
 
@@ -171,7 +167,8 @@ public sealed class LibraryViewBuilder(RomdexDbContext db, LibraryViews cache, P
             titleViews.Count(t => t.Ignored),
             bios.Count,
             bios.Count(b => b.Status == DumpStatus.Good),
-            ownPreferences);
+            ownPreferences,
+            SystemNames.Short(system.Name));
         return new SystemView(summary, titleViews, bios);
     }
 

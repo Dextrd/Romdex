@@ -10,6 +10,7 @@ builder.RootComponents.Add<HeadOutlet>("head::after");
 // The web app is just another client of the public API, served from the same origin.
 builder.Services.AddScoped<AuthState>();
 builder.Services.AddScoped<Theme>();
+builder.Services.AddScoped<GameLayout>();
 builder.Services.AddScoped(services =>
     new HttpClient(new SignInHandler(services.GetRequiredService<AuthState>())) { BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) });
 builder.Services.AddScoped<RomdexClient>();

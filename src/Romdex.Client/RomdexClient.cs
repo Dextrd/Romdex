@@ -146,6 +146,16 @@ public sealed class RomdexClient(HttpClient http)
 
     public Task<TitleDetail?> GetTitleAsync(Guid id, CancellationToken ct = default) => GetOrNullAsync<TitleDetail>($"{Api}/titles/{id}", ct);
 
+    /// <summary>What a title's game is, from the metadata plugins: looked up the first time it's asked for, which can take a few seconds.</summary>
+    public Task<GameInfo?> GetGameInfoAsync(Guid titleId, CancellationToken ct = default) => GetOrNullAsync<GameInfo>($"{Api}/titles/{titleId}/about", ct);
+
+    /// <summary>
+    /// What a title's game is, as far as it's been looked up: waits a moment for the lookup to finish, then gives what's
+    /// been found so far, marked <see cref="GameInfo.Loading"/> until there's no more to come.
+    /// </summary>
+    public Task<GameInfo?> GetGameInfoSoFarAsync(Guid titleId, CancellationToken ct = default) =>
+        GetOrNullAsync<GameInfo>($"{Api}/titles/{titleId}/about?partial=true", ct);
+
     /// <summary>How to play a dump the library has: the player's link, or why it can't play in the browser.</summary>
     public Task<PlayInfo?> GetPlayAsync(Guid dumpId, CancellationToken ct = default) => GetOrNullAsync<PlayInfo>($"{Api}/play/{dumpId}", ct);
 
@@ -172,10 +182,11 @@ public sealed class RomdexClient(HttpClient http)
     }
 
     /// <summary>
-    /// Every game the DATs list, in the library or not, whose name has every word of <paramref name="q"/>, closest first;
-    /// <paramref name="have"/> keeps to games the library has (true) or hasn't (false).
+    /// Every game the DATs list, in the library or not, whose name has every word of <paramref name="q"/>, closest first,
+    /// each once with its title on every system; <paramref name="have"/> keeps to games the library has on some system
+    /// (true) or on none (false).
     /// </summary>
-    public async Task<TitlePage> SearchCatalogueAsync(string q, Guid? systemId = null, bool? have = null, int skip = 0, int take = 50,
+    public async Task<GamePage> SearchCatalogueAsync(string q, Guid? systemId = null, bool? have = null, int skip = 0, int take = 50,
         CancellationToken ct = default)
     {
         var query = $"q={Uri.EscapeDataString(q)}&skip={skip}&take={take}";
@@ -183,7 +194,7 @@ public sealed class RomdexClient(HttpClient http)
             query += $"&system={id}";
         if (have is { } h)
             query += $"&have={(h ? "true" : "false")}";
-        return (await http.GetFromJsonAsync<TitlePage>($"{Api}/catalogue/search?{query}", RomdexJson.Options, ct))!;
+        return (await http.GetFromJsonAsync<GamePage>($"{Api}/catalogue/search?{query}", RomdexJson.Options, ct))!;
     }
 
     public async Task<TaskInfo> RefreshCatalogueAsync(CancellationToken ct = default)

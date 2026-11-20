@@ -13,6 +13,10 @@ node_modules/
 sandbox/roms/
 sandbox/inbox/
 sandbox/dats/
+sandbox/arrivals/
+sandbox/igir-out/
+sandbox/*.csv
+sandbox/.cookies
 
 # The Phase 1 gate library (tools/make-gate-library.py).
 /gate/

@@ -24,6 +24,6 @@ The compose file has its own, shorter settings:
 - `ROMS_PATH` and `DATS_PATH`;
 - `PUID` and `PGID`, the user and group that own the library, which the igir worker and the plugins run as (default
   1000);
-- `ROMDEX_PORT` (default 8788) and `ROMDEX_VERSION`;
-- `INBOX_PATH`, the inbox plugin's folder (default `./inbox`);
-- `COMPOSE_PROFILES=dumps` and `DUMPS_PATH`, for the dumping tools plugin.
+- `ROMDEX_PORT` (default 8788) and `ROMDEX_VERSION`.
+
+Each retriever's README has its own, such as `INBOX_PATH` for the inbox folder.

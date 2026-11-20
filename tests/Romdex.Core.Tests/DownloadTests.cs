@@ -2,8 +2,11 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using Romdex.Client;
+using System.Text.Json;
 using Romdex.Core.Downloads;
+using Romdex.Core.Events;
 using Romdex.Core.Plugins;
 using Romdex.Core.Tests.Support;
 
@@ -23,6 +26,7 @@ public sealed class DownloadTests : IDisposable
     private readonly string _staging;
     private readonly FakeWorker _worker;
     private readonly FakeRetriever _plugin;
+    private readonly WebhookReceiver _receiver = new();
     private readonly WebApplicationFactory<Program> _factory;
     private readonly RomdexClient _api;
 
@@ -45,6 +49,7 @@ public sealed class DownloadTests : IDisposable
                 services.RemoveAll<IFilingWorker>();
                 services.AddSingleton<IFilingWorker>(_worker);
                 services.AddHttpClient(RetrievalPlugins.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => _plugin);
+                services.AddHttpClient(WebhookSender.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => _receiver);
             }));
         _api = new RomdexClient(_factory.CreateSignedInClient());
     }
@@ -90,6 +95,34 @@ public sealed class DownloadTests : IDisposable
         var again = Assert.Single(await ArriveAsync(1));
         Assert.Equal(DownloadState.Discarded, again.State);
         Assert.Contains("already in the library", again.Message);
+    }
+
+    [Fact]
+    public async Task Webhooks_hear_once_when_a_download_is_filed_or_held()
+    {
+        var pond = _dats.Dump(Handheld, "Pixel Pond (USA)", [".gb"]);
+        _dats.WriteDats();
+        await SetUpAsync();
+        await _api.CreateWebhookAsync(new SaveWebhook("Downloads", "http://receiver.test/hook", [EventTypes.DownloadFiled, EventTypes.DownloadNeedsReview]));
+
+        _plugin.Drop("pond", ("whatever.gb", pond[0].Data));
+        _plugin.Drop("junk", ("homebrew.gb", [1, 2, 3, 4]));
+        await ArriveAsync(2);
+        var announcer = _factory.Services.GetServices<IHostedService>().OfType<EventAnnouncer>().Single();
+        while (await announcer.AnnounceAsync(CancellationToken.None))
+        {
+        }
+
+        var sent = (await _receiver.WaitAsync(2)).Select(r => JsonSerializer.Deserialize<RomdexEvent>(r.Body, RomdexJson.Options)!).ToList();
+        var filed = sent.Single(e => e.Type == EventTypes.DownloadFiled).DataAs<DownloadEventData>()!.Download;
+        Assert.Equal("pond", filed.Name);
+        Assert.Equal("Pixel Pond (USA)", Assert.Single(filed.Dumps).Dump.Name);
+        Assert.Equal("junk", sent.Single(e => e.Type == EventTypes.DownloadNeedsReview).DataAs<DownloadEventData>()!.Download.Name);
+
+        // Looking again finds nothing new to send.
+        Assert.False(await announcer.AnnounceAsync(CancellationToken.None));
+        await Task.Delay(500);
+        Assert.Equal(2, _receiver.Received.Count);
     }
 
     [Fact]

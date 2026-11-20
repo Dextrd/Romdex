@@ -189,6 +189,9 @@ else
 
     private static readonly (string Type, string Help)[] EventHelps =
     [
+        (EventTypes.DownloadFiled, "A download is in the library."),
+        (EventTypes.DownloadNeedsReview, "A download is held for someone to look at."),
+        (EventTypes.DownloadFailed, "A download failed."),
         (EventTypes.TaskCompleted, "A background task, such as a library scan, finished."),
         (EventTypes.TaskFailed, "A background task failed."),
     ];

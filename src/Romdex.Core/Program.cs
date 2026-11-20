@@ -50,6 +50,7 @@ builder.Services.ConfigureHttpJsonOptions(json => RomdexJson.Configure(json.Seri
 builder.Services.AddSingleton<PluginCatalog>();
 builder.Services.AddSingleton<PluginHost>();
 builder.Services.AddScoped<IndexPlugins>();
+builder.Services.AddScoped<MetadataPlugins>();
 builder.Services.AddScoped<ConnectorPlugins>();
 builder.Services.AddScoped<RetrievalPlugins>();
 builder.Services.AddHttpClient(RetrievalPlugins.HttpClientName, http => http.Timeout = TimeSpan.FromMinutes(2));
@@ -67,13 +68,17 @@ builder.Services.AddScoped<CatalogueImporter>();
 builder.Services.AddScoped<Preferences>();
 builder.Services.AddSingleton<LibraryViews>();
 builder.Services.AddScoped<LibraryViewBuilder>();
+builder.Services.AddScoped<Games>();
 builder.Services.AddScoped<LibraryMatcher>();
 builder.Services.AddScoped<LibraryScanner>();
 builder.Services.AddSingleton<ContainerReader>();
 builder.Services.AddScoped<ITaskHandler, CatalogueRefreshTask>();
 builder.Services.AddScoped<ITaskHandler, LibraryScanTask>();
 builder.Services.AddScoped<ITaskHandler, ArtLookupTask>();
-builder.Services.AddHttpClient(ArtLookupTask.HttpClientName, http =>
+builder.Services.AddSingleton<CoverCache>();
+builder.Services.AddSingleton<GameDetailsCache>();
+builder.Services.AddSingleton<GameImages>();
+builder.Services.AddHttpClient(CoverCache.HttpClientName, http =>
 {
     http.Timeout = TimeSpan.FromSeconds(30);
     foreach (var product in PluginHttp.UserAgent)

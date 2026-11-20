@@ -10,7 +10,7 @@ namespace Romdex.Client;
 /// <param name="LibraryFiles">Files found in it, counting no further than <see cref="CountLimit"/>.</param>
 /// <param name="DatPath">The folder DATs are dropped into, as the core sees it.</param>
 /// <param name="DatFiles">DAT files in it, counting no further than <see cref="CountLimit"/>.</param>
-/// <param name="Catalogue">An index plugin has been added, so Romdex knows what exists.</param>
+/// <param name="Catalogue">An index plugin has been added, so Romdex knows what exists. Metadata plugins don't count.</param>
 /// <param name="Connector">An app such as RomM has been connected.</param>
 public sealed record SetupStatus(bool Done, string LibraryPath, bool LibraryReadable, int LibraryFiles, string DatPath, int DatFiles, bool Catalogue,
     bool Connector)

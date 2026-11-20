@@ -1,0 +1,27 @@
+@*
+    A game in a grid: its cover, name and systems, on a tile coloured for where it stands, green when it's in the
+    library and red when it isn't. Anything given, such as a button to get it, sits in its corner.
+*@
+<div class="tile-wrap">
+    <a class="tile game-tile @Format.Badge(Status)" href="@Href" title="@($"{Name} · {Format.OwnershipLabel(Status)}")">
+        <Cover Url="@Cover" />
+        <div class="tile-name">@Name</div>
+        <div class="small tile-sub"><span class="tile-status">@Format.OwnershipLabel(Status)</span>@(Systems is { Length: > 0 } ? $" · {Systems}" : "")</div>
+    </a>
+    @if (ChildContent is not null)
+    {
+        <div class="tile-corner">@ChildContent</div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Href { get; set; } = "";
+    [Parameter, EditorRequired] public string Name { get; set; } = "";
+    [Parameter] public string? Cover { get; set; }
+    [Parameter] public TitleStatus Status { get; set; }
+
+    /// <summary>The systems it's on, by short name, such as <c>GC · PS2</c>.</summary>
+    [Parameter] public string? Systems { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

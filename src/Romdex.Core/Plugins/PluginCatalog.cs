@@ -4,6 +4,10 @@ using Microsoft.Extensions.Options;
 using Romdex.Contracts.Plugins;
 using Romdex.Plugins.DatFolder;
 using Romdex.Plugins.Hasheous;
+using Romdex.Plugins.Libretro;
+using Romdex.Plugins.ScreenScraper;
+using Romdex.Plugins.TheGamesDb;
+using Romdex.Plugins.Wikipedia;
 using Romdex.Plugins.Redump;
 using Romdex.Plugins.Romm;
 
@@ -23,7 +27,7 @@ public sealed record DiscoveredPlugin(PluginManifest Manifest, IPluginFactory? F
 /// </summary>
 public sealed class PluginCatalog
 {
-    private static readonly Assembly[] BuiltIn = [typeof(DatFolderFactory).Assembly, typeof(RedumpFactory).Assembly, typeof(HasheousFactory).Assembly, typeof(RommFactory).Assembly];
+    private static readonly Assembly[] BuiltIn = [typeof(DatFolderFactory).Assembly, typeof(RedumpFactory).Assembly, typeof(HasheousFactory).Assembly, typeof(WikipediaFactory).Assembly, typeof(LibretroThumbnailsFactory).Assembly, typeof(TheGamesDbFactory).Assembly, typeof(ScreenScraperFactory).Assembly, typeof(RommFactory).Assembly];
 
     private readonly Dictionary<string, DiscoveredPlugin> _plugins = new(StringComparer.Ordinal);
 

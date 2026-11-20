@@ -35,6 +35,7 @@ public static class SystemEndpoints
                 Contracts: new Dictionary<string, string>
                 {
                     ["index"] = ContractVersions.Index.ToString(),
+                    ["metadata"] = ContractVersions.Metadata.ToString(),
                     ["retrieval"] = ContractVersions.Retrieval.ToString(),
                     ["connector"] = ContractVersions.Connector.ToString(),
                 }))
@@ -49,7 +50,8 @@ public static class SystemEndpoints
             .WithSummary("Recent activity, as far back as the log settings keep in memory: scans, downloads, tasks, warnings and errors.");
 
         var settings = api.MapGroup("/settings").WithTags("Settings").RequireScope(Scopes.Settings);
-        settings.MapGet("/log", (SettingsService s, CancellationToken ct) => s.GetLogAsync(ct)).WithName("GetLogSettings");
+        settings.MapGet("/log", (SettingsService s, CancellationToken ct) => s.GetLogAsync(ct)).WithName("GetLogSettings")
+            .WithSummary("How many days of activity the Log page shows, and how long the log files are kept.");
         settings.MapPut("/log", async (LogSettings value, SettingsService s, IEnumerable<IHostedService> services, CancellationToken ct) =>
             {
                 var errors = new Dictionary<string, string[]>();

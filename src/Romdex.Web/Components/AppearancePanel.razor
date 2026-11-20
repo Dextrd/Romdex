@@ -60,6 +60,30 @@
                 <span class="muted small">Stronger text and borders, and owned, partial, covered and missing in colours that colour-blind people can tell apart</span>
             </span>
         </label>
+
+        <div class="field-label">Age ratings</div>
+        @* Whose ratings games' pages show in their corner; a game none of theirs is known for shows another board's. *@
+        <div class="rating-choices" role="radiogroup" aria-label="Age ratings">
+            <label class="dialog-choice">
+                <input type="radio" name="@($"ratings-{(ForEveryone ? "everyone" : "you")}")" checked="@(_appearance.Ratings == RatingBoard.Auto)"
+                       @onchange="() => SaveAsync(_appearance with { Ratings = RatingBoard.Auto })" />
+                <span><strong>Automatic</strong><span class="muted small">By your browser's language</span></span>
+            </label>
+            @foreach (var (board, name, where, sample) in Format.RatingBoards)
+            {
+                <label class="dialog-choice rating-choice">
+                    <input type="radio" name="@($"ratings-{(ForEveryone ? "everyone" : "you")}")" checked="@(_appearance.Ratings == board)"
+                           @onchange="() => SaveAsync(_appearance with { Ratings = board })" />
+                    <img src="img/ratings/@(sample).svg" alt="" />
+                    <span><strong>@name</strong><span class="muted small">@where</span></span>
+                </label>
+            }
+            <label class="dialog-choice">
+                <input type="radio" name="@($"ratings-{(ForEveryone ? "everyone" : "you")}")" checked="@(_appearance.Ratings == RatingBoard.None)"
+                       @onchange="() => SaveAsync(_appearance with { Ratings = RatingBoard.None })" />
+                <span><strong>Don't show them</strong></span>
+            </label>
+        </div>
         @if (_error is not null) { <p class="error small">@_error</p> }
     </div>
 </section>

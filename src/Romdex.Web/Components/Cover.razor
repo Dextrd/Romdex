@@ -1,0 +1,28 @@
+@*
+    A game's cover, as tall as a box is to its width. It shimmers while the picture is looked up and loads, and shows a
+    placeholder controller only if there's no cover or it doesn't load. Fills its container's width.
+*@
+<div @key="Url" class="cover box @(Url is null ? "blank" : "pending") @Class" aria-hidden="true">
+    <svg viewBox="0 0 24 24">
+        <path d="M7 7h10a5 5 0 0 1 5 5v1.5a3.5 3.5 0 0 1-6.3 2.1L14.5 14h-5l-1.2 1.6A3.5 3.5 0 0 1 2 13.5V12a5 5 0 0 1 5-5z" />
+        <path d="M7.5 9.5v3.5M5.75 11.25h3.5" />
+        <circle cx="15.5" cy="10.5" r=".75" />
+        <circle cx="17.75" cy="12.25" r=".75" />
+    </svg>
+    @if (Url is not null)
+    {
+        @*
+            The classes are set by the browser as the picture arrives; Blazor leaves them alone until the URL changes. A
+            cover still being looked up is asked for again (cover.js). One that fails is hidden, not removed: Blazor still
+            counts it, and removing it breaks later updates.
+        *@
+        <img src="@Url" alt="" loading="lazy"
+             onload="this.parentElement.classList.replace('pending', 'loaded')"
+             onerror="romdexCoverFailed(this)" />
+    }
+</div>
+
+@code {
+    [Parameter] public string? Url { get; set; }
+    [Parameter] public string? Class { get; set; }
+}

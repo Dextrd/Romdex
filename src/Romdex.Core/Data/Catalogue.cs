@@ -19,6 +19,9 @@ public class CatalogueSystem
     public required string DatVersion { get; set; }
     public DateTime? DatDate { get; set; }
 
+    /// <summary>The version of the clone list its index plugin grouped its dumps with, such as Retool's; null for none.</summary>
+    public string? CloneList { get; set; }
+
     /// <summary>The index plugin it came from, and that plugin's ID for it.</summary>
     public Guid? PluginInstanceId { get; set; }
 
@@ -87,7 +90,7 @@ public class Dump
 }
 
 /// <summary>
-/// What a hash-lookup plugin, such as Hasheous, knows of a dump: its name as people know it, and its cover, kept in
+/// What a metadata plugin, such as Hasheous, knows of a dump: its name as people know it, and its cover, kept in
 /// the data folder. Kept apart from the dump, which the DATs define.
 /// </summary>
 public class DumpArt
@@ -104,8 +107,39 @@ public class DumpArt
     /// <summary>The source's IDs for the game, such as IGDB's, by scheme, as JSON.</summary>
     public string IdsJson { get; set; } = "{}";
 
+    /// <summary>Pages about the game, such as its IGDB page, by the site's name, as JSON.</summary>
+    public string LinksJson { get; set; } = "{}";
+
+    /// <summary>What the game is, in a paragraph or so, from the source.</summary>
+    public string? Description { get; set; }
+
     /// <summary>Why the lookup failed, when it did: it's tried again later.</summary>
     public string? Error { get; set; }
+}
+
+/// <summary>
+/// What a title's game is, from the metadata plugins, by the IDs its dumps were found with: when it came out, who made
+/// it, its reviews. Looked up the first time its page is shown, and again now and then.
+/// </summary>
+public class GameAbout
+{
+    public Guid TitleId { get; set; }
+    public DateTime LookedUpAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>The plugins' details, merged, as JSON: a <c>GameDetails</c> of the metadata contract. Null when none knew the game.</summary>
+    public string? DetailsJson { get; set; }
+
+    /// <summary>The IDs it was looked up by, and the plugins that were on, as JSON: it's looked up again when either changes.</summary>
+    public string IdsJson { get; set; } = "{}";
+
+    /// <summary>Why the lookup failed, when it did: it's tried again later.</summary>
+    public string? Error { get; set; }
+
+    /// <summary>
+    /// Pictures of the game on the title's system, as JSON: a list of the metadata contract's <c>GameImage</c>. Null
+    /// until they're looked up.
+    /// </summary>
+    public string? ImagesJson { get; set; }
 }
 
 /// <summary>One file of a dump: a cartridge image, or a disc's cue sheet or one of its tracks.</summary>

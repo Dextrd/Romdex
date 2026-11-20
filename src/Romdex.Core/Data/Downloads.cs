@@ -72,6 +72,9 @@ public class Download
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>The state it was in when events were last looked for, so each change is announced once.</summary>
+    public DownloadState? AnnouncedState { get; set; }
 }
 
 /// <summary>A dump a download holds whole, and what became of it.</summary>

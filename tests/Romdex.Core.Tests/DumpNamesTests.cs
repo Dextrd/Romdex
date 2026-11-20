@@ -63,4 +63,50 @@ public sealed class DumpNamesTests
     [Fact]
     public void Title_keys_ignore_case_and_spacing() =>
         Assert.Equal(DumpNames.TitleKey("Hopper  Quest"), DumpNames.TitleKey("hopper quest"));
+
+    [Theory]
+    [InlineData("Sonic & Knuckles", "Sonic and Knuckles")]
+    [InlineData("The Sky Puzzle", "Sky Puzzle!")]
+    [InlineData("Pokémon - Hopper Version", "Pokemon Hopper Version")]
+    public void Games_on_other_systems_are_one_whatever_their_punctuation(string one, string other) =>
+        Assert.Equal(Games.Key(one), Games.Key(other));
+
+    [Fact]
+    public void Games_with_other_words_are_not_one() =>
+        Assert.NotEqual(Games.Key("Sky Puzzle"), Games.Key("Sky Puzzle 2"));
+
+    [Theory]
+    [InlineData("Sony - PlayStation 2", "PS2")]
+    [InlineData("Sony - PlayStation", "PS1")]
+    [InlineData("Nintendo - GameCube", "GC")]
+    [InlineData("Nintendo - Nintendo Entertainment System (Headered)", "NES")]
+    [InlineData("Nintendo - Game Boy Color", "GBC")]
+    [InlineData("Test - Handheld", "Handheld")]
+    [InlineData("Homebrew Things", "Homebrew Things")]
+    public void Systems_have_short_names(string name, string expected) => Assert.Equal(expected, SystemNames.Short(name));
+
+    [Theory]
+    [InlineData("(GC & Xbox) 4.8/10 · (PS2) 4.7/10", "Nintendo - GameCube", "4.8/10")]
+    [InlineData("(GC & Xbox) 4.8/10 · (PS2) 4.7/10", "Sony - PlayStation 2", "4.7/10")]
+    [InlineData("XBOX: 73/100 · GCN: 72/100 · PC: 66/100", "Nintendo - GameCube", "72/100")]
+    [InlineData("2.5/5 (GC) · 3/5 (PS2)", "Sony - PlayStation 2", "3/5")]
+    [InlineData("(PS) 8/10", "Sony - PlayStation", "8/10")]
+    [InlineData("(Genesis) 9/10 · (SNES) 8/10", "Sega - Mega Drive - Genesis", "9/10")]
+    [InlineData("4/10, 2/10", "Nintendo - GameCube", "4/10, 2/10")]
+    [InlineData("8/10 (Japan)", "Nintendo - GameCube", "8/10 (Japan)")]
+    [InlineData("(PS2) 7/10 · 8/10", "Nintendo - GameCube", "8/10")]
+    public void A_score_for_several_systems_is_the_one_for_this(string score, string system, string expected) =>
+        Assert.Equal(expected, GameDetailsCache.ScoreHere(score, SystemNames.Names(system)));
+
+    [Fact]
+    public void A_score_only_for_other_systems_is_not_shown() =>
+        Assert.Null(GameDetailsCache.ScoreHere("(PS2) D− · (GC & Xbox) C+", SystemNames.Names("Sega - Dreamcast")));
+
+    [Fact]
+    public void A_magazine_about_other_systems_is_not_shown_here()
+    {
+        Assert.Null(GameDetailsCache.ScoreHere("Nintendo Power", "8/10", SystemNames.Names("Sony - PlayStation 2")));
+        Assert.Equal("8/10", GameDetailsCache.ScoreHere("Nintendo Power", "8/10", SystemNames.Names("Nintendo - GameCube")));
+        Assert.Null(GameDetailsCache.ScoreHere("Official Xbox Magazine (UK)", "7/10", SystemNames.Names("Nintendo - GameCube")));
+    }
 }

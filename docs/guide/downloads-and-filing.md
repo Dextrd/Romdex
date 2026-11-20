@@ -5,7 +5,7 @@ what each one is from its checksums and files it where its system says. Anything
 **Downloads** page.
 
 You're responsible for what you bring in. Romdex checks that a dump is what the DATs say it is; it doesn't know where
-it came from, and it comes with no plugin that fetches commercial games.
+it came from, and it comes with no retrievers of its own: you choose which to add.
 
 ## How a dump arrives
 

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Romdex.Client;
@@ -125,7 +126,37 @@ public sealed class LibraryTests : IDisposable
         Assert.Equal(["Racer Zip Deluxe", "Zip Racer"], found.Items.Select(t => t.Name));
         Assert.Equal("Racer Zip Deluxe", Assert.Single((await _api.SearchCatalogueAsync("zip", have: false)).Items).Name);
         Assert.Equal("Zip Racer", Assert.Single((await _api.SearchCatalogueAsync("zip", have: true)).Items).Name);
-        Assert.Equal(0, (await _api.SearchCatalogueAsync("zip", systemId: found.Items[0].SystemId, have: true)).Total);
+        Assert.Equal(0, (await _api.SearchCatalogueAsync("zip", systemId: found.Items[0].Titles[0].SystemId, have: true)).Total);
+    }
+
+    [Fact]
+    public async Task A_game_on_several_systems_is_found_once_and_owned_if_its_had_on_any()
+    {
+        _dats.Dump(Handheld, "Sky Puzzle (World)", [".gb"]);
+        var console = _dats.Dump(Console, "Sky Puzzle! (USA)", [".nes"]);
+        _dats.Dump(Disc, "The Sky Puzzle (Europe)", [".bin"]);
+        _dats.Dump(Handheld, "Sky Puzzle Deluxe (World)", [".gb"]);
+        _dats.WriteDats();
+        _dats.Put("Console/sky.nes", console[0].Data);
+        await RefreshAndScanAsync();
+
+        // One game, named and pictured as the one the library has, with its title on each system.
+        var found = await _api.SearchCatalogueAsync("sky puzzle");
+        Assert.Equal(["Sky Puzzle!", "Sky Puzzle Deluxe"], found.Items.Select(g => g.Name));
+        var game = found.Items[0];
+        Assert.Equal(TitleStatus.Owned, game.Status);
+        Assert.Equal(3, game.Titles.Count);
+        Assert.Equal(game.Id, game.Titles[0].Id);
+        Assert.Equal([TitleStatus.Missing, TitleStatus.Missing], game.Titles.Skip(1).Select(t => t.Status));
+        Assert.Equal("Sky Puzzle Deluxe", Assert.Single((await _api.SearchCatalogueAsync("sky", have: false)).Items).Name);
+
+        // Narrowed to a system it's missing on, it's still the one game.
+        var handheld = (await _api.ListSystemsAsync()).Single(s => s.Name == Handheld);
+        Assert.Equal(TitleStatus.Owned, (await _api.SearchCatalogueAsync("sky puzzle", handheld.Id)).Items[0].Status);
+
+        // Its page on any system lists all three.
+        var detail = (await _api.GetTitleAsync(game.Titles[1].Id))!;
+        Assert.Equal(game.Titles.Select(t => t.Id).Order(), detail.Versions!.Select(v => v.Id).Order());
     }
 
     [Fact]
@@ -205,6 +236,39 @@ public sealed class LibraryTests : IDisposable
         Assert.Equal("20261108-000000", system.DatVersion);
         Assert.Equal(1, system.Ignored);
         Assert.Equal(1, system.Owned);
+    }
+
+    [Fact]
+    public async Task Titles_a_metadata_plugin_found_one_game_for_are_one_unless_two_are_on_one_system()
+    {
+        _dats.Dump(Handheld, "Kite Story (World)", [".gb"]);
+        _dats.Dump(Console, "Tako no Monogatari (Japan)", [".nes"]);
+        _dats.Dump(Disc, "Kite Story (Europe)", [".bin"]);
+        _dats.Dump(Disc, "Kite Story 2 (Europe)", [".bin"]);
+        _dats.Dump(Handheld, "Owl Night (World)", [".gb"]);
+        _dats.Dump(Console, "Fukurou no Yoru (Japan)", [".nes"]);
+        _dats.WriteDats();
+        await RefreshAndScanAsync();
+
+        // As Hasheous would: the same IGDB game for the Japanese release, and, wrongly, for a sequel's dump.
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<Data.RomdexDbContext>();
+            foreach (var (name, igdb) in new[] { ("Owl Night (World)", "1"), ("Fukurou no Yoru (Japan)", "1"), ("Kite Story (World)", "2"),
+                         ("Tako no Monogatari (Japan)", "2"), ("Kite Story (Europe)", "2"), ("Kite Story 2 (Europe)", "2") })
+                db.DumpArt.Add(new Data.DumpArt { DumpId = db.Dumps.Single(d => d.Name == name).Id, IdsJson = $$"""{"igdb":"{{igdb}}"}""" });
+            await db.SaveChangesAsync();
+        }
+
+        var owl = Assert.Single((await _api.SearchCatalogueAsync("owl")).Items);
+        Assert.Equal(["Fukurou no Yoru", "Owl Night"], owl.Titles.Select(t => t.Name).Order());
+        // Kite Story 2 and Kite Story, both on the disc system, share an ID, so it joins nothing: the names still do.
+        var kite = (await _api.SearchCatalogueAsync("kite")).Items;
+        Assert.Equal(["Kite Story", "Kite Story 2"], kite.Select(g => g.Name));
+        Assert.Equal(2, kite[0].Titles.Count);
+        Assert.Single(Assert.Single((await _api.SearchCatalogueAsync("tako")).Items).Titles);
+        // Found by its other name, a game is named as it was searched for.
+        Assert.Equal("Fukurou no Yoru", Assert.Single((await _api.SearchCatalogueAsync("fukurou")).Items).Name);
     }
 
     private async Task RefreshAndScanAsync()

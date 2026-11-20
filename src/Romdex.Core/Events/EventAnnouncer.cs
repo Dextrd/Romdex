@@ -7,8 +7,9 @@ using Romdex.Core.Tasks;
 namespace Romdex.Core.Events;
 
 /// <summary>
-/// Turns changes into events: for now, a background task finishing or failing. It looks for tasks finished and not yet
-/// announced, rather than being told by the code that finishes them, so nothing is missed, even across a restart. Each
+/// Turns changes into events: a download filed, held for review or failed, and a background task finishing or failing.
+/// It looks for what changed and isn't yet announced, rather than being told by the code that changes it, so nothing is
+/// missed, even across a restart. Each
 /// event goes to the event stream and, as a delivery row saved with the announcement, to every webhook that wants it.
 /// </summary>
 public sealed class EventAnnouncer(IServiceScopeFactory scopes, EventFeed feed, WebhookSender sender, ILogger<EventAnnouncer> log)
@@ -51,7 +52,7 @@ public sealed class EventAnnouncer(IServiceScopeFactory scopes, EventFeed feed, 
 
     private void OnRaised(string kind)
     {
-        if (kind != EventFeed.Tasks)
+        if (kind is not (EventFeed.Tasks or EventFeed.Downloads))
             return;
         try
         {
@@ -73,6 +74,19 @@ public sealed class EventAnnouncer(IServiceScopeFactory scopes, EventFeed feed, 
         var titles = scope.ServiceProvider.GetRequiredService<TaskTitles>();
         var events = new List<RomdexEvent>();
 
+        // Every change of state is noted, so a download held a second time is announced again; only some are announced.
+        var downloads = await db.Downloads.Include(d => d.Dumps)
+            .Where(d => d.AnnouncedState == null || d.AnnouncedState != d.State)
+            .OrderBy(d => d.UpdatedAt).Take(Batch).ToListAsync(ct);
+        var announced = downloads.Where(d => DownloadEvent(d.State) is not null).ToList();
+        var infos = (await Api.DownloadEndpoints.InfoAsync(db, announced, ct)).ToDictionary(i => i.Id);
+        foreach (var download in downloads)
+        {
+            if (DownloadEvent(download.State) is { } type)
+                events.Add(New(type, download.UpdatedAt, new DownloadEventData(infos[download.Id])));
+            download.AnnouncedState = download.State;
+        }
+
         var tasks = await db.BackgroundTasks
             .Where(t => !t.Announced && (t.Status == BackgroundTaskStatus.Succeeded || t.Status == BackgroundTaskStatus.Failed))
             .OrderBy(t => t.FinishedAt).Take(Batch).ToListAsync(ct);
@@ -83,7 +97,7 @@ public sealed class EventAnnouncer(IServiceScopeFactory scopes, EventFeed feed, 
             task.Announced = true;
         }
 
-        if (tasks.Count == 0)
+        if (downloads.Count == 0 && tasks.Count == 0)
             return false;
 
         var webhooks = await db.Webhooks.Where(w => w.Enabled).ToListAsync(ct);
@@ -96,8 +110,16 @@ public sealed class EventAnnouncer(IServiceScopeFactory scopes, EventFeed feed, 
             feed.Publish(@event);
         if (webhooks.Count > 0)
             sender.Wake();
-        return tasks.Count == Batch;
+        return downloads.Count == Batch || tasks.Count == Batch;
     }
+
+    private static string? DownloadEvent(Data.DownloadState state) => state switch
+    {
+        Data.DownloadState.Filed => EventTypes.DownloadFiled,
+        Data.DownloadState.NeedsReview => EventTypes.DownloadNeedsReview,
+        Data.DownloadState.Failed => EventTypes.DownloadFailed,
+        _ => null,
+    };
 
     public static RomdexEvent New<T>(string type, DateTime occurredAt, T data) =>
         new(Guid.CreateVersion7(), type, DateTime.SpecifyKind(occurredAt, DateTimeKind.Utc), JsonSerializer.SerializeToElement(data, RomdexJson.Options));

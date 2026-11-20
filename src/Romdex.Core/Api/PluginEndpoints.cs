@@ -87,7 +87,7 @@ public static class PluginEndpoints
                 db.PluginInstances.Add(instance);
                 await db.SaveChangesAsync(ct);
                 // A new source of covers looks up what the library already has.
-                await ArtLookupTask.QueueIfUsefulAsync(db, catalog, queue, ct);
+                await ArtLookupTask.QueueIfUsefulAsync(db, queue, ct);
                 return Results.Created($"/api/v1/plugins/{instance.Id}", ToInfo(instance, catalog));
             })
             .WithName("AddPlugin").WithSummary("Set up a plugin: a retriever by its container URL, or a loaded one by ID. It goes last in the order.")
@@ -209,7 +209,8 @@ public static class PluginEndpoints
                 await db.SaveChangesAsync(ct);
                 return Results.NoContent();
             })
-            .WithName("RemovePlugin");
+            .WithName("RemovePlugin").WithSummary("Removes a plugin and its settings.")
+            .Produces(StatusCodes.Status204NoContent).Produces(StatusCodes.Status404NotFound);
 
         return api;
     }

@@ -3,6 +3,7 @@
 @inject RomdexClient Api
 @inject ServerEvents Events
 @inject AuthState Auth
+@inject GameLayout Layout
 
 <PageTitle>@(_system?.Name ?? "System") · Romdex</PageTitle>
 
@@ -28,6 +29,7 @@ else
     <div class="toolbar">
         <Segmented T="string" Value="_filter" Options="GameFilters.Options" OnChange="FilterAsync" Label="Show" />
         <input type="search" placeholder="Search games" value="@_query" @oninput="SearchAsync" />
+        <LayoutToggle Value="@_layout" OnChange="l => _layout = l" />
     </div>
 
     @if (_page is null)
@@ -40,7 +42,7 @@ else
     }
     else
     {
-        <TitleTable Titles="_titles" />
+        <TitleTable Titles="_titles" Grid="_layout == GameLayout.Grid" />
         @if (_titles.Count < _page.Total)
         {
             <div class="toolbar">
@@ -186,6 +188,7 @@ else
     private string _filter = "All";
     private string _query = "";
     private int _search;
+    private string _layout = GameLayout.Grid;
     private FilingSettings? _filing;
     private IReadOnlyList<StorageFormat> _formats = [];
     private string? _filingError;
@@ -239,6 +242,7 @@ else
     {
         Events.Received -= OnEvent;
         Events.Received += OnEvent;
+        _layout = await Layout.GetAsync();
         await LoadAsync();
     }
 

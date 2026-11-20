@@ -2,6 +2,9 @@
 @inject RomdexClient Api
 @inject AuthState Auth
 @inject NavigationManager Nav
+@using Microsoft.JSInterop
+@inject IJSRuntime Js
+@implements IDisposable
 
 <PageTitle>@(_title?.Name ?? "Game") · Romdex</PageTitle>
 
@@ -17,51 +20,253 @@ else
 {
     var held = _title.Dumps.Where(d => d.Status != DumpStatus.Missing).ToList();
     var others = _title.Dumps.Where(d => d.Status == DumpStatus.Missing).ToList();
+    // What plays: the first dump the library has whole that plays in the browser or opens in the connected app.
+    var playable = held.Select(d => _play.GetValueOrDefault(d.Id)).FirstOrDefault(p => p is { PlayerUrl: not null } or { App: not null });
+    var info = _info;
+    // Still being looked up: what isn't known yet shows as placeholders.
+    var loading = info is null || info.Loading;
+    var year = info?.Released.Select(r => r.Date[..Math.Min(4, r.Date.Length)]).Order().FirstOrDefault();
     <p class="small"><a href="">Library</a> / <a href="systems/@_title.SystemId">@_title.SystemName</a></p>
-    <div class="title-head">
-        @if (_title.Cover is { } cover)
+    @* The cover with what's known of the game below it; beside them, its name, what can be done with it, what it's about
+       and what reviewers gave it. *@
+    <div class="game-page">
+        <Cover Url="@_title.Cover" />
+        @if (info is not null && Facts(info) is { Count: > 0 } facts)
         {
-            <img class="cover" src="@cover" alt="" />
-        }
-        <div>
-            <div class="row">
-                <h1>@_title.Name</h1>
-                @if (Auth.May(UserPermissions.Download) && _title.Status != TitleStatus.Owned)
+            <dl class="game-facts">
+                @foreach (var (label, value) in facts)
                 {
-                    <button @onclick="() => _getting = (null, _title.Name)" title="Find it through the retrievers">Get</button>
+                    <dt>@label</dt>
+                    <dd>@value</dd>
+                }
+            </dl>
+        }
+        else if (loading)
+        {
+            @* Looked up the first time the page is shown, which can take a few seconds. *@
+            <dl class="game-facts" aria-busy="true">
+                @for (var i = 0; i < 4; i++)
+                {
+                    <dt><span class="placeholder short"></span></dt>
+                    <dd><span class="placeholder" style="width: @(5 + i * 2)rem"></span></dd>
+                }
+            </dl>
+        }
+        <div class="game-main">
+            @{ var rating = info is null ? null : Format.Rating(info.Ratings, Auth.Status?.Appearance?.Ratings ?? RatingBoard.Auto, _language); }
+            <div class="game-title">
+                <div class="game-title-text">
+                    <h1>@_title.Name</h1>
+                    @if (_title.KnownAs is { } knownAs)
+                    {
+                        <p class="muted known-as">Also known as @knownAs</p>
+                    }
+                    <div class="row small game-meta">
+                        @if (info is null)
+                        {
+                            <span class="placeholder" style="width: 9rem"></span>
+                        }
+                        else
+                        {
+                            var made = info.Developers.Concat(info.Publishers).Distinct().Take(2).ToList();
+                            @if (year is not null) { <span>@year</span> }
+                            @if (made.Count > 0) { <span class="muted">@string.Join(" · ", made)</span> }
+                            @if (info.Genres.Count > 0) { <span class="muted">@Capitalised(info.Genres[0])</span> }
+                        }
+                        <span class="badge @Format.Badge(_title.Status)">@Format.OwnershipLabel(_title.Status)</span>
+                        @if (_title.Ignored) { <span class="badge ignored" title="Never listed as missing">Ignored</span> }
+                    </div>
+                    @if (_title.Versions is { Count: > 1 } versions)
+                    {
+                        @* The game on every system it's on, green where the library has a copy: picking one opens its page. *@
+                        var shown = _picked ?? _title.Id;
+                        var owned = versions.Where(v => v.Status != TitleStatus.Missing).Select(v => v.Id).ToHashSet();
+                        <div class="versions">
+                            <Segmented T="Guid" Value="shown" Label="System" Class="@($"consoles {(owned.Contains(shown) ? "have" : "")}")"
+                                       Options="@versions.Select(v => (v.Id, v.System, (string?)$"{v.Name} · {Format.OwnershipLabel(v.Status)}")).ToList()"
+                                       OptionClass="@(id => owned.Contains(id) ? "have" : null)" OnChange="PickSystem" />
+                        </div>
+                    }
+                </div>
+                @if (rating is not null)
+                {
+                    @* Whose ratings are shown is chosen under Settings → Appearance. *@
+                    <img class="age-rating" src="@Format.RatingImage(rating)" alt="Rated @rating.Name by @rating.Board" title="@rating.Board: @rating.Name" />
                 }
             </div>
-            @if (_title.KnownAs is { } knownAs)
+            <div class="row album-actions game-actions">
+                @if (playable?.PlayerUrl is not null)
+                {
+                    <IconButton Icon="play" Primary="true" Large="true" Label="Play" Title="@(playable.Bios is { } bios ? $"Play it in the browser, with {bios}" : "Play it in the browser")"
+                                OnClick="() => Play(playable)" />
+                }
+                @if (playable?.App is { } app)
+                {
+                    <IconButton Icon="open" Large="true" Label="@($"Open in {app}")" Title="Play it there, with its saves and states" OnClick="() => OpenInAppAsync(playable)" />
+                }
+                @if (_title.Status != TitleStatus.Owned)
+                {
+                    <IconButton Icon="get" Requires="@UserPermissions.Download" Large="true" Label="Get" Title="Find it through the retrievers" OnClick="() => _getting = (null, _title.Name)" />
+                }
+                @if (_title.Status != TitleStatus.Owned || _title.Ignored)
+                {
+                    <IconButton Icon="@(_title.Ignored ? "unignore" : "ignore")" Requires="@UserPermissions.Download" Large="true"
+                                Title="@(_title.Ignored ? "List it as missing again" : "Never list it as missing")" OnClick="IgnoreAsync" />
+                }
+            </div>
+            @if (playable is not null && _opening.GetValueOrDefault(playable.DumpId) is { } opening)
             {
-                <p class="muted">Also known as @knownAs</p>
+                <p class="muted small">@opening</p>
             }
-            @if (_title.Status != TitleStatus.Missing)
+            else if (held.Count > 0 && playable is null && held.Select(d => _play.GetValueOrDefault(d.Id)?.Unplayable).FirstOrDefault(w => w is not null) is { } why)
             {
-                <p><span class="badge @Format.Badge(_title.Status)">@Format.Label(_title.Status)</span></p>
+                <p class="muted small">@why</p>
+            }
+            @if (info?.Links is { Count: > 0 } links)
+            {
+                <div class="ids game-links">
+                    @foreach (var link in links)
+                    {
+                        <a href="@link.Url" target="_blank" rel="noopener noreferrer"><code>@link.Site</code></a>
+                    }
+                </div>
+            }
+
+            @if (info?.Summary is null && loading)
+            {
+                <div class="game-summary" aria-busy="true">
+                    <span class="placeholder line" style="width: 100%"></span>
+                    <span class="placeholder line" style="width: 96%"></span>
+                    <span class="placeholder line" style="width: 88%"></span>
+                    <span class="placeholder line" style="width: 60%"></span>
+                </div>
+            }
+            else if (info?.Summary is { } summary)
+            {
+                @* Its first few lines, and the rest when asked for. *@
+                <div class="game-summary @(_summaryLong != false && !_summaryOpen ? "clamped" : "")">
+                    <div class="game-summary-text" id="game-summary-text" @ref="_summary">
+                        @foreach (var paragraph in summary.Split("\n\n", StringSplitOptions.RemoveEmptyEntries))
+                        {
+                            <p>@paragraph</p>
+                        }
+                    </div>
+                    <div class="game-summary-foot small">
+                        @if (info.SummarySource is { } source)
+                        {
+                            <span class="muted">
+                                From @if (info.SummaryUrl is { } url) { <a href="@url" target="_blank" rel="noopener noreferrer">@source</a> } else { <span>@source</span> }
+                            </span>
+                        }
+                        @if (_summaryLong == true)
+                        {
+                            <button type="button" class="summary-toggle" aria-expanded="@(_summaryOpen ? "true" : "false")" aria-controls="game-summary-text"
+                                    @onclick="() => _summaryOpen = !_summaryOpen">
+                                @(_summaryOpen ? "Show less" : "Show more") <span class="chevron down @(_summaryOpen ? "open" : "")"></span>
+                            </button>
+                        }
+                    </div>
+                </div>
+            }
+
+            @if (info is { Scores.Count: > 0 })
+            {
+                <section class="game-reviews">
+                    <h2 class="section">Reviews</h2>
+                    @* A row that scrolls sideways, by its arrows or a swipe, fading out where there's more. *@
+                    <div class="carousel at-start">
+                        <button type="button" class="carousel-arrow" data-step="-1" aria-label="Earlier reviews"><span class="chevron left"></span></button>
+                        <div class="carousel-track" tabindex="0" aria-label="Reviews">
+                            @foreach (var score in info.Scores)
+                            {
+                                var percent = Format.Percent(score.Score);
+                                <div class="score @(percent is { } p ? Format.ScoreBadge(p) : "")">
+                                    @if (Format.ReviewerLogo(score.Reviewer) is { } logo)
+                                    {
+                                        <span class="score-logo" aria-hidden="true"><img src="@logo" alt="" /></span>
+                                    }
+                                    else
+                                    {
+                                        <span class="score-icon" style="--hue: @Format.Hue(score.Reviewer)" aria-hidden="true">@Format.Monogram(score.Reviewer)</span>
+                                    }
+                                    <span class="score-value">@score.Score</span>
+                                    <span class="score-by small">@score.Reviewer</span>
+                                </div>
+                            }
+                        </div>
+                        <button type="button" class="carousel-arrow" data-step="1" aria-label="Later reviews"><span class="chevron right"></span></button>
+                    </div>
+                </section>
+            }
+
+            @if (info is { Images.Count: > 0 })
+            {
+                <section class="game-images">
+                    <h2 class="section">Screenshots</h2>
+                    <div class="carousel at-start">
+                        <button type="button" class="carousel-arrow" data-step="-1" aria-label="Earlier pictures"><span class="chevron left"></span></button>
+                        <div class="carousel-track shots" tabindex="0" aria-label="Screenshots">
+                            @foreach (var image in info.Images)
+                            {
+                                <button type="button" class="shot" title="See it bigger" @onclick="() => _viewing = image">
+                                    @* One its source no longer has is left out, and the row with it when none are left. *@
+                                    <img src="@image.Url" alt="@ImageName(image)" loading="lazy" onerror="this.closest('.shot').hidden = true" />
+                                    <span class="shot-label small">@ImageName(image)</span>
+                                </button>
+                            }
+                        </div>
+                        <button type="button" class="carousel-arrow" data-step="1" aria-label="Later pictures"><span class="chevron right"></span></button>
+                    </div>
+                    <p class="muted small">From @string.Join(", ", info.Images.Select(i => i.Source).Distinct())</p>
+                </section>
             }
         </div>
     </div>
 
-    @if (held.Count == 0)
+    @if (_viewing is { } viewing)
     {
-        <div class="empty card">Not in the library.</div>
-    }
-    else
-    {
-        <h2>In your library</h2>
-        <div class="card">
-            @foreach (var dump in held) { @Dump(dump) }
+        <div class="lightbox" role="dialog" aria-label="@ImageName(viewing)" tabindex="-1" @ref="_lightbox" @onclick="() => _viewing = null"
+             @onkeydown="CloseOnEscape">
+            <img src="@viewing.Url" alt="@ImageName(viewing)" />
+            <button type="button" class="lightbox-close" aria-label="Close">×</button>
         </div>
     }
 
+    @if (held.Count > 0)
+    {
+        <h2 class="section">@(held.Count == 1 ? "In your library" : $"In your library ({held.Count})")</h2>
+        <div class="card dumps">
+            @foreach (var dump in held) { @Dump(dump) }
+        </div>
+    }
     @if (others.Count > 0)
     {
-        <details open="@(held.Count == 0)">
-            <summary>@(held.Count == 0 ? "Dumps the DAT lists" : $"Other dumps the DAT lists ({others.Count})")</summary>
-            <div class="card">
-                @foreach (var dump in others) { @Dump(dump) }
-            </div>
-        </details>
+        <h2 class="section">@(held.Count == 0 ? $"Dumps the DAT lists ({others.Count})" : $"Other dumps the DAT lists ({others.Count})")</h2>
+        <div class="card dumps">
+            @foreach (var dump in others) { @Dump(dump) }
+        </div>
+    }
+
+    @if (info is { InSeries.Count: > 0 })
+    {
+        @* The rest of its series that the catalogue has, on any system. *@
+        @foreach (var series in info.InSeries)
+        {
+            <section class="game-series">
+                <h2 class="section">More of @series.Name</h2>
+                <div class="carousel at-start" data-series="@series.Name">
+                    <button type="button" class="carousel-arrow" data-step="-1" aria-label="Earlier games"><span class="chevron left"></span></button>
+                    <div class="carousel-track series-track" tabindex="0" aria-label="@($"Games in {series.Name}")">
+                        @foreach (var game in series.Games)
+                        {
+                            <GameTile @key="game.Id" Href="@($"titles/{game.Id}")" Name="@game.Name" Cover="@game.Cover" Status="game.Status"
+                                      Systems="@string.Join(" · ", game.Titles.Select(t => _short.GetValueOrDefault(t.SystemId)).OfType<string>().Distinct())" />
+                        }
+                    </div>
+                    <button type="button" class="carousel-arrow" data-step="1" aria-label="Later games"><span class="chevron right"></span></button>
+                </div>
+            </section>
+        }
     }
 
     @if (_getting is { } getting)
@@ -74,26 +279,158 @@ else
     [Parameter] public Guid Id { get; set; }
 
     private TitleDetail? _title;
+    private GameInfo? _info;
     private bool _notFound;
+    private Guid? _picked;
     private (Guid? DumpId, string Name)? _getting;
     private readonly Dictionary<Guid, PlayInfo> _play = [];
     private readonly Dictionary<Guid, string> _opening = [];
+    private ElementReference _summary;
+    private Dictionary<Guid, string> _short = [];
+    private bool _gone;
+    private ElementReference _lightbox;
+    private bool? _summaryLong;
+    private bool _summaryOpen;
+    private Screenshot? _viewing;
+    private bool _focusViewing;
+
+    // The browser's language, for whose age ratings to show by default; the same for the whole visit.
+    private static string? _language;
 
     protected override async Task OnParametersSetAsync()
     {
         _title = await Api.GetTitleAsync(Id);
+        _picked = null;
         _notFound = _title is null;
+        _info = null;
+        _summaryLong = null;
+        _summaryOpen = false;
+        _viewing = null;
         _play.Clear();
         _opening.Clear();
-        if (_title is null || !Auth.May(UserPermissions.Play))
+        if (_title is null)
+            return;
+        // The details can take a few seconds the first time: the page is shown without them meanwhile.
+        _ = LoadInfoAsync(Id);
+        if (_short.Count == 0)
+            _short = (await Api.ListSystemsAsync()).ToDictionary(s => s.Id, Format.Short);
+        if (!Auth.May(UserPermissions.Play))
             return;
         foreach (var dump in _title.Dumps.Where(d => d.Status == DumpStatus.Good))
             if (await Api.GetPlayAsync(dump.Id) is { } play)
                 _play[dump.Id] = play;
     }
 
+    // What's known of the game, shown as it's found: each answer is what's been found so far, until there's no more.
+    private async Task LoadInfoAsync(Guid id)
+    {
+        while (true)
+        {
+            GameInfo info;
+            try
+            {
+                info = await Api.GetGameInfoSoFarAsync(id) ?? GameInfo.Empty;
+            }
+            catch (HttpRequestException)
+            {
+                info = GameInfo.Empty;
+            }
+            // Another game may have been opened meanwhile, or another page.
+            if (id != Id || _gone)
+                return;
+            // A summary that's changed is measured again.
+            if (info.Summary != _info?.Summary)
+                _summaryLong = null;
+            _info = info;
+            StateHasChanged();
+            if (!info.Loading)
+                return;
+        }
+    }
+
+    public void Dispose() => _gone = true;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && _language is null)
+        {
+            _language = await Js.InvokeAsync<string>("romdexGame.language");
+            StateHasChanged();
+        }
+        // An opened picture takes the keyboard, so Escape closes it.
+        if (_viewing is not null && !_focusViewing)
+        {
+            _focusViewing = true;
+            await _lightbox.FocusAsync();
+        }
+        else if (_viewing is null)
+            _focusViewing = false;
+        if (_info is null)
+            return;
+        // Only a summary longer than its first few lines can be shown in full.
+        if (_info.Summary is not null && _summaryLong is null)
+        {
+            _summaryLong = await Js.InvokeAsync<bool>("romdexGame.overflows", _summary);
+            if (_summaryLong == true)
+                StateHasChanged();
+        }
+        // The rows that scroll sideways: each is set up once, and checked again for whether there's more past an edge.
+        await Js.InvokeVoidAsync("romdexGame.carousels");
+    }
+
+    private void CloseOnEscape(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+            _viewing = null;
+    }
+
+    private static string ImageName(Screenshot image) => image.Kind switch
+    {
+        "title" => "Title screen",
+        _ => "Screenshot",
+    };
+
+    private static string Capitalised(string text) => text.Length == 0 ? text : char.ToUpperInvariant(text[0]) + text[1..];
+
+    // What's known about the game, as labels and values, in the order people look for them.
+    private static List<(string Label, string Value)> Facts(GameInfo info)
+    {
+        var facts = new List<(string, string)>();
+        void Add(string one, string many, IReadOnlyList<string> values)
+        {
+            if (values.Count > 0)
+                facts.Add((values.Count == 1 ? one : many, string.Join(", ", values.Select(Capitalised))));
+        }
+        if (info.Released.Count > 0)
+            facts.Add(("Released", string.Join("\n", info.Released.Select(r =>
+                $"{Format.ReleaseDate(r.Date)}{(r.Region is null && r.Platform is null ? "" : $" ({string.Join(", ", new[] { r.Region, r.Platform }.OfType<string>())})")}"))));
+        Add("Developer", "Developers", info.Developers);
+        Add("Publisher", "Publishers", info.Publishers);
+        Add("Genre", "Genres", info.Genres);
+        Add("Mode", "Modes", info.Modes);
+        Add("Series", "Series", info.Series);
+        foreach (var credit in info.Credits)
+            Add(credit.Role, credit.Role + "s", credit.Names);
+        return facts;
+    }
+
     // The player is a page of its own, outside the app: EmulatorJS is loaded there, and only there.
+    // The switch moves at once, while the system's page loads.
+    private void PickSystem(Guid id)
+    {
+        if (id == Id)
+            return;
+        _picked = id;
+        Nav.NavigateTo($"titles/{id}");
+    }
+
     private void Play(PlayInfo play) => Nav.NavigateTo(play.PlayerUrl!, forceLoad: true);
+
+    private async Task IgnoreAsync()
+    {
+        if (_title is { } title)
+            _title = title with { Ignored = (await Api.IgnoreTitleAsync(title.Id, !title.Ignored)).Ignored };
+    }
 
     private async Task OpenInAppAsync(PlayInfo play)
     {
@@ -117,61 +454,67 @@ else
         }
     }
 
+    // A dump: its name, where it came out and in what languages, enough to tell it from the others; its serial, files,
+    // hashes and where the library has it, opened.
     private RenderFragment Dump(DumpInfo dump) => __builder =>
     {
+        var play = _play.GetValueOrDefault(dump.Id);
         <div class="dump">
-            <div class="dump-head">
-                <span class="dump-name">@dump.Name</span>
+            <details>
+                <summary>
+                    <span class="dump-name">@dump.Name</span>
+                    <span class="dump-line">
+                        @string.Join(", ", dump.Regions)
+                        @if (dump.Kinds.Count > 0) { <span class="muted"> · @string.Join(", ", dump.Kinds)</span> }
+                        @if (dump.Disc is not null) { <span class="muted"> · Disc @dump.Disc</span> }
+                    </span>
+                    @if (dump.Languages.Count > 0)
+                    {
+                        <span class="dump-line muted">@Format.Languages(dump.Languages)</span>
+                    }
+                </summary>
+                <dl class="file-tags dump-details">
+                    @if (dump.Serial is not null)
+                    {
+                        <dt>Serial</dt>
+                        <dd>@dump.Serial</dd>
+                    }
+                    <dt>@(dump.Files.Count == 1 ? "Size" : "Files")</dt>
+                    <dd>@(dump.Files.Count == 1 ? Format.Size(dump.Files[0].Size) : $"{dump.Files.Count}, {Format.Size(dump.Files.Sum(f => f.Size))}")</dd>
+                </dl>
+                <div class="dump-files">
+                    @foreach (var file in dump.Files)
+                    {
+                        <div class="file">
+                            <span>@file.Name</span> <span class="muted">@Format.Size(file.Size)</span>
+                            <dl class="hashes">
+                                @if (file.Crc32 is not null) { <dt>CRC32</dt><dd><code>@file.Crc32</code></dd> }
+                                @if (file.Md5 is not null) { <dt>MD5</dt><dd><code>@file.Md5</code></dd> }
+                                @if (file.Sha1 is not null) { <dt>SHA-1</dt><dd><code>@file.Sha1</code></dd> }
+                            </dl>
+                            @foreach (var place in file.Library)
+                            {
+                                <div class="muted">In the library as <code>@place.Path@(place.Entry is null ? "" : $" → {place.Entry}")</code></div>
+                            }
+                        </div>
+                    }
+                </div>
+            </details>
+            <div class="dump-aside">
                 @if (dump.Status != DumpStatus.Missing)
                 {
                     <span class="badge @Format.Badge(dump.Status)">@(dump.Status == DumpStatus.Good ? "Verified" : dump.Status.ToString())</span>
                 }
-                @if (dump.Status != DumpStatus.Good && Auth.May(UserPermissions.Download))
+                @if (dump.Preferred) { <span class="badge neutral" title="The one 1G1R prefers, or you chose">Preferred</span> }
+                @if (play?.PlayerUrl is not null)
                 {
-                    <button class="small" @onclick="() => _getting = (dump.Id, dump.Name)" title="Find this dump through the retrievers">Get this dump</button>
+                    <IconButton Icon="play" Class="small" Title="@(play.Bios is { } bios ? $"Play this dump in the browser, with {bios}" : "Play this dump in the browser")"
+                                OnClick="() => Play(play)" />
                 }
-            </div>
-            @if (_play.GetValueOrDefault(dump.Id) is { } play)
-            {
-                <div class="dump-actions">
-                    @if (play.PlayerUrl is not null)
-                    {
-                        <button class="primary" @onclick="() => Play(play)" title="@(play.Bios is { } bios ? $"Plays in the browser, with {bios}" : "Plays in the browser")">Play</button>
-                    }
-                    @if (play.App is { } app)
-                    {
-                        <button @onclick="() => OpenInAppAsync(play)" title="Play it there, with its saves and states">Open in @app</button>
-                    }
-                    @if (_opening.GetValueOrDefault(dump.Id) is { } opening)
-                    {
-                        <span class="muted small">@opening</span>
-                    }
-                    else if (play.PlayerUrl is null && play.Unplayable is { } why)
-                    {
-                        <span class="muted small">@why</span>
-                    }
-                </div>
-            }
-            <div class="muted small">
-                @string.Join(", ", dump.Regions)@(dump.Languages.Count > 0 ? $" · {string.Join(", ", dump.Languages)}" : "")
-                @if (dump.Serial is not null) { <span> · @dump.Serial</span> }
-                @if (dump.Kinds.Count > 0) { <span> · @string.Join(", ", dump.Kinds)</span> }
-            </div>
-            <div class="dump-files">
-                @foreach (var file in dump.Files)
+                @if (dump.Status != DumpStatus.Good)
                 {
-                    <div class="file">
-                        <span>@file.Name</span> <span class="muted">@Format.Size(file.Size)</span>
-                        <div class="hashes">
-                            @if (file.Crc32 is not null) { <code title="CRC32">@file.Crc32</code> }
-                            @if (file.Sha1 is not null) { <code title="SHA-1">@file.Sha1</code> }
-                            else if (file.Md5 is not null) { <code title="MD5">@file.Md5</code> }
-                        </div>
-                        @foreach (var place in file.Library)
-                        {
-                            <div class="muted">In the library as <code>@place.Path@(place.Entry is null ? "" : $" → {place.Entry}")</code></div>
-                        }
-                    </div>
+                    <IconButton Icon="get" Class="small" Requires="@UserPermissions.Download" Title="Find this dump through the retrievers"
+                                OnClick="() => _getting = (dump.Id, dump.Name)" />
                 }
             </div>
         </div>

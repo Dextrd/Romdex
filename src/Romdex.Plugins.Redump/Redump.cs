@@ -19,10 +19,10 @@ public sealed class RedumpFactory : IPluginFactory
         Type = PluginType.Index,
         ContractVersion = ContractVersions.Index.ToString(),
         Description = "Fetches Redump's DATs for the disc systems you choose, and their BIOS DATs where Redump has them, and checks for new "
-                      + "versions every few days.",
+                      + "versions every few days. With them, Retool's clone lists make one title of a game released under different names.",
         Homepage = "https://redump.info",
         Capabilities = [IndexCapabilities.FetchDats],
-        Access = new PluginAccess { Network = ["redump.info"] },
+        Access = new PluginAccess { Network = ["redump.info", "raw.githubusercontent.com"] },
         MaxRequestsPerSecond = 1,
         SettingsSchema = JsonDocument.Parse("""
             {
@@ -40,6 +40,12 @@ public sealed class RedumpFactory : IPluginFactory
                   "default": true,
                   "title": "BIOS DATs",
                   "description": "Fetch the BIOS DAT too, for systems Redump has one for."
+                },
+                "cloneLists": {
+                  "type": "boolean",
+                  "default": true,
+                  "title": "Retool's clone lists",
+                  "description": "Fetch Retool's clone list for each system too, which says which entries are one game under different names, such as a Japanese release with a title of its own. From github.com/unexpectedpanda/retool-clonelists-metadata."
                 },
                 "everyDays": {
                   "type": "integer",
@@ -67,15 +73,22 @@ public sealed class RedumpFactory : IPluginFactory
             .Select(s => s.ToUpperInvariant()).Distinct().ToList();
         var bios = !settings.TryGetProperty("bios", out var b) || b.ValueKind != JsonValueKind.False;
         var days = settings.TryGetProperty("everyDays", out var d) && d.TryGetInt32(out var n) ? Math.Clamp(n, 1, 90) : 7;
-        return new Redump(context.HttpClient, context.DataDirectory, Text("baseUrl", "https://redump.info").TrimEnd('/'), systems, bios, TimeSpan.FromDays(days));
+        var cloneLists = !settings.TryGetProperty("cloneLists", out var c) || c.ValueKind != JsonValueKind.False ? CloneListsUrl : null;
+        return new Redump(context.HttpClient, context.DataDirectory, Text("baseUrl", "https://redump.info").TrimEnd('/'), systems, bios, TimeSpan.FromDays(days),
+            cloneLists);
     }
+
+    /// <summary>Where Retool's clone lists are, each at <c>{this}/{DAT name} (Redump).json</c>.</summary>
+    public const string CloneListsUrl = "https://raw.githubusercontent.com/unexpectedpanda/retool-clonelists-metadata/main/clonelists";
 }
 
 /// <summary>
 /// Redump's DATs, kept in the plugin's own folder and read like a DAT folder. Redump hands each out as a zip, at
 /// <c>/datfile/{code}</c>, and BIOS DATs at <c>/bios/{code}</c>; a download replaces what's kept only when it's a newer version.
+/// Most come zipped, but some, such as the PlayStation 2's BIOS DAT, come as the DAT itself: each is kept as it came.
+/// Retool's clone list for each, where there is one, is kept beside it, for the DAT folder to apply.
 /// </summary>
-public sealed class Redump(HttpClient http, string folder, string baseUrl, IReadOnlyList<string> systems, bool bios, TimeSpan every)
+public sealed class Redump(HttpClient http, string folder, string baseUrl, IReadOnlyList<string> systems, bool bios, TimeSpan every, string? cloneLists = null)
     : IIndexPlugin, IDatFetcher
 {
     /// <summary>The systems Redump has a BIOS DAT for.</summary>
@@ -110,21 +123,23 @@ public sealed class Redump(HttpClient http, string folder, string baseUrl, IRead
     public async Task<IReadOnlyList<IndexSystem>> FetchAsync(CancellationToken cancellationToken)
     {
         var state = ReadState();
-        var wanted = systems.Select(s => (Url: $"{baseUrl}/datfile/{s}", File: $"{s}.zip"))
-            .Concat(bios ? systems.Where(BiosSystems.Contains).Select(s => (Url: $"{baseUrl}/bios/{s}", File: $"{s}-bios.zip")) : [])
+        // Each kept as {name}.zip or {name}.dat, as it came.
+        var wanted = systems.Select(s => (Url: $"{baseUrl}/datfile/{s}", Name: s))
+            .Concat(bios ? systems.Where(BiosSystems.Contains).Select(s => (Url: $"{baseUrl}/bios/{s}", Name: $"{s}-bios")) : [])
             .ToList();
-        var missing = wanted.Any(w => !File.Exists(Path.Combine(folder, w.File)));
-        if (!missing && state.FetchedAt is { } last && DateTime.UtcNow - last < every)
+        var missing = wanted.Any(w => Kept(Path.Combine(folder, w.Name)) is null);
+        // Clone lists turned on are fetched at once, not when the DATs are next due.
+        if (!missing && state.CloneLists == (cloneLists is not null) && state.FetchedAt is { } last && DateTime.UtcNow - last < every)
             return [];
 
         // One that fails doesn't stop the rest; what failed is reported once all have been tried.
         var changed = new List<IndexSystem>();
         var errors = new List<Exception>();
-        foreach (var (url, file) in wanted)
+        foreach (var (url, name) in wanted)
         {
             try
             {
-                if (await FetchOneAsync(url, Path.Combine(folder, file), cancellationToken) is { } system)
+                if (await FetchOneAsync(url, Path.Combine(folder, name), cancellationToken) is { } system)
                     changed.Add(system);
             }
             catch (Exception e) when (e is HttpRequestException or InvalidDataException or IOException)
@@ -132,32 +147,77 @@ public sealed class Redump(HttpClient http, string folder, string baseUrl, IRead
                 errors.Add(e);
             }
         }
-        WriteState(errors.Count == 0 ? new State(DateTime.UtcNow, null) : state with { Error = string.Join("; ", errors.Select(e => e.Message)) });
+        if (cloneLists is not null)
+            foreach (var code in systems)
+            {
+                try
+                {
+                    if (await FetchCloneListAsync(Path.Combine(folder, code), cancellationToken) is { } grouped && !changed.Any(s => s.Name == grouped.Name))
+                        changed.Add(grouped);
+                }
+                catch (Exception e) when (e is HttpRequestException or InvalidDataException or IOException)
+                {
+                    errors.Add(e);
+                }
+            }
+        WriteState(errors.Count == 0 ? new State(DateTime.UtcNow, null, cloneLists is not null) : state with { Error = string.Join("; ", errors.Select(e => e.Message)) });
         if (errors.Count > 0)
             throw errors.Count == 1 ? errors[0] : new AggregateException("Some DATs couldn't be fetched: " + string.Join("; ", errors.Select(e => e.Message)), errors);
         return changed;
     }
 
+    // Retool's clone list for the DAT kept as {name}, beside it as {name}-clones.json. Returns the DAT's system when the
+    // list is new or changed; nothing when Retool has none for it.
+    private async Task<IndexSystem?> FetchCloneListAsync(string name, CancellationToken ct)
+    {
+        if (Kept(name) is not { } dat || ReadHeader(await File.ReadAllBytesAsync(dat, ct)) is not { } system)
+            return null;
+        using var response = await http.GetAsync($"{cloneLists}/{Uri.EscapeDataString(system.Name + " (Redump)")}.json", ct);
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            return null;
+        if (!response.IsSuccessStatusCode)
+            throw new HttpRequestException($"Retool's clone list for {system.Name} answered {(int)response.StatusCode}");
+        var bytes = await response.Content.ReadAsByteArrayAsync(ct);
+        if (Retool.Read(new MemoryStream(bytes)) is null)
+            throw new InvalidDataException($"Retool's clone list for {system.Name} isn't one.");
+        var path = name + "-clones.json";
+        if (File.Exists(path) && (await File.ReadAllBytesAsync(path, ct)).AsSpan().SequenceEqual(bytes))
+            return null;
+        await File.WriteAllBytesAsync(path + ".part", bytes, ct);
+        File.Move(path + ".part", path, overwrite: true);
+        return system;
+    }
+
+    // The file a DAT is kept in, zipped or not, if there is one.
+    private static string? Kept(string name) => new[] { name + ".zip", name + ".dat" }.FirstOrDefault(File.Exists);
+
     // Downloads one DAT; keeps it, and returns its system, only when it's a version newer than the one kept.
-    private async Task<IndexSystem?> FetchOneAsync(string url, string path, CancellationToken ct)
+    private async Task<IndexSystem?> FetchOneAsync(string url, string name, CancellationToken ct)
     {
         using var response = await http.GetAsync(url, ct);
         if (!response.IsSuccessStatusCode)
             throw new HttpRequestException($"{url} answered {(int)response.StatusCode}");
         var bytes = await response.Content.ReadAsByteArrayAsync(ct);
         var fetched = ReadHeader(bytes) ?? throw new InvalidDataException($"{url} didn't send a DAT.");
-        if (File.Exists(path) && ReadHeader(await File.ReadAllBytesAsync(path, ct)) is { } kept && string.CompareOrdinal(kept.Version, fetched.Version) >= 0)
+        if (Kept(name) is { } old && ReadHeader(await File.ReadAllBytesAsync(old, ct)) is { } kept && string.CompareOrdinal(kept.Version, fetched.Version) >= 0)
             return null;
+        var (path, other) = IsZip(bytes) ? (name + ".zip", name + ".dat") : (name + ".dat", name + ".zip");
         var partial = path + ".part";
         await File.WriteAllBytesAsync(partial, bytes, ct);
         File.Move(partial, path, overwrite: true);
+        // One that came the other way before goes, so the folder never has two of it.
+        File.Delete(other);
         return fetched;
     }
+
+    private static bool IsZip(byte[] bytes) => bytes.AsSpan().StartsWith("PK\x03\x04"u8);
 
     private static IndexSystem? ReadHeader(byte[] bytes)
     {
         try
         {
+            if (!IsZip(bytes))
+                return Logiqx.ReadHeader(new MemoryStream(bytes));
             using var zip = new ZipArchive(new MemoryStream(bytes), ZipArchiveMode.Read);
             var entry = zip.Entries.FirstOrDefault(e => e.Name.EndsWith(".dat", StringComparison.OrdinalIgnoreCase) || e.Name.EndsWith(".xml", StringComparison.OrdinalIgnoreCase));
             if (entry is null)
@@ -173,7 +233,7 @@ public sealed class Redump(HttpClient http, string folder, string baseUrl, IRead
 
     private static string Count(int n) => n == 1 ? "1 DAT" : $"{n} DATs";
 
-    private sealed record State(DateTime? FetchedAt, string? Error);
+    private sealed record State(DateTime? FetchedAt, string? Error, bool CloneLists = false);
 
     private State ReadState()
     {

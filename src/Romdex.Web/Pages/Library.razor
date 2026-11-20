@@ -3,6 +3,7 @@
 @inject RomdexClient Api
 @inject ServerEvents Events
 @inject NavigationManager Nav
+@inject GameLayout Layout
 
 <PageTitle>Library · Romdex</PageTitle>
 
@@ -41,6 +42,7 @@ else if (_view == "games")
     <div class="toolbar">
         <Segmented T="string" Value="_filter" Options="GameFilters.Options" OnChange="FilterAsync" Label="Show" />
         <input type="search" placeholder="Search games" value="@_query" @oninput="SearchAsync" />
+        <LayoutToggle Value="@_layout" OnChange="l => _layout = l" />
     </div>
     @if (_games is null)
     {
@@ -52,7 +54,7 @@ else if (_view == "games")
     }
     else
     {
-        <TitleTable Titles="_titles" Systems="_names" />
+        <TitleTable Titles="_titles" Systems="_names" Grid="_layout == GameLayout.Grid" />
         @if (_titles.Count < _games.Total)
         {
             <div class="toolbar">
@@ -114,6 +116,7 @@ else
     private string _filter = "All";
     private string _query = "";
     private int _search;
+    private string _layout = GameLayout.Grid;
 
     // Systems the library has any game of.
     private List<SystemSummary> Held => _systems.Where(s => s.Owned + s.Partial + s.Bad > 0).ToList();
@@ -127,6 +130,7 @@ else
     protected override async Task OnParametersSetAsync()
     {
         _view = ViewParameter == "games" ? "games" : "systems";
+        _layout = await Layout.GetAsync();
         await LoadAsync();
         _loaded = true;
     }
@@ -149,7 +153,7 @@ else
         try
         {
             _systems = await Api.ListSystemsAsync();
-            _names = _systems.ToDictionary(s => s.Id, s => s.Name);
+            _names = _systems.ToDictionary(s => s.Id, Format.Short);
             _status = await Api.GetLibraryStatusAsync();
             if (_view == "games")
                 await LoadGamesAsync(Math.Max(_titles.Count, PageSize));

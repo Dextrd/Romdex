@@ -27,7 +27,6 @@ public sealed class DownloadPipeline(
     LibraryMatcher matcher,
     ConnectorPlugins connectors,
     AppSync appSync,
-    PluginCatalog catalog,
     TaskQueue tasks,
     IOptions<RomdexOptions> options,
     ILogger<DownloadPipeline> logger)
@@ -162,10 +161,10 @@ public sealed class DownloadPipeline(
         notes.Insert(0, $"Filed {Names(toFile.Select(f => f.Dump.Name))}");
         await SetAsync(item, DownloadState.Filed, Sentence(notes), ct);
 
-        // The connected app, if any, scans for it and gives its ID; a hash-lookup plugin, if any, finds its cover.
+        // The connected app, if any, scans for it and gives its ID; a metadata plugin, if any, finds its cover.
         if (await connectors.GetActiveAsync(ct) is not null)
             appSync.Add(filed);
-        await ArtLookupTask.QueueIfUsefulAsync(db, catalog, tasks, ct);
+        await ArtLookupTask.QueueIfUsefulAsync(db, tasks, ct);
     }
 
     /// <summary>

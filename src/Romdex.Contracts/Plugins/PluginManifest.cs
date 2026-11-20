@@ -3,14 +3,23 @@ using System.Text.Json.Serialization;
 
 namespace Romdex.Contracts.Plugins;
 
-/// <summary>The kinds of plugin.</summary>
+/// <summary>The kinds of plugin. Each does one job, and only that one.</summary>
 [JsonConverter(typeof(JsonStringEnumConverter<PluginType>))]
 public enum PluginType
 {
-    /// <summary>Catalogue data: which systems and dumps exist, from DATs, and titles and art by hash.</summary>
+    /// <summary>
+    /// The catalogue: which systems and dumps exist, from preservation DATs such as No-Intro's and Redump's. What these
+    /// list is what Romdex matches files against, so it decides what is owned, missing or bad.
+    /// </summary>
     Index,
 
-    /// <summary>Finds dumps of a game, or hands over ones that arrived, into staging. Runs out of process behind the HTTP contract.</summary>
+    /// <summary>
+    /// Titles and covers for dumps the catalogue already has, looked up by their hashes. They never add to or change
+    /// what exists: only how a game is named and shown.
+    /// </summary>
+    Metadata,
+
+    /// <summary>Brings dumps in: finds one of a game, or hands over ones that arrived, into staging. Runs out of process behind the HTTP contract.</summary>
     Retrieval,
 
     /// <summary>Tells an app that uses the library, such as RomM, about new games, and opens games there.</summary>
@@ -46,7 +55,7 @@ public sealed record PluginManifest
 
     /// <summary>
     /// Capability names from <see cref="Index.IndexCapabilities"/>, <see cref="Retrieval.RetrievalCapabilities"/> or
-    /// <see cref="Connectors.ConnectorCapabilities"/>.
+    /// <see cref="Connectors.ConnectorCapabilities"/>. Metadata plugins have none.
     /// The core and API only offer what is declared here.
     /// </summary>
     public IReadOnlyList<string> Capabilities { get; init; } = [];

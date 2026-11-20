@@ -6,7 +6,7 @@ using Romdex.Plugins.Redump;
 
 namespace Romdex.Core.Tests;
 
-/// <summary>Fetching Redump's DATs: zips from /datfile and /bios, kept only when newer, checked every few days.</summary>
+/// <summary>Fetching Redump's DATs: from /datfile and /bios, zipped or not, kept only when newer, checked every few days.</summary>
 public sealed class RedumpTests : IDisposable
 {
     private readonly string _folder = Path.Combine(Path.GetTempPath(), "romdex-tests", Guid.NewGuid().ToString("N"));
@@ -33,6 +33,61 @@ public sealed class RedumpTests : IDisposable
         _site.Requests.Clear();
         Assert.Empty(await redump.FetchAsync(default));
         Assert.Empty(_site.Requests);
+    }
+
+    [Fact]
+    public async Task A_DAT_that_comes_unzipped_is_kept_as_it_came()
+    {
+        // As Redump sends the PlayStation 2's BIOS DAT.
+        _site.Dats["/datfile/PS2"] = Zip("Sony - PlayStation 2", "2026-11-01 10-00-00");
+        _site.Dats["/bios/PS2"] = Encoding.UTF8.GetBytes(Dat("Sony - PlayStation 2 - BIOS Images", "2026-10-10 00-00-00"));
+        var redump = Create("PS2", bios: true);
+
+        Assert.Equal(["Sony - PlayStation 2", "Sony - PlayStation 2 - BIOS Images"], (await redump.FetchAsync(default)).Select(s => s.Name).Order());
+        Assert.Equal(2, (await redump.ListSystemsAsync(default)).Count);
+        Assert.Equal(HealthStatus.Healthy, (await redump.CheckHealthAsync(default)).Status);
+
+        // Zipped next time, it replaces the one kept, not sits beside it.
+        _site.Dats["/bios/PS2"] = Zip("Sony - PlayStation 2 - BIOS Images", "2026-11-11 00-00-00");
+        Assert.Single(await Create("PS2", days: 0, bios: true).FetchAsync(default));
+        Assert.Equal(["PS2-bios.zip", "PS2.zip"], Directory.GetFiles(_folder, "PS2*").Select(Path.GetFileName).Order());
+    }
+
+    [Fact]
+    public async Task Retools_clone_list_makes_one_title_of_a_game_under_other_names()
+    {
+        _site.Dats["/datfile/PS2"] = Zip("Sony - PlayStation 2", "2026-11-01 10-00-00", """
+            <game name="Crash Twinsanity (Europe, Australia) (En,Fr)"><rom name="a.iso" size="1" crc="00000001"/></game>
+            <game name="Crash Bandicoot 5 - Eeee Crash to Cortex no Yabou! (Japan)"><rom name="b.iso" size="1" crc="00000002"/></game>
+            <game name="Gadget Racers (Europe)"><rom name="c.iso" size="1" crc="00000003"/></game>
+            <game name="Penny Racers (USA)"><rom name="d.iso" size="1" crc="00000004"/></game>
+            <game name="Sonic Heroes (Europe)"><rom name="e.iso" size="1" crc="00000005"/></game>
+            """);
+        _site.Dats["/clonelists/Sony%20-%20PlayStation%202%20%28Redump%29.json"] = Encoding.UTF8.GetBytes("""
+            {
+              "description": { "name": "Sony - PlayStation 2 (Redump)", "lastUpdated": "2026-05-10 17:34:33" },
+              "variants": [
+                { "group": "Crash Twinsanity", "titles": [ { "searchTerm": "Crash Bandicoot 5 - Eeee Crash to Cortex no Yabou!" }, { "searchTerm": "Crash Twinsanity" } ] },
+                { "group": "Penny Racers", "titles": [ { "searchTerm": "Gadget Racers \\(Europe\\).*", "nameType": "regex" }, { "searchTerm": "Penny Racers" } ] },
+                { "group": "Metal Slug 2", "compilations": [ { "searchTerm": "Metal Slug Anthology" } ] }
+              ]
+            }
+            """);
+        var redump = new Redump(new HttpClient(_site), _folder, "https://redump.test", ["PS2"], bios: false, TimeSpan.FromDays(7), "https://redump.test/clonelists");
+
+        await redump.FetchAsync(default);
+        var system = Assert.Single(await redump.ListSystemsAsync(default));
+        Assert.Equal("2026-05-10 17:34:33", system.CloneList);
+        var dumps = (await redump.GetSystemAsync(system.Id, default))!.Dumps.ToDictionary(d => d.Name, d => d.CloneOf);
+        Assert.Equal("Crash Twinsanity (Europe, Australia) (En,Fr)", dumps["Crash Bandicoot 5 - Eeee Crash to Cortex no Yabou! (Japan)"]);
+        Assert.Equal("Penny Racers (USA)", dumps["Gadget Racers (Europe)"]);
+        Assert.Null(dumps["Crash Twinsanity (Europe, Australia) (En,Fr)"]);
+        Assert.Null(dumps["Sonic Heroes (Europe)"]);
+
+        // A list unchanged isn't written again; without one, nothing is grouped.
+        Assert.Empty(await new Redump(new HttpClient(_site), _folder, "https://redump.test", ["PS2"], false, TimeSpan.Zero, "https://redump.test/clonelists").FetchAsync(default));
+        File.Delete(Path.Combine(_folder, "PS2-clones.json"));
+        Assert.Null(Assert.Single(await redump.ListSystemsAsync(default)).CloneList);
     }
 
     [Fact]
@@ -77,18 +132,20 @@ public sealed class RedumpTests : IDisposable
         return (Redump)plugin;
     }
 
-    private static byte[] Zip(string system, string version)
+    private static byte[] Zip(string system, string version, string? games = null)
     {
         var memory = new MemoryStream();
         using (var zip = new ZipArchive(memory, ZipArchiveMode.Create, leaveOpen: true))
         using (var writer = new StreamWriter(zip.CreateEntry($"{system} - Datfile (1) ({version}).dat").Open()))
-            writer.Write($"""
-                <?xml version="1.0"?>
-                <datafile><header><name>{system}</name><description>{system}</description><version>{version}</version><homepage>redump.info</homepage></header>
-                <game name="Made Up (USA)"><category>Games</category><rom name="Made Up (USA).cue" size="1" crc="00000001"/></game></datafile>
-                """);
+            writer.Write(Dat(system, version, games));
         return memory.ToArray();
     }
+
+    private static string Dat(string system, string version, string? games = null) => $"""
+        <?xml version="1.0"?>
+        <datafile><header><name>{system}</name><description>{system}</description><version>{version}</version><homepage>redump.info</homepage></header>
+        {games ?? """<game name="Made Up (USA)"><category>Games</category><rom name="Made Up (USA).cue" size="1" crc="00000001"/></game>"""}</datafile>
+        """;
 
     private sealed class FakeRedump : HttpMessageHandler
     {

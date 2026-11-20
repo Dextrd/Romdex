@@ -3,25 +3,25 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Romdex.Contracts.Plugins;
 using Romdex.Contracts.Plugins.Index;
+using Romdex.Contracts.Plugins.Metadata;
 
 namespace Romdex.Plugins.Hasheous;
 
 /// <summary>Entry point for the Hasheous plugin.</summary>
 public sealed class HasheousFactory : IPluginFactory
 {
-    public const string PluginId = "romdex.index.hasheous";
+    public const string PluginId = "romdex.metadata.hasheous";
 
     public PluginManifest Manifest { get; } = new()
     {
         Id = PluginId,
         Name = "Hasheous",
         Version = "0.1.0",
-        Type = PluginType.Index,
-        ContractVersion = ContractVersions.Index.ToString(),
-        Description = "Looks up the games you have on Hasheous by their hashes, for titles and cover art. It needs no account, but sends Hasheous "
+        Type = PluginType.Metadata,
+        ContractVersion = ContractVersions.Metadata.ToString(),
+        Description = "Looks up games on Hasheous by their hashes, for titles, cover art, a description and where else they're known, such as IGDB and Wikipedia. It needs no account, but sends Hasheous "
                       + "the hashes of what's in your library.",
         Homepage = "https://hasheous.org",
-        Capabilities = [IndexCapabilities.HashLookup],
         Access = new PluginAccess { Network = ["hasheous.org"] },
         MaxRequestsPerSecond = 1,
         SettingsSchema = JsonDocument.Parse("""
@@ -47,10 +47,10 @@ public sealed class HasheousFactory : IPluginFactory
 }
 
 /// <summary>
-/// Hasheous, which maps the hashes in No-Intro's and Redump's DATs to games in IGDB and other databases. It lists no
-/// systems of its own: it only answers what a dump is, by hash. Lookups and its images need no key.
+/// Hasheous, which maps the hashes in No-Intro's and Redump's DATs to games in IGDB and other databases. It answers only
+/// what a dump is called and looks like, by hash. Lookups and its images need no key.
 /// </summary>
-public sealed class Hasheous(HttpClient http, string baseUrl) : IIndexPlugin, IHashLookup
+public sealed class Hasheous(HttpClient http, string baseUrl) : IMetadataPlugin
 {
     public async Task<HealthReport> CheckHealthAsync(CancellationToken cancellationToken)
     {
@@ -68,11 +68,7 @@ public sealed class Hasheous(HttpClient http, string baseUrl) : IIndexPlugin, IH
         }
     }
 
-    public Task<IReadOnlyList<IndexSystem>> ListSystemsAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<IndexSystem>>([]);
-
-    public Task<IndexSystemDetail?> GetSystemAsync(string systemId, CancellationToken cancellationToken) => Task.FromResult<IndexSystemDetail?>(null);
-
-    public async Task<HashLookupResult?> LookUpAsync(IndexDumpFile file, CancellationToken cancellationToken)
+    public async Task<DumpMetadata?> LookUpAsync(IndexDumpFile file, CancellationToken cancellationToken)
     {
         var hashes = new Dictionary<string, string>();
         if (file.Md5 is { } md5)
@@ -88,7 +84,7 @@ public sealed class Hasheous(HttpClient http, string baseUrl) : IIndexPlugin, IH
         if (response.StatusCode == HttpStatusCode.NotFound)
             return null;
         if (response.StatusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.ServiceUnavailable)
-            throw new IndexUnavailableException($"Hasheous is busy ({(int)response.StatusCode}).");
+            throw new MetadataUnavailableException($"Hasheous is busy ({(int)response.StatusCode}).");
         response.EnsureSuccessStatusCode();
         var found = await response.Content.ReadFromJsonAsync<Lookup>(Json, cancellationToken);
         if (found is null)
@@ -98,18 +94,46 @@ public sealed class Hasheous(HttpClient http, string baseUrl) : IIndexPlugin, IH
         var cover = found.Attributes?.FirstOrDefault(a => a.AttributeType == "ImageId" && a.AttributeName == "Logo")?.Value is { ValueKind: JsonValueKind.String } image
             ? $"{baseUrl}/api/v1/images/{Uri.EscapeDataString(image.GetString()!)}"
             : null;
-        var ids = (found.Metadata ?? [])
-            .Where(m => m.Status == "Mapped" && !string.IsNullOrEmpty(m.Id) && m.Source is not null)
-            .GroupBy(m => m.Source!.ToLowerInvariant())
-            .ToDictionary(g => g.Key, g => g.First().Id!);
-        return new HashLookupResult(found.Name, cover, ids);
+        var mapped = (found.Metadata ?? []).Where(m => m.Status == "Mapped" && !string.IsNullOrEmpty(m.Id) && m.Source is not null).ToList();
+        var ids = mapped.GroupBy(m => m.Source!.ToLowerInvariant()).ToDictionary(g => g.Key, g => g.First().Id!);
+        var links = mapped.Where(m => Uri.TryCreate(m.Link, UriKind.Absolute, out var link) && link.Scheme == Uri.UriSchemeHttps)
+            .GroupBy(m => SourceName(m.Source!)).ToDictionary(g => g.Key, g => g.First().Link!);
+        // Hasheous' own description, which it has written by AI, in Markdown: kept as plain text.
+        var description = found.Attributes?.FirstOrDefault(a => a.AttributeName == "AIDescription")?.Value is { ValueKind: JsonValueKind.String } text
+            ? PlainText(text.GetString()!)
+            : null;
+        return new DumpMetadata(found.Name, cover, ids, links, description);
     }
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
+    // Sites as people write them, where Hasheous runs the words together.
+    private static string SourceName(string source) => source switch
+    {
+        "TheGamesDb" => "TheGamesDB",
+        "GiantBomb" => "Giant Bomb",
+        "SteamGridDb" => "SteamGridDB",
+        "RetroAchievements" => "RetroAchievements",
+        "ScreenScraper" => "ScreenScraper",
+        "MobyGames" => "MobyGames",
+        "EpicGameStore" => "Epic Games Store",
+        _ => source,
+    };
+
+    // Markdown's headings, emphasis and links, as text.
+    private static string? PlainText(string markdown)
+    {
+        var lines = markdown.Replace("\r", "").Split('\n')
+            .Select(l => System.Text.RegularExpressions.Regex.Replace(l, @"^\s{0,3}(#+|[-*]|\d+\.)\s+", "").Trim())
+            .Select(l => System.Text.RegularExpressions.Regex.Replace(l, @"\[([^\]]*)\]\([^)]*\)", "$1"))
+            .Select(l => l.Replace("**", "").Replace("__", ""));
+        var text = System.Text.RegularExpressions.Regex.Replace(string.Join("\n", lines), @"\n{3,}", "\n\n").Trim();
+        return text.Length > 0 ? text : null;
+    }
+
     private sealed record Lookup(string? Name, List<Metadata>? Metadata, List<Attribute>? Attributes);
 
-    private sealed record Metadata(string? Id, string? Status, string? Source);
+    private sealed record Metadata(string? Id, string? Status, string? Source, string? Link);
 
     private sealed record Attribute(string? AttributeType, string? AttributeName, JsonElement Value);
 }

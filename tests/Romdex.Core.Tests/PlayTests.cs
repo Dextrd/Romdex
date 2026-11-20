@@ -1,11 +1,13 @@
 using System.IO.Compression;
 using System.Net;
+using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Romdex.Client;
+using Romdex.Contracts.Plugins;
 using Romdex.Core.Api;
 using Romdex.Core.Apps;
 using Romdex.Core.Catalogue;
@@ -49,7 +51,7 @@ public sealed class PlayTests : IDisposable
                     o.RateLimit = false;
                 });
                 services.AddHttpClient(PlayEndpoints.EmulatorClient).ConfigurePrimaryHttpMessageHandler(() => _services);
-                services.AddHttpClient(ArtLookupTask.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => _services);
+                services.AddHttpClient(CoverCache.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => _services);
             }));
         _api = new RomdexClient(_factory.CreateSignedInClient());
     }
@@ -133,7 +135,7 @@ public sealed class PlayTests : IDisposable
     }
 
     [Fact]
-    public async Task Covers_come_from_hash_lookups_and_stay()
+    public async Task Covers_come_from_metadata_plugins_and_stay()
     {
         var pond = _dats.Dump(GameBoy, "Pixel Pond (USA)", [".gb"]);
         _dats.WriteDats();
@@ -141,17 +143,204 @@ public sealed class PlayTests : IDisposable
         await SetUpAsync();
         _services.Hasheous[Md5(pond[0].Data)] = "Pixel Pond Deluxe";
 
-        await _api.AddPluginAsync(new AddPlugin("romdex.index.hasheous"));
-        var title = await WaitAsync(async () => (await _api.ListAllTitlesAsync(have: true)).Items.Single(), t => t.Cover is not null);
+        var hasheous = await _api.AddPluginAsync(new AddPlugin("romdex.metadata.hasheous"));
+        Assert.Equal(PluginType.Metadata, hasheous.Type);
+        var title = (await _api.ListAllTitlesAsync(have: true)).Items.Single();
 
-        var detail = (await _api.GetTitleAsync(title.Id))!;
-        Assert.Equal("Pixel Pond Deluxe", detail.KnownAs);
-        Assert.Equal(FakeServices.Png, await _factory.CreateSignedInClient().GetByteArrayAsync(detail.Cover));
+        Assert.Equal(FakeServices.Png, await CoverAsync(title.Cover!));
+        Assert.Equal("Pixel Pond Deluxe", (await _api.GetTitleAsync(title.Id))!.KnownAs);
         Assert.Equal(1, _services.Lookups);
 
         // Looked up once: another scan doesn't ask again.
         await RunAsync(await _api.ScanLibraryAsync());
         Assert.Equal(1, _services.Lookups);
+    }
+
+    [Fact]
+    public async Task Games_the_library_hasnt_get_covers_the_first_time_theyre_shown()
+    {
+        var kite = _dats.Dump(GameBoy, "Paper Kite (USA)", [".gb"]);
+        _dats.Dump(GameBoy, "Night Owl (USA)", [".gb"]);
+        _dats.WriteDats();
+        await SetUpAsync();
+        var kiteCover = Assert.Single((await _api.SearchCatalogueAsync("kite")).Items).Cover!;
+        var owlCover = Assert.Single((await _api.SearchCatalogueAsync("owl")).Items).Cover!;
+
+        // Every game has a cover's place, but with no plugin for covers there's none, at once.
+        var client = _factory.CreateSignedInClient();
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync(kiteCover)).StatusCode);
+        Assert.Equal(0, _services.Lookups);
+
+        _services.Hasheous[Md5(kite[0].Data)] = "Paper Kite";
+        await _api.AddPluginAsync(new AddPlugin("romdex.metadata.hasheous"));
+        Assert.Equal(FakeServices.Png, await CoverAsync(kiteCover));
+        Assert.Equal(1, _services.Lookups);
+
+        // One no source knows is looked up once, which the page hears about with the rest it's waiting on.
+        var status = await WaitAsync(async () => await (await client.PostAsJsonAsync("api/v1/titles/covers/status", new[] { "/" + owlCover, "/" + kiteCover }))
+            .Content.ReadFromJsonAsync<Dictionary<string, string>>(), s => s!["/" + owlCover] != "pending");
+        Assert.Equal("none", status!["/" + owlCover]);
+        Assert.Equal("ready", status["/" + kiteCover]);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync(owlCover)).StatusCode);
+        Assert.Equal(2, _services.Lookups);
+    }
+
+    [Fact]
+    public async Task A_games_page_has_what_wikipedia_knows_of_the_game_hasheous_found()
+    {
+        var pond = _dats.Dump(GameBoy, "Pixel Pond (USA)", [".gb"]);
+        // More of its series: one on another system, and one on two.
+        _dats.Dump(GameBoy, "Pixel Pond 2 (USA)", [".gb"]);
+        _dats.Dump(PlayStation, "Pixel Pond 2 (USA)", [".cue", ".bin"]);
+        _dats.Dump(PlayStation, "Lily Leap (USA)", [".cue", ".bin"]);
+        _dats.Dump(GameBoy, "Frog Racer (USA)", [".gb"]);
+        _dats.WriteDats();
+        _dats.Put("gb/Pixel Pond (USA).gb", pond[0].Data);
+        await SetUpAsync();
+        var title = (await _api.ListAllTitlesAsync(have: true)).Items.Single();
+
+        // Without a plugin for it there's nothing to say.
+        var info = (await _api.GetGameInfoAsync(title.Id))!;
+        Assert.Null(info.Summary);
+        Assert.Empty(info.Links);
+
+        _services.Hasheous[Md5(pond[0].Data)] = "Pixel Pond";
+        await _api.AddPluginAsync(new AddPlugin("romdex.metadata.hasheous"));
+        // Hasheous alone: its description, and where else the game is known.
+        info = (await _api.GetGameInfoAsync(title.Id))!;
+        Assert.Equal("Pixel Pond\n\nA pond of pixels.", info.Summary);
+        Assert.StartsWith("Hasheous", info.SummarySource);
+        Assert.Equal(["IGDB", "Wikipedia"], info.Links.Select(l => l.Site));
+
+        // With Wikipedia, what it is: shown as it's found, until there's no more to come.
+        await _api.AddPluginAsync(new AddPlugin("romdex.metadata.wikipedia"));
+        info = await WaitAsync(async () => (await _api.GetGameInfoSoFarAsync(title.Id))!, i => !i.Loading);
+        Assert.Equal("Pixel Pond is a 1998 puzzle game.\n\nIt was well liked.", info.Summary);
+        Assert.Equal(("Wikipedia", "https://en.wikipedia.org/wiki/Pixel_Pond"), (info.SummarySource, info.SummaryUrl));
+        Assert.Equal([new ReleaseDate("Japan", "1998", null), new ReleaseDate("United States", "1998-06-01", null)], info.Released);
+        Assert.Equal(["Lilypad Soft"], info.Developers);
+        // A statement marked wrong is left out.
+        Assert.Empty(info.Publishers);
+        Assert.Equal(["puzzle video game"], info.Genres);
+        Assert.Equal(["Rana Croak"], Assert.Single(info.Credits, c => c.Role == "Composer").Names);
+        Assert.Equal([("Metacritic", "81/100"), ("Famitsu", "32/40"), ("IGN", "8.5/10 · 7/10"), ("Frog Monthly", "4/5")],
+            info.Scores.Select(s => (s.Reviewer, s.Score)));
+        // Ratings by their boards' marks; one the page has no mark for is left out.
+        Assert.Equal([new AgeRating("ESRB", "e", "Everyone"), new AgeRating("PEGI", "7", "PEGI 7")], info.Ratings);
+        Assert.Empty(info.Images);
+        // The rest of its series that the catalogue has, earliest first, each once on every system it's on; then the
+        // series that one's part of, without those already listed.
+        Assert.Equal([("Pond Tales", ["Lily Leap", "Pixel Pond 2"]), ("Pond Universe", ["Frog Racer"])],
+            info.InSeries.Select(s => (s.Name, s.Games.Select(g => g.Name).ToArray())).ToArray());
+        Assert.Equal(2, info.InSeries[0].Games[1].Titles.Count);
+
+        // Kept: the page shown again doesn't ask Wikipedia again.
+        var asked = _services.WikipediaLookups;
+        await _api.GetGameInfoAsync(title.Id);
+        Assert.Equal(asked, _services.WikipediaLookups);
+    }
+
+    [Fact]
+    public async Task A_games_page_has_libretros_pictures_of_the_dump_the_library_has()
+    {
+        var pond = _dats.Dump(GameBoy, "Pixel Pond (USA)", [".gb"]);
+        _dats.Dump(GameBoy, "Pixel Pond (Europe)", [".gb"], cloneOf: "Pixel Pond (USA)");
+        _dats.WriteDats();
+        _dats.Put("gb/Pixel Pond (USA).gb", pond[0].Data);
+        await SetUpAsync();
+        await _api.AddPluginAsync(new AddPlugin("romdex.metadata.libretro-thumbnails"));
+        var title = (await _api.ListAllTitlesAsync(have: true)).Items.Single();
+
+        // libretro has the title screen of both, and play of only the European one.
+        var info = (await _api.GetGameInfoAsync(title.Id))!;
+        Assert.Equal(["title", "screenshot"], info.Images.Select(i => i.Kind));
+        Assert.All(info.Images, i => Assert.Equal("libretro thumbnails", i.Source));
+        using var client = _factory.CreateSignedInClient();
+        foreach (var image in info.Images)
+            Assert.Equal(FakeServices.Png, await client.GetByteArrayAsync(image.Url));
+        Assert.Equal(["/Nintendo - Game Boy/Named_Titles/Pixel Pond (USA).png", "/Nintendo - Game Boy/Named_Snaps/Pixel Pond (Europe).png"], _services.Pictures);
+
+        // Kept, and the lists of what libretro has read once.
+        Assert.Equal(FakeServices.Png, await client.GetByteArrayAsync(info.Images[0].Url));
+        Assert.Equal(2, _services.Pictures.Count);
+        Assert.Equal(2, _services.LibretroLists);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"api/v1/titles/{title.Id}/images/2")).StatusCode);
+    }
+
+    [Fact]
+    public async Task TheGamesDB_finds_games_by_hash_with_your_key()
+    {
+        var pond = _dats.Dump(GameBoy, "Pixel Pond (USA)", [".gb"]);
+        _dats.WriteDats();
+        _dats.Put("gb/Pixel Pond (USA).gb", pond[0].Data);
+        await SetUpAsync();
+        _services.TheGamesDb = Md5(pond[0].Data);
+        await _api.AddPluginAsync(new AddPlugin("romdex.metadata.thegamesdb", Settings: JsonSerializer.SerializeToElement(new { apiKey = "tgdb-test" })));
+        var title = (await _api.ListAllTitlesAsync(have: true)).Items.Single();
+
+        // Its cover and name, by the dump's hash, once it's been looked up: a cover asked for just as the lookup
+        // finishes can miss it.
+        await WaitAsync(async () => (await _api.GetTitleAsync(title.Id))!.KnownAs, k => k is not null);
+        Assert.Equal(FakeServices.Png, await CoverAsync(title.Cover!));
+        Assert.Equal("Pixel Pond Deluxe", (await _api.GetTitleAsync(title.Id))!.KnownAs);
+
+        // What it is, with the names of what it gives by ID, and its title screen before its screenshots.
+        var info = (await _api.GetGameInfoAsync(title.Id))!;
+        Assert.Equal(("A pond of pixels.", "TheGamesDB", "https://thegamesdb.net/game.php?id=53"), (info.Summary, info.SummarySource, info.SummaryUrl));
+        Assert.Equal([new ReleaseDate(null, "1998-06-01", null)], info.Released);
+        Assert.Equal(["Lilypad Soft"], info.Developers);
+        Assert.Equal(["Frog Press"], info.Publishers);
+        Assert.Equal(["Puzzle"], info.Genres);
+        Assert.Equal(["Up to 2 players", "Co-op"], info.Modes);
+        Assert.Equal([new AgeRating("ESRB", "e10", "Everyone 10+")], info.Ratings);
+        Assert.Equal(["title", "screenshot", "screenshot"], info.Images.Select(i => i.Kind));
+        Assert.All(info.Images, i => Assert.Equal("TheGamesDB", i.Source));
+        using var client = _factory.CreateSignedInClient();
+        foreach (var image in info.Images)
+            Assert.Equal(FakeServices.Png, await client.GetByteArrayAsync(image.Url));
+        Assert.Equal(["/images/original/boxart/front/53-1.jpg", "/images/original/titlescreen/53-1.jpg", "/images/original/screenshots/53-1.jpg",
+            "/images/original/screenshots/53-2.jpg"], _services.Pictures);
+
+        // Every call carries the key.
+        Assert.NotEmpty(_services.TheGamesDbKeys);
+        Assert.All(_services.TheGamesDbKeys, k => Assert.Equal("tgdb-test", k));
+    }
+
+    [Fact]
+    public async Task ScreenScraper_finds_games_by_hash_with_a_developer_id_and_your_account()
+    {
+        var pond = _dats.Dump(GameBoy, "Pixel Pond (USA)", [".gb"]);
+        _dats.WriteDats();
+        _dats.Put("gb/Pixel Pond (USA).gb", pond[0].Data);
+        await SetUpAsync();
+        _services.ScreenScraper = Md5(pond[0].Data);
+        await _api.AddPluginAsync(new AddPlugin("romdex.metadata.screenscraper",
+            Settings: JsonSerializer.SerializeToElement(new { devId = "dev", devPassword = "devpass", username = "frog", password = "ribbit" })));
+        var title = (await _api.ListAllTitlesAsync(have: true)).Items.Single();
+
+        // Its cover and its name as ScreenScraper has it, by the dump's hashes.
+        Assert.Equal(FakeServices.Png, await CoverAsync(title.Cover!));
+        Assert.Equal("Pixel Pond Deluxe", (await _api.GetTitleAsync(title.Id))!.KnownAs);
+
+        // What it is, in English, with the ratings the page has marks for.
+        var info = (await _api.GetGameInfoAsync(title.Id))!;
+        Assert.Equal(("A pond of pixels.", "ScreenScraper"), (info.Summary, info.SummarySource));
+        Assert.Equal([new ReleaseDate("Japan", "1998-03-01", null), new ReleaseDate("North America", "1998-06-01", null)], info.Released);
+        Assert.Equal(["Lilypad Soft"], info.Developers);
+        Assert.Equal(["Frog Press"], info.Publishers);
+        Assert.Equal(["Puzzle"], info.Genres);
+        Assert.Equal(["1-2 players"], info.Modes);
+        Assert.Equal([new AgeRating("PEGI", "3", "PEGI 3"), new AgeRating("ESRB", "e", "Everyone")], info.Ratings);
+        // Of the region games are most often known by.
+        Assert.Equal(["title", "screenshot"], info.Images.Select(i => i.Kind));
+        using var client = _factory.CreateSignedInClient();
+        foreach (var image in info.Images)
+            Assert.Equal(FakeServices.Png, await client.GetByteArrayAsync(image.Url));
+        Assert.Equal(["box-2D us", "sstitle wor", "ss us"], _services.Pictures);
+
+        // Every call says who's asking.
+        Assert.NotEmpty(_services.ScreenScraperLogins);
+        Assert.All(_services.ScreenScraperLogins, l => Assert.Equal("dev devpass Romdex frog ribbit json", l));
     }
 
     [Fact]
@@ -201,6 +390,15 @@ public sealed class PlayTests : IDisposable
         return text[from..text.IndexOf(end, from, StringComparison.Ordinal)];
     }
 
+    // A cover, once it's been looked up: until then it's a 503.
+    private async Task<byte[]> CoverAsync(string cover)
+    {
+        var client = _factory.CreateSignedInClient();
+        var response = await WaitAsync(() => client.GetAsync(cover), r => r.StatusCode != HttpStatusCode.ServiceUnavailable);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return await response.Content.ReadAsByteArrayAsync();
+    }
+
     private static string Md5(byte[] data) => Convert.ToHexStringLower(System.Security.Cryptography.MD5.HashData(data));
 
     private static async Task<T> WaitAsync<T>(Func<Task<T>> get, Func<T, bool> done)
@@ -236,6 +434,27 @@ public sealed class PlayTests : IDisposable
         public Dictionary<string, string> Hasheous { get; } = [];
 
         public int Lookups { get; private set; }
+        public int WikipediaLookups { get; private set; }
+        public int LibretroLists { get; private set; }
+        public List<string> Pictures { get; } = [];
+
+        /// <summary>The MD5 of the one game TheGamesDB knows, and ScreenScraper.</summary>
+        public string? TheGamesDb { get; set; }
+        public string? ScreenScraper { get; set; }
+
+        public List<string> TheGamesDbKeys { get; } = [];
+        public List<string> ScreenScraperLogins { get; } = [];
+
+        private const string WikiText = """
+            '''Pixel Pond''' is a game.
+            {{Video game reviews
+            | MC = 81/100<ref name="mc">{{cite web |url=https://example.com |title=Pixel Pond}}</ref>
+            | Fam = 32/40
+            | IGN = 8.5/10<br />7/10
+            | rev1 = Frog Monthly | rev1Score = {{Rating|4|5}} 4/5
+            | width = 30em
+            }}
+            """;
         public List<string> Scanned { get; } = [];
         public string? RommAuthorization { get; private set; }
 
@@ -260,14 +479,148 @@ public sealed class PlayTests : IDisposable
                         ? Json(JsonSerializer.Serialize(new
                         {
                             name,
-                            metadata = new[] { new { id = "42", status = "Mapped", source = "IGDB" } },
-                            attributes = new object[] { new { attributeType = "ImageId", attributeName = "Logo", value = "ABC123" } },
+                            metadata = new[]
+                            {
+                                new { id = "42", status = "Mapped", source = "IGDB", link = "https://www.igdb.com/games/pixel-pond" },
+                                new { id = "https://en.wikipedia.org/wiki/Pixel_Pond", status = "Mapped", source = "Wikipedia", link = "https://en.wikipedia.org/wiki/Pixel_Pond" },
+                                new { id = "", status = "NotMapped", source = "Steam", link = "" },
+                            },
+                            attributes = new object[]
+                            {
+                                new { attributeType = "ImageId", attributeName = "Logo", value = "ABC123" },
+                                new { attributeType = "LongString", attributeName = "AIDescription", value = "## Pixel Pond\n\nA **pond** of pixels." },
+                            },
                         }))
                         : new HttpResponseMessage(HttpStatusCode.NotFound);
                 }
                 case "hasheous.org" when path == "/api/v1/images/ABC123":
                     // Hasheous says JPEG for what's a PNG.
                     return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(Png) { Headers = { ContentType = new("image/jpeg") } } };
+                case "en.wikipedia.org" when path == "/w/api.php" && url.Query.Contains("titles=Pixel%20Pond"):
+                    WikipediaLookups++;
+                    return Json(JsonSerializer.Serialize(new
+                    {
+                        query = new
+                        {
+                            pages = new[]
+                            {
+                                new
+                                {
+                                    title = "Pixel Pond",
+                                    pageprops = new { wikibase_item = "Q1" },
+                                    extract = "Pixel Pond is a 1998 puzzle game.\nIt was well liked.",
+                                    revisions = new[] { new { slots = new { main = new { content = WikiText } } } },
+                                },
+                            },
+                        },
+                    }));
+                case "www.wikidata.org" when path == "/wiki/Special:EntityData/Q1.json":
+                    return Json("""
+                        {"entities":{"Q1":{"claims":{
+                          "P577":[{"rank":"normal","mainsnak":{"datavalue":{"value":{"time":"+1998-06-01T00:00:00Z","precision":11}}},
+                                   "qualifiers":{"P291":[{"datavalue":{"value":{"id":"Q30"}}}]}},
+                                  {"rank":"normal","mainsnak":{"datavalue":{"value":{"time":"+1998-00-00T00:00:00Z","precision":9}}},
+                                   "qualifiers":{"P291":[{"datavalue":{"value":{"id":"Q17"}}}]}}],
+                          "P178":[{"rank":"normal","mainsnak":{"datavalue":{"value":{"id":"Q2"}}}}],
+                          "P123":[{"rank":"deprecated","mainsnak":{"datavalue":{"value":{"id":"Q3"}}}}],
+                          "P136":[{"rank":"normal","mainsnak":{"datavalue":{"value":{"id":"Q4"}}}}],
+                          "P86":[{"rank":"normal","mainsnak":{"datavalue":{"value":{"id":"Q5"}}}}],
+                          "P179":[{"rank":"normal","mainsnak":{"datavalue":{"value":{"id":"Q6"}}}}],
+                          "P852":[{"rank":"normal","mainsnak":{"datavalue":{"value":{"id":"Q14864328"}}}}],
+                          "P908":[{"rank":"normal","mainsnak":{"datavalue":{"value":{"id":"Q14915514"}}}}],
+                          "P914":[{"rank":"normal","mainsnak":{"datavalue":{"value":{"id":"Q102129161"}}}}]
+                        }}}}
+                        """);
+                case "www.wikidata.org" when path == "/w/api.php":
+                    return Json("""
+                        {"entities":{"Q30":{"labels":{"en":{"value":"United States"}}},"Q17":{"labels":{"en":{"value":"Japan"}}},
+                          "Q2":{"labels":{"en":{"value":"Lilypad Soft"}}},"Q4":{"labels":{"en":{"value":"puzzle video game"}}},
+                          "Q5":{"labels":{"en":{"value":"Rana Croak"}}},"Q6":{"labels":{"en":{"value":"Pond Tales"}}}}}
+                        """);
+                case "query.wikidata.org" when path == "/sparql" && Uri.UnescapeDataString(url.Query).Contains("?parent"):
+                    return Json("""{"results":{"bindings":[{"parent":{"value":"http://www.wikidata.org/entity/Q7"},"parentLabel":{"value":"Pond Universe"}}]}}""");
+                case "query.wikidata.org" when path == "/sparql" && Uri.UnescapeDataString(url.Query).Contains("* wd:Q7 "):
+                    return Json("""
+                        {"results":{"bindings":[{"gameLabel":{"value":"Pixel Pond 2"}},{"gameLabel":{"value":"Frog Racer"}},{"gameLabel":{"value":"Pixel Pond"}}]}}
+                        """);
+                case "query.wikidata.org" when path == "/sparql" && Uri.UnescapeDataString(url.Query).Contains("* wd:Q6 "):
+                    // The series' games, earliest first: the game itself, one the catalogue hasn't, and one unnamed.
+                    return Json("""
+                        {"results":{"bindings":[
+                          {"gameLabel":{"value":"Pixel Pond"}},{"gameLabel":{"value":"Lily Leap"}},{"gameLabel":{"value":"Q99"}},
+                          {"gameLabel":{"value":"Pond Tales Online"}},{"gameLabel":{"value":"Pixel Pond 2"}}]}}
+                        """);
+                case "thumbnails.libretro.com" when path.EndsWith('/'):
+                    LibretroLists++;
+                    return path switch
+                    {
+                        "/Nintendo%20-%20Game%20Boy/Named_Titles/" => Html("""<a href="Pixel%20Pond%20(Europe).png">x</a> <a href="Pixel%20Pond%20(USA).png">x</a>"""),
+                        "/Nintendo%20-%20Game%20Boy/Named_Snaps/" => Html("""<a href="../">..</a> <a href="Pixel%20Pond%20(Europe).png">x</a>"""),
+                        _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+                    };
+                case "thumbnails.libretro.com":
+                    Pictures.Add(Uri.UnescapeDataString(path));
+                    return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(Png) { Headers = { ContentType = new("image/png") } } };
+                case "api.thegamesdb.net":
+                {
+                    var query = System.Web.HttpUtility.ParseQueryString(url.Query);
+                    // Its health is checked while it looks up.
+                    lock (TheGamesDbKeys)
+                        TheGamesDbKeys.Add(query["apikey"] ?? "");
+                    const string images = "https://cdn.thegamesdb.net/images/original/";
+                    return path switch
+                    {
+                        "/v1/Games/ByGameHash" when query["hash"] == TheGamesDb && query["filter[type]"] == "md5" => Json("""
+                            {"code":200,"data":{"count":1,"games":[{"id":53,"game_title":"Pixel Pond Deluxe","platform":4}]},
+                             "include":{"boxart":{"base_url":{"original":"IMAGES"},
+                               "data":{"53":[{"side":"back","filename":"boxart/back/53-1.jpg"},{"side":"front","filename":"boxart/front/53-1.jpg"}]}}}}
+                            """.Replace("IMAGES", images)),
+                        "/v1/Games/ByGameHash" => Json("""{"code":200,"data":{"count":0,"games":[]}}"""),
+                        "/v1/Games/ByGameID" when query["id"] == "53" => Json("""
+                            {"code":200,"data":{"count":1,"games":[{"id":53,"game_title":"Pixel Pond Deluxe","release_date":"1998-06-01","players":2,
+                              "coop":"Yes","rating":"E10+ - Everyone 10+","overview":"A pond of pixels.","developers":[7],"publishers":[8],"genres":[5]}]}}
+                            """),
+                        "/v1/Developers/ByDeveloperID" => Json("""{"data":{"developers":{"7":{"id":7,"name":"Lilypad Soft"}}}}"""),
+                        "/v1/Publishers/ByPublisherID" => Json("""{"data":{"publishers":{"8":{"id":8,"name":"Frog Press"}}}}"""),
+                        "/v1/Genres" => Json("""{"data":{"genres":{"1":{"id":1,"name":"Action"},"5":{"id":5,"name":"Puzzle"}}}}"""),
+                        "/v1/Games/Images" when query["games_id"] == "53" => Json("""
+                            {"code":200,"data":{"count":3,"base_url":{"original":"IMAGES"},"images":{"53":[
+                              {"type":"screenshot","filename":"screenshots/53-1.jpg"},{"type":"titlescreen","filename":"titlescreen/53-1.jpg"},
+                              {"type":"screenshot","filename":"screenshots/53-2.jpg"}]}}}
+                            """.Replace("IMAGES", images)),
+                        _ => new HttpResponseMessage(HttpStatusCode.NotFound),
+                    };
+                }
+                case "cdn.thegamesdb.net":
+                    Pictures.Add(path);
+                    return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(Png) { Headers = { ContentType = new("image/jpeg") } } };
+                case "api.screenscraper.fr" when path == "/api2/jeuInfos.php":
+                {
+                    var query = System.Web.HttpUtility.ParseQueryString(url.Query);
+                    lock (ScreenScraperLogins)
+                        ScreenScraperLogins.Add(string.Join(' ', new[] { "devid", "devpassword", "softname", "ssid", "sspassword", "output" }.Select(k => query[k])));
+                    if (query["gameid"] != "3" && (query["md5"] != ScreenScraper || query["romnom"] != "Pixel Pond (USA).gb"))
+                        return new HttpResponseMessage(HttpStatusCode.NotFound);
+                    string Media(string type, string region) =>
+                        """{"type":"TYPE","region":"REGION","url":"https://neoclone.screenscraper.fr/api2/mediaJeu.php?devid=dev&jeuid=3&media=TYPE(REGION)","format":"png"}"""
+                            .Replace("TYPE", type).Replace("REGION", region);
+                    return Json("""
+                        {"header":{"success":"true"},"response":{"jeu":{"id":"3",
+                          "noms":[{"region":"jp","text":"Pikuseru Pondo"},{"region":"ss","text":"Pixel Pond Deluxe"}],
+                          "synopsis":[{"langue":"fr","text":"Un étang de pixels."},{"langue":"en","text":"A pond of pixels."}],
+                          "editeur":{"id":"1","text":"Frog Press"},"developpeur":{"id":"2","text":"Lilypad Soft"},"joueurs":{"text":"1-2"},
+                          "dates":[{"region":"us","text":"1998-06-01"},{"region":"jp","text":"1998-03-01"}],
+                          "genres":[{"id":"1","noms":[{"langue":"fr","text":"Réflexion"},{"langue":"en","text":"Puzzle"}]}],
+                          "classifications":[{"type":"PEGI","text":"3"},{"type":"ESRB","text":"E"},{"type":"SS","text":"7"}],
+                          "medias":[MEDIAS]}}}
+                        """.Replace("MEDIAS", string.Join(',', new[] { ("box-2D", "eu"), ("box-2D", "us"), ("sstitle", "wor"), ("ss", "eu"), ("ss", "us") }.Select(m => Media(m.Item1, m.Item2)))));
+                }
+                case "neoclone.screenscraper.fr":
+                {
+                    var media = System.Web.HttpUtility.ParseQueryString(url.Query)["media"]!;
+                    Pictures.Add(media.Replace("(", " ").TrimEnd(')'));
+                    return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(Png) { Headers = { ContentType = new("image/png") } } };
+                }
                 case "romm":
                     RommAuthorization = request.Headers.Authorization?.ToString();
                     if (path == "/api/tasks/scan")
@@ -286,6 +639,8 @@ public sealed class PlayTests : IDisposable
             }
             return new HttpResponseMessage(HttpStatusCode.NotFound);
         }
+
+        private static HttpResponseMessage Html(string html) => new(HttpStatusCode.OK) { Content = new StringContent(html, Encoding.UTF8, "text/html") };
 
         private static HttpResponseMessage Json(string json, HttpStatusCode status = HttpStatusCode.OK) =>
             new(status) { Content = new StringContent(json, Encoding.UTF8, "application/json") };

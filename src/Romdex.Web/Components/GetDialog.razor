@@ -1,7 +1,16 @@
 @inject RomdexClient Api
 
-@* Finds a title through the retrievers that search, and has one of them fetch what it offered. *@
+@*
+    Finds a title through the retrievers that search, and has one of them fetch what it offered. A game on more than one
+    system is found for one at a time, picked at the top.
+*@
 <Dialog Title="@($"Get {Name}")" OnClose="OnClose" Class="get-dialog">
+    @if (Versions is { Count: > 1 } && _fetched is null)
+    {
+        <div class="toolbar">
+            <Segmented T="Guid" Value="_titleId" Options="@(Versions.Select(v => (v.TitleId, v.System, (string?)null)).ToList())" OnChange="PickAsync" Label="System" />
+        </div>
+    }
     @if (_result is null)
     {
         <Loading />
@@ -71,21 +80,46 @@
 
     [Parameter] public EventCallback OnClose { get; set; }
 
+    /// <summary>The game's titles on each system it's on, by short name, to pick which to get; <see cref="TitleId"/> is picked first.</summary>
+    [Parameter] public IReadOnlyList<(Guid TitleId, string System)>? Versions { get; set; }
+
+    private Guid _titleId;
     private DownloadSearchResult? _result;
     private DownloadInfo? _fetched;
     private bool _fetching;
     private string? _error;
 
-    protected override async Task OnInitializedAsync()
+    protected override Task OnInitializedAsync()
     {
+        _titleId = TitleId;
+        return SearchAsync();
+    }
+
+    private Task PickAsync(Guid titleId)
+    {
+        if (titleId == _titleId)
+            return Task.CompletedTask;
+        _titleId = titleId;
+        _result = null;
+        _error = null;
+        return SearchAsync();
+    }
+
+    private async Task SearchAsync()
+    {
+        var titleId = _titleId;
+        DownloadSearchResult result;
         try
         {
-            _result = await Api.SearchDownloadsAsync(TitleId, DumpId);
+            result = await Api.SearchDownloadsAsync(titleId, titleId == TitleId ? DumpId : null);
         }
         catch (Exception e) when (e is RomdexApiException or HttpRequestException)
         {
-            _result = new DownloadSearchResult([], [$"Couldn't search: {e.Message}"]);
+            result = new DownloadSearchResult([], [$"Couldn't search: {e.Message}"]);
         }
+        // Another system may have been picked while this one was searched for.
+        if (titleId == _titleId)
+            _result = result;
     }
 
     private async Task FetchAsync(DownloadOffer offer)
@@ -94,7 +128,7 @@
         _error = null;
         try
         {
-            _fetched = await Api.StartDownloadAsync(new StartDownload(TitleId, offer.PluginId, offer.Candidate, DumpId));
+            _fetched = await Api.StartDownloadAsync(new StartDownload(_titleId, offer.PluginId, offer.Candidate, _titleId == TitleId ? DumpId : null));
         }
         catch (Exception e) when (e is RomdexApiException or HttpRequestException)
         {

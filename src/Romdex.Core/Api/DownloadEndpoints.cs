@@ -160,7 +160,7 @@ public static class DownloadEndpoints
     private static IResult Problem(string field, string message) =>
         Results.ValidationProblem(new Dictionary<string, string[]> { [field] = [message] });
 
-    private static async Task<List<DownloadInfo>> InfoAsync(RomdexDbContext db, IReadOnlyList<Download> items, CancellationToken ct)
+    internal static async Task<List<DownloadInfo>> InfoAsync(RomdexDbContext db, IReadOnlyList<Download> items, CancellationToken ct)
     {
         var dumpIds = items.SelectMany(i => i.Dumps.Select(d => d.DumpId)).ToList();
         var dumps = await db.Dumps.AsNoTracking().Where(d => dumpIds.Contains(d.Id))

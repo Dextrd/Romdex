@@ -23,9 +23,17 @@ public enum ThemeColor { Blue, Pink, Green, Grey, Purple, Amber }
 /// <summary>Light or dark. Auto follows the device; black is dark with pure black behind, for OLED screens.</summary>
 public enum ThemeMode { Auto, Light, Dark, Black }
 
+/// <summary>
+/// Whose age ratings a game's page shows. Auto goes by the browser's language: ESRB's in North America, CERO's in
+/// Japan, USK's in Germany, ACB's in Australia, and PEGI's elsewhere.
+/// </summary>
+public enum RatingBoard { Auto, Esrb, Pegi, Usk, Cero, Acb, None }
+
 /// <summary>How the web app looks for someone, kept with their account: <c>PUT /auth/appearance</c>.</summary>
 /// <param name="HighContrast">Stronger text and borders, and status colours that colour-blind people can tell apart.</param>
-public sealed record Appearance(ThemeColor Color = ThemeColor.Blue, ThemeMode Mode = ThemeMode.Auto, bool HighContrast = false);
+/// <param name="Ratings">Whose age ratings games' pages show; where a game has none from them, another board's.</param>
+public sealed record Appearance(ThemeColor Color = ThemeColor.Blue, ThemeMode Mode = ThemeMode.Auto, bool HighContrast = false,
+    RatingBoard Ratings = RatingBoard.Auto);
 
 /// <summary>Body of <c>POST /auth/setup</c>: the admin account, made the first time Romdex runs.</summary>
 public sealed record SetUpLogin(string Username, string Password);
