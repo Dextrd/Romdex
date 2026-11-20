@@ -7,6 +7,7 @@ using Romdex.Core.Data;
 using DownloadState = Romdex.Core.Data.DownloadState;
 using Romdex.Core.Downloads;
 using Romdex.Core.Plugins;
+using Romdex.Core.Tasks;
 
 namespace Romdex.Core.Api;
 
@@ -129,7 +130,53 @@ public static class DownloadEndpoints
         api.MapGet("/systems/{id:guid}/filing/adoption", async (Guid id, RomdexDbContext db, Adoption adoption, CancellationToken ct) =>
                 await db.Systems.FindAsync([id], ct) is { } system ? Results.Ok(await adoption.ReportAsync(system, ct)) : Results.NotFound())
             .WithTags("Downloads").WithName("ReportAdoption")
-            .WithSummary("Which of a system's games in the library aren't where its filing settings would put them, and where they'd go. Nothing is moved.");
+            .WithSummary("Which of a system's games in the library aren't where the layout would put them, and where they'd go. Nothing is moved.");
+
+        api.MapGet("/library/format", async (Filing filing, CancellationToken ct) => await filing.GetFormatAsync(ct))
+            .WithTags("Downloads").WithName("GetLibraryFormat").WithSummary("The library's layout, which every system's arrivals follow unless it has its own.");
+
+        api.MapPut("/library/format", async (LibraryFormat body, Filing filing, CancellationToken ct) =>
+            {
+                if (body.Layout is LibraryLayout.Library or LibraryLayout.Custom || !Enum.IsDefined(body.Layout))
+                    return Problem("layout", "Choose one of the layouts: a folder of your own goes on a system's page.");
+                if (Filing.CleanFolder(body.GamesFolder) is not { } games)
+                    return Problem("gamesFolder", "The games folder has to be a folder inside the library.");
+                if (Filing.CleanFolder(body.BiosFolder) is not { } bios)
+                    return Problem("biosFolder", "The BIOS folder has to be a folder inside the library.");
+                var format = body with { GamesFolder = games, BiosFolder = bios };
+                await filing.SaveFormatAsync(format, ct);
+                return Results.Ok(format);
+            })
+            .RequireScope(Scopes.Files).WithTags("Downloads").WithName("SetLibraryFormat")
+            .WithSummary("Sets the library's layout. What arrives from now on follows it; games already there move only when the library is formatted.");
+
+        api.MapGet("/library/format/detect", async (Adoption adoption, CancellationToken ct) => await adoption.DetectAsync(ct))
+            .WithTags("Downloads").WithName("DetectLibraryFormat")
+            .WithSummary("The layout the library's games are in now, as near as it can be told, to set it to. Nothing changes.");
+
+        api.MapGet("/library/format/preview", async (Guid? systemId, RomdexDbContext db, Adoption adoption, CancellationToken ct) =>
+            {
+                if (systemId is not { } id)
+                    return Results.Ok(await adoption.ReportAsync((IReadOnlyList<CatalogueSystem>?)null, ct));
+                return await db.Systems.FindAsync([id], ct) is { } system ? Results.Ok(await adoption.ReportAsync(system, ct)) : Results.NotFound();
+            })
+            .WithTags("Downloads").WithName("PreviewLibraryFormat")
+            .WithSummary("What formatting the library, or one system's games, would move, and where. Nothing is moved.");
+
+        api.MapPost("/library/format/apply", async (FormatLibrary body, RomdexDbContext db, TaskQueue queue, TaskTitles titles, CancellationToken ct) =>
+            {
+                string? name = null;
+                if (body.SystemId is { } id)
+                {
+                    if (await db.Systems.FindAsync([id], ct) is not { } system)
+                        return Results.NotFound();
+                    name = system.Name;
+                }
+                var task = await queue.EnqueueAsync(LibraryFormatTask.TaskKind, body.SystemId is null ? null : LibraryFormatTask.PayloadFor(body.SystemId, name), ct);
+                return Results.Ok(titles.ToInfo(task));
+            })
+            .RequireScope(Scopes.Files).WithTags("Downloads").WithName("FormatLibrary")
+            .WithSummary("Moves the library's games, or one system's, to where the layout puts them, as the preview says, as a task. Files that match nothing stay where they are.");
 
         api.MapPut("/systems/{id:guid}/filing", async (Guid id, FilingSettings body, RomdexDbContext db, Filing filing, CancellationToken ct) =>
             {
@@ -139,11 +186,17 @@ public static class DownloadEndpoints
                     return Problem("id", "A BIOS DAT is filed as its system is: set that system's instead.");
                 if (!(await filing.FormatsForAsync(system, ct)).Contains(body.Storage))
                     return Problem("storage", $"{body.Storage} isn't a format for {system.Name}.");
+                if (!Enum.IsDefined(body.Layout))
+                    return Problem("layout", "That isn't a layout.");
+                var folder = body.Layout == LibraryLayout.Custom ? Filing.CleanFolder(body.Folder) : null;
+                if (body.Layout == LibraryLayout.Custom && folder is not { Length: > 0 })
+                    return Problem("folder", "Name the folder, inside the games folder, that this system's games go in.");
+                body = body with { Folder = folder };
                 await filing.SaveAsync(system.Name, body, ct);
                 return Results.Ok(body);
             })
             .RequireScope(Scopes.Files).WithTags("Downloads").WithName("SetFiling")
-            .WithSummary("Sets how a system's arrivals are filed. Files already in the library stay as they are.");
+            .WithSummary("Sets how a system's arrivals are filed. Files already in the library move only when it's formatted.");
 
         return api;
     }

@@ -255,7 +255,7 @@ public sealed class RomdexClient(HttpClient http)
     public async Task<IReadOnlyList<StorageFormat>> ListStorageFormatsAsync(Guid systemId, CancellationToken ct = default) =>
         await http.GetFromJsonAsync<List<StorageFormat>>($"{Api}/systems/{systemId}/filing/formats", RomdexJson.Options, ct) ?? [];
 
-    /// <summary>Which of a system's games aren't where its filing settings would put them. Nothing is moved.</summary>
+    /// <summary>Which of a system's games aren't where the layout would put them. Nothing is moved.</summary>
     public async Task<AdoptionReport> GetAdoptionAsync(Guid systemId, CancellationToken ct = default) =>
         (await http.GetFromJsonAsync<AdoptionReport>($"{Api}/systems/{systemId}/filing/adoption", RomdexJson.Options, ct))!;
 
@@ -265,6 +265,28 @@ public sealed class RomdexClient(HttpClient http)
         await EnsureAsync(response, ct);
         return (await response.Content.ReadFromJsonAsync<FilingSettings>(RomdexJson.Options, ct))!;
     }
+
+    public async Task<LibraryFormat> GetLibraryFormatAsync(CancellationToken ct = default) =>
+        (await http.GetFromJsonAsync<LibraryFormat>($"{Api}/library/format", RomdexJson.Options, ct))!;
+
+    public async Task<LibraryFormat> SetLibraryFormatAsync(LibraryFormat format, CancellationToken ct = default)
+    {
+        using var response = await http.PutAsJsonAsync($"{Api}/library/format", format, RomdexJson.Options, ct);
+        await EnsureAsync(response, ct);
+        return (await response.Content.ReadFromJsonAsync<LibraryFormat>(RomdexJson.Options, ct))!;
+    }
+
+    /// <summary>The layout the library's games are in now, as near as it can be told.</summary>
+    public async Task<LayoutDetection> DetectLibraryFormatAsync(CancellationToken ct = default) =>
+        (await http.GetFromJsonAsync<LayoutDetection>($"{Api}/library/format/detect", RomdexJson.Options, ct))!;
+
+    /// <summary>What formatting the library, or one system's games, would move. Nothing is moved.</summary>
+    public async Task<AdoptionReport> PreviewLibraryFormatAsync(Guid? systemId = null, CancellationToken ct = default) =>
+        (await http.GetFromJsonAsync<AdoptionReport>($"{Api}/library/format/preview{(systemId is { } id ? $"?systemId={id}" : "")}", RomdexJson.Options, ct))!;
+
+    /// <summary>Moves the library's games, or one system's, to where the layout puts them, as a task.</summary>
+    public Task<TaskInfo> FormatLibraryAsync(Guid? systemId = null, CancellationToken ct = default) =>
+        PostForAsync<TaskInfo>($"{Api}/library/format/apply", new FormatLibrary(systemId), ct);
 
     // ---- Stopping and ordering tasks ----
 

@@ -29,8 +29,8 @@ public enum FilingMode
 /// <summary>Body of <c>POST /v1/file</c>.</summary>
 /// <param name="StagingDirectory">Where the files are, relative to the staging volume.</param>
 /// <param name="Dat">A Logiqx DAT of the one dump to file, named as the system's DAT is.</param>
-/// <param name="Layout"><c>romm</c> or <c>datName</c>: the folder it goes in.</param>
-public sealed record FileRequest(string StagingDirectory, string Dat, string Layout, FilingMode Mode);
+/// <param name="Folder">The folder it goes in, relative to the library, from <see cref="LibraryFolders"/>.</param>
+public sealed record FileRequest(string StagingDirectory, string Dat, string Folder, FilingMode Mode);
 
 /// <param name="Files">Where each file went, relative to the library folder.</param>
 public sealed record FileResult(IReadOnlyList<string> Files);
@@ -52,7 +52,7 @@ public sealed record ReadRequest(string Root, string Path);
 public sealed record ReadResult(IReadOnlyList<ContentHashes> Contents);
 
 /// <summary>Body of <c>POST /v1/folder</c>: the folder a layout gives a system's games.</summary>
-/// <param name="Layout"><c>romm</c> or <c>datName</c>.</param>
+/// <param name="Layout"><c>datName</c>, or one of igir's console tokens, such as <c>romm</c>, <c>es</c> or <c>batocera</c>.</param>
 /// <param name="Files">File names of one of its games, for a system igir knows only by extension.</param>
 public sealed record FolderRequest(string DatName, string Layout, IReadOnlyList<string> Files);
 
@@ -66,6 +66,18 @@ public sealed record StageRequest(string Path, string StagingDirectory);
 
 /// <param name="Files">Where it went, relative to the staging directory.</param>
 public sealed record StageResult(IReadOnlyList<string> Files);
+
+/// <summary>Body of <c>POST /v1/move</c>: moves library files to other places in it, for formatting.</summary>
+public sealed record MoveRequest(IReadOnlyList<LibraryMove> Moves);
+
+/// <param name="From">Relative to the library.</param>
+/// <param name="To">Relative to the library.</param>
+public sealed record LibraryMove(string From, string To);
+
+/// <param name="Error">Why it didn't move, such as another file being there.</param>
+public sealed record FailedMove(string From, string To, string Error);
+
+public sealed record MoveResult(IReadOnlyList<LibraryMove> Moved, IReadOnlyList<FailedMove> Failed);
 
 /// <summary>Answer to <c>GET /v1/version</c>.</summary>
 public sealed record WorkerVersion(string Version, string Igir, string? Chdman, string? DolphinTool);
@@ -81,6 +93,7 @@ public interface IFilingWorker
     Task<ReadResult> ReadAsync(ReadRequest request, CancellationToken ct);
     Task<StageResult> StageAsync(StageRequest request, CancellationToken ct);
     Task<FolderResult> FolderAsync(FolderRequest request, CancellationToken ct);
+    Task<MoveResult> MoveAsync(MoveRequest request, CancellationToken ct);
 }
 
 /// <summary>The igir worker, reached at <see cref="RomdexOptions.WorkerUrl"/>.</summary>
@@ -105,6 +118,8 @@ public sealed class HttpFilingWorker(HttpClient http, IOptions<RomdexOptions> op
     public Task<StageResult> StageAsync(StageRequest request, CancellationToken ct) => SendAsync<StageResult>(HttpMethod.Post, "v1/stage", request, ct);
 
     public Task<FolderResult> FolderAsync(FolderRequest request, CancellationToken ct) => SendAsync<FolderResult>(HttpMethod.Post, "v1/folder", request, ct);
+
+    public Task<MoveResult> MoveAsync(MoveRequest request, CancellationToken ct) => SendAsync<MoveResult>(HttpMethod.Post, "v1/move", request, ct);
 
     private async Task<T> SendAsync<T>(HttpMethod method, string path, object? body, CancellationToken ct)
     {

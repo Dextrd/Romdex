@@ -90,6 +90,8 @@ builder.Services.AddHostedService<CatalogueSchedule>();
 builder.Services.AddHttpClient<IFilingWorker, HttpFilingWorker>(HttpFilingWorker.HttpClientName, http => http.Timeout = TimeSpan.FromHours(2));
 builder.Services.AddScoped<Filing>();
 builder.Services.AddScoped<Adoption>();
+builder.Services.AddScoped<LibraryFolders>();
+builder.Services.AddScoped<ITaskHandler, LibraryFormatTask>();
 builder.Services.AddScoped<RetrievalTargets>();
 builder.Services.AddScoped<DownloadService>();
 builder.Services.AddScoped<DownloadPipeline>();

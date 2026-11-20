@@ -10,7 +10,8 @@ process.env.STAGING_ROOT = await fs.mkdtemp(path.join(os.tmpdir(), "worker-stagi
 process.env.LIBRARY_ROOT = await fs.mkdtemp(path.join(os.tmpdir(), "worker-library-"));
 
 const { parseCsv } = await import("../src/csv.js");
-const { consoleFolder, folderFor, readDat } = await import("../src/filing.js");
+const { consoleFolder, folderFor, layouts, readDat } = await import("../src/filing.js");
+const { move } = await import("../src/move.js");
 const { hash } = await import("../src/discs.js");
 const { inside, LIBRARY, STAGING } = await import("../src/paths.js");
 const { stage } = await import("../src/stage.js");
@@ -44,6 +45,14 @@ test("the RomM folder is igir's, by DAT name first and then by extension", () =>
   assert.throws(() => folderFor({ datName: "x", layout: "flat" }), /layout/);
 });
 
+test("other layouts take igir's folders for them too", () => {
+  for (const layout of ["romm", "es", "batocera", "retrodeck", "mister"]) assert.ok(layouts().includes(layout), layout);
+  assert.equal(folderFor({ datName: "Nintendo - GameCube", layout: "es", files: ["a.iso"] }).folder, "gc");
+  assert.equal(folderFor({ datName: "Nintendo - GameCube", layout: "batocera", files: ["a.iso"] }).folder, "gamecube");
+  assert.equal(folderFor({ datName: "Sony - PlayStation", layout: "es", files: ["a.cue"] }).folder, "psx");
+  assert.equal(folderFor({ datName: "Some Club - Things", layout: "es", files: ["a.xyz"] }).folder, "Some Club - Things");
+});
+
 test("paths from the core stay inside their volume", () => {
   assert.equal(inside(STAGING, "downloads/1", "x"), path.join(STAGING, "downloads", "1"));
   assert.throws(() => inside(STAGING, "../etc", "stagingDirectory"), /must be inside/);
@@ -67,7 +76,7 @@ test("the API refuses what it can't do, with a reason", async () => {
     const base = `http://127.0.0.1:${server.address().port}`;
     const missing = await fetch(`${base}/v1/nothing`);
     assert.equal(missing.status, 404);
-    const escape = await fetch(`${base}/v1/file`, { method: "POST", body: JSON.stringify({ stagingDirectory: "../..", dat: "<game", layout: "romm", mode: "move" }) });
+    const escape = await fetch(`${base}/v1/file`, { method: "POST", body: JSON.stringify({ stagingDirectory: "../..", dat: "<game", folder: "gb", mode: "move" }) });
     assert.equal(escape.status, 400);
     assert.match((await escape.json()).error, /inside/);
     const health = await (await fetch(`${base}/v1/health`)).json();
@@ -87,4 +96,29 @@ test("a library file is staged, and the folders it leaves empty go", async () =>
   assert.ok((await fs.stat(path.join(LIBRARY, "gb", "keep.gb"))).isFile());
   await assert.rejects(stage({ path: "gb/gone.gb", stagingDirectory: "downloads/s" }), /isn't a file/);
   await assert.rejects(stage({ path: "../x", stagingDirectory: "downloads/s" }), /must be inside/);
+});
+
+test("library files move to their new places, and only folders left with clutter go", async () => {
+  const at = (...p) => path.join(LIBRARY, "fmt", ...p);
+  await fs.mkdir(at("old", "deep"), { recursive: true });
+  await fs.mkdir(at("kept"), { recursive: true });
+  await fs.writeFile(at("old", "deep", "a.gb"), "a");
+  await fs.writeFile(at("old", "deep", "Thumbs.db"), "t");
+  await fs.writeFile(at("old", ".DS_Store"), "d");
+  await fs.writeFile(at("kept", "b.gb"), "b");
+  await fs.writeFile(at("kept", "notes.txt"), "n");
+  await fs.writeFile(at("taken.gb"), "x");
+  const result = await move({ moves: [
+    { from: "fmt/old/deep/a.gb", to: "fmt/new/a.gb" },
+    { from: "fmt/kept/b.gb", to: "fmt/taken.gb" },
+    { from: "fmt/missing.gb", to: "fmt/new/missing.gb" },
+  ] });
+  assert.deepEqual(result.moved, [{ from: "fmt/old/deep/a.gb", to: "fmt/new/a.gb" }]);
+  assert.deepEqual(result.failed.map((f) => f.from), ["fmt/kept/b.gb", "fmt/missing.gb"]);
+  assert.match(result.failed[0].error, /already there/);
+  assert.equal(await fs.readFile(at("new", "a.gb"), "utf8"), "a");
+  await assert.rejects(fs.stat(at("old")));
+  assert.equal(await fs.readFile(at("kept", "b.gb"), "utf8"), "b");
+  await assert.rejects(move({ moves: [{ from: "../x", to: "fmt/x" }] }), /must be inside/);
+  await assert.rejects(move({ moves: [] }), /moves/);
 });

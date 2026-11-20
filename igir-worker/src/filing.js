@@ -14,16 +14,14 @@ const require = createRequire(import.meta.url);
 const MODES = { move: [], extract: ["extract"], zip: ["zip"] };
 
 /**
- * Files one dump. The DAT names the system as its own DAT does, which is how igir knows the console for the RomM
- * layout; one it doesn't know goes in a folder named after the DAT instead.
+ * Files one dump into the library folder the core chose for it, which it works out with folderFor.
  * @returns {{ files: string[], folder: string }} where each file went, relative to the library
  */
-export async function file({ stagingDirectory, dat, layout, mode }) {
+export async function file({ stagingDirectory, dat, folder, mode }) {
   const input = inside(STAGING, stagingDirectory, "stagingDirectory");
   if (typeof dat !== "string" || !dat.includes("<game")) throw new RequestError("dat must be a Logiqx DAT of the dump to file.");
   if (!(mode in MODES)) throw new RequestError('mode must be "move", "extract" or "zip".');
-  const { name, roms } = readDat(dat);
-  const output = inside(LIBRARY, folderFor({ datName: name, layout, files: roms }).folder, "The folder");
+  const output = inside(LIBRARY, folder, "folder");
 
   const scratch = await fs.mkdtemp(path.join(os.tmpdir(), "romdex-file-"));
   try {
@@ -49,14 +47,15 @@ export async function file({ stagingDirectory, dat, layout, mode }) {
 }
 
 /**
- * The library folder a layout gives a system's games: the folder igir's {romm} token gives, by the DAT's name or else
- * by the files' extensions, or one named after the DAT. Lets the core check where the library's games would go.
+ * The folder a layout names a system's games: the one igir's token for that layout gives, such as {romm} or {es}, by
+ * the DAT's name or else by the files' extensions; or one named after the DAT, for "datName" and for a system the
+ * layout has no folder for. Relative to wherever the core keeps games.
  */
 export function folderFor({ datName, layout, files = [] } = {}) {
   if (typeof datName !== "string" || datName.length === 0) throw new RequestError("datName is needed.");
   if (layout === "datName") return { folder: safe(datName) };
-  if (layout === "romm") return { folder: consoleFolder(datName, files) ?? safe(datName) };
-  throw new RequestError('layout must be "romm" or "datName".');
+  if (!layouts().includes(layout)) throw new RequestError(`layout must be "datName" or one igir knows: ${layouts().join(", ")}.`);
+  return { folder: consoleFolder(datName, files, layout) ?? safe(datName) };
 }
 
 /** The library files igir's report says it wrote, relative to the library. */
@@ -88,19 +87,29 @@ export function readDat(dat) {
 
 let consoles;
 
-/**
- * The RomM folder for a system, as igir would choose it: the last console whose DAT name pattern fits, else the last
- * whose extensions include one of the files'. Null when igir knows no RomM folder for it.
- */
-export function consoleFolder(datName, roms) {
+function knownConsoles() {
   consoles ??= require("igir/dist/src/modules/candidates/utils/consoleTokens.json").consoles.map((c) => {
     const [, pattern, flags] = /^\/(.*)\/([a-z]*)$/.exec(c.datNameRegex);
-    return { regex: new RegExp(pattern, flags), extensions: c.extensions, romm: c.tokens.romm };
+    return { regex: new RegExp(pattern, flags), extensions: c.extensions, tokens: c.tokens };
   });
-  const byName = consoles.findLast((c) => c.regex.test(datName));
+  return consoles;
+}
+
+/** The layouts igir has folder names for, by its tokens' names, such as romm, es, batocera and mister. */
+export function layouts() {
+  return [...new Set(knownConsoles().flatMap((c) => Object.keys(c.tokens)))].sort();
+}
+
+/**
+ * A layout's folder for a system, as igir would choose it: the last console whose DAT name pattern fits, else the last
+ * whose extensions include one of the files'. Null when igir knows no folder for it in that layout.
+ */
+export function consoleFolder(datName, roms, layout = "romm") {
+  const all = knownConsoles();
+  const byName = all.findLast((c) => c.regex.test(datName));
   const extensions = roms.map((r) => path.extname(r).toLowerCase());
-  const found = byName ?? consoles.findLast((c) => c.extensions.some((e) => extensions.includes(e)));
-  return found?.romm ?? null;
+  const found = byName ?? all.findLast((c) => c.extensions.some((e) => extensions.includes(e)));
+  return found?.tokens[layout] ?? null;
 }
 
 function safe(name) {

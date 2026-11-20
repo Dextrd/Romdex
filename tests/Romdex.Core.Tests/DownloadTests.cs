@@ -302,6 +302,65 @@ public sealed class DownloadTests : IDisposable
         Assert.True(File.Exists(Path.Combine(_dats.Roms, "old", "Moss Maze.zip")));
     }
 
+    [Fact]
+    public async Task The_library_is_formatted_to_its_layout_and_arrivals_follow_it()
+    {
+        var pond = _dats.Dump(Handheld, "Pixel Pond (USA)", [".gb"]);
+        var quarry = _dats.Dump(Handheld, "Quiet Quarry (USA)", [".gb", ".gbc"]);
+        var boot = _dats.Dump(Handheld, "[BIOS] Handheld Boot (World)", [".bin"]);
+        var maze = _dats.Dump(Handheld, "Moss Maze (Japan)", [".gb"]);
+        _dats.WriteDats();
+        _dats.Put("romm/Pixel Pond (USA).gb", pond[0].Data);
+        _dats.Put("romm/Quiet Quarry (USA)/" + quarry[0].Name, quarry[0].Data);
+        _dats.Put("romm/Quiet Quarry (USA)/" + quarry[1].Name, quarry[1].Data);
+        _dats.Put("romm/" + boot[0].Name, boot[0].Data);
+        _dats.Put("romm/stray.gb", [1, 2, 3]);
+        await SetUpAsync();
+        var handheld = (await _api.ListSystemsAsync()).Single(s => s.Name == Handheld);
+
+        // It's in RomM's layout already, as the library is by default.
+        var detected = await _api.DetectLibraryFormatAsync();
+        Assert.Equal(new LibraryFormat(LibraryLayout.Romm, "", "", true), detected.Format);
+        Assert.Equal((1, 1), (detected.Systems, detected.Fitting));
+        Assert.Equal(3, (await _api.PreviewLibraryFormatAsync()).InPlace);
+
+        // An ES-DE layout, as EmuDeck keeps it: games in roms, BIOS files all together in bios.
+        await Assert.ThrowsAsync<RomdexApiException>(() => _api.SetLibraryFormatAsync(new LibraryFormat(LibraryLayout.EsDe, "../roms")));
+        await Assert.ThrowsAsync<RomdexApiException>(() => _api.SetLibraryFormatAsync(new LibraryFormat(LibraryLayout.Custom)));
+        var format = await _api.SetLibraryFormatAsync(new LibraryFormat(LibraryLayout.EsDe, "/roms/", "bios", BiosBySystem: false));
+        Assert.Equal(new LibraryFormat(LibraryLayout.EsDe, "roms", "bios", false), format);
+        var preview = await _api.PreviewLibraryFormatAsync();
+        Assert.Equal((3, 0), (preview.Checked, preview.InPlace));
+        Assert.Equal(["bios/" + boot[0].Name], preview.Moves.Single(m => m.Dump.Name == boot[0].Name.Replace(".bin", "")).To);
+        Assert.Equal([$"roms/es/Quiet Quarry (USA)/{quarry[0].Name}", $"roms/es/Quiet Quarry (USA)/{quarry[1].Name}"],
+            preview.Moves.Single(m => m.Dump.Name == "Quiet Quarry (USA)").To);
+        Assert.True(File.Exists(Path.Combine(_dats.Roms, "romm", "Pixel Pond (USA).gb")));
+
+        // Formatting moves them, leaves what matches nothing, and the library follows without hashing anything again.
+        await RunAsync(await _api.FormatLibraryAsync());
+        Assert.True(File.Exists(Path.Combine(_dats.Roms, "roms", "es", "Pixel Pond (USA).gb")));
+        Assert.True(File.Exists(Path.Combine(_dats.Roms, "roms", "es", "Quiet Quarry (USA)", quarry[1].Name)));
+        Assert.True(File.Exists(Path.Combine(_dats.Roms, "bios", boot[0].Name)));
+        Assert.True(File.Exists(Path.Combine(_dats.Roms, "romm", "stray.gb")));
+        Assert.False(Directory.Exists(Path.Combine(_dats.Roms, "romm", "Quiet Quarry (USA)")));
+        preview = await _api.PreviewLibraryFormatAsync(handheld.Id);
+        Assert.Equal((3, 3), (preview.Checked, preview.InPlace));
+        Assert.Equal(new LibraryFormat(LibraryLayout.EsDe, "roms", "bios", false), (await _api.DetectLibraryFormatAsync()).Format);
+
+        // What arrives from a retriever goes where the layout keeps the rest.
+        _plugin.Drop("maze", ("maze.gb", maze[0].Data));
+        Assert.Equal(DownloadState.Filed, Assert.Single(await ArriveAsync(1)).State);
+        Assert.Equal("roms/es", _worker.Filed.Last().Folder);
+        Assert.True(File.Exists(Path.Combine(_dats.Roms, "roms", "es", "Moss Maze (Japan).gb")));
+
+        // A system can keep a folder of its own naming.
+        await Assert.ThrowsAsync<RomdexApiException>(() => _api.SetFilingAsync(handheld.Id, new FilingSettings(LibraryLayout.Custom)));
+        await _api.SetFilingAsync(handheld.Id, new FilingSettings(LibraryLayout.Custom, Folder: "Game Boy"));
+        preview = await _api.PreviewLibraryFormatAsync(handheld.Id);
+        Assert.Contains(["roms/Game Boy/Moss Maze (Japan).gb"], preview.Moves.Select(m => m.To));
+        Assert.DoesNotContain(preview.Moves, m => m.Dump.Name.StartsWith("[BIOS]"));
+    }
+
     private async Task SetUpAsync()
     {
         await RunAsync(await _api.RefreshCatalogueAsync());

@@ -22,6 +22,7 @@ public sealed class DownloadPipeline(
     ContainerReader reader,
     IFilingWorker worker,
     Filing filing,
+    LibraryFolders folders,
     LibraryViewBuilder views,
     LibraryScanner scanner,
     LibraryMatcher matcher,
@@ -139,8 +140,9 @@ public sealed class DownloadPipeline(
             if (mode == FilingMode.Move && NeedsRewriting(staged, dump))
                 mode = FilingMode.Zip;
             var files = await db.DumpFiles.AsNoTracking().Where(f => f.DumpId == dump.Id).ToListAsync(ct);
-            var result = await worker.FileAsync(new FileRequest(item.StagingDirectory, OneEntryDat.For(system.Name, dump, files),
-                settings.Layout == LibraryLayout.Romm ? "romm" : "datName", mode), ct);
+            // Where the library's layout keeps the rest of the system's games, or its BIOS files.
+            var folder = await folders.ForAsync(system, dump.Kinds.HasFlag(DumpKinds.Bios), [.. files.Select(f => f.Name)], ct);
+            var result = await worker.FileAsync(new FileRequest(item.StagingDirectory, OneEntryDat.For(system.Name, dump, files), folder, mode), ct);
             if (result.Files.Count == 0)
                 throw new FilingWorkerException($"igir filed nothing for {dump.Name}.");
             item.Dumps.First(d => d.DumpId == dump.Id).FiledPaths = string.Join('|', result.Files);

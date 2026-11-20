@@ -28,24 +28,34 @@ it with the files given, 500 for anything else.
 |---|---|---|
 | `GET /v1/health` | | `{status, message}` |
 | `GET /v1/version` | | `{version, igir, chdman, dolphinTool}`; a tool that isn't installed is null |
-| `POST /v1/file` | `{stagingDirectory, dat, layout, mode}` | `{files, folder}` |
+| `POST /v1/file` | `{stagingDirectory, dat, folder, mode}` | `{files, folder}` |
+| `GET /v1/layouts` | | `{layouts}` |
 | `POST /v1/folder` | `{datName, layout, files}` | `{folder}` |
+| `POST /v1/move` | `{moves: [{from, to}]}` | `{moved: [{from, to}], failed: [{from, to, error}]}` |
 | `POST /v1/convert` | `{stagingDirectory, format, source}` | `{file}` |
 | `POST /v1/read` | `{root, path}` | `{contents: [{entry, size, crc32, md5, sha1}]}` |
 | `POST /v1/stage` | `{path, stagingDirectory}` | `{files}` |
 
 **File.** `stagingDirectory` is relative to `/staging`. `dat` is a Logiqx DAT holding the one dump, named as the
-system's own DAT is. `layout` is `romm` (a folder per platform as RomM names them, such as `gb` or `psx`, the folder
-igir's `{romm}` token gives; a system igir doesn't know goes in a folder named after the DAT) or `datName` (a folder
-named after the DAT). `mode` is `move` (as it is: a loose file stays loose, an archive is moved whole and renamed),
+system's own DAT is. `folder` is where it goes, relative to `/roms`, which the core works out with **Folder**. `mode` is `move` (as it is: a loose file stays loose, an archive is moved whole and renamed),
 `extract` (loose, out of any archive) or `zip`. A dump of several files gets a folder of its own. `files` are where
 igir put them, relative to `/roms`.
 
 igir only looks for headers inside an archive when it writes the files out of it, so the core asks for `zip` or
 `extract` for a headered dump that came in an archive.
 
-**Folder.** The folder `layout` gives a system's games, as **File** would choose it, relative to `/roms`. `files` are
-file names of one of its games, for a system igir knows only by extension. It writes nothing.
+**Layouts.** The layouts **Folder** knows: `datName` (a folder named after the DAT), and each of igir's console tokens,
+such as `romm` (RomM's folders, such as `gb` or `psx`), `es` (ES-DE's, which EmuDeck uses), `batocera`, `retrodeck`
+and `mister`.
+
+**Folder.** The folder `layout` gives a system's games, as igir's token for it would: by the DAT's name, or else by
+`files`, file names of one of its games, for a system igir knows only by extension. A system the layout has no folder
+for gets one named after the DAT. Relative to wherever the core keeps games; it writes nothing.
+
+**Move.** Moves library files (relative to `/roms`) to new places in it, for formatting the library to another layout.
+A file whose new place is taken stays where it is and is listed under `failed`, as is one that isn't there. Folders
+the moves leave empty, or holding only what operating systems leave behind (`.DS_Store`, `Thumbs.db`, `desktop.ini`),
+are removed; any other folder stays.
 
 **Convert.** Makes a CHD (`format: chd`, from a cue sheet, gdi or iso) or an RVZ (`format: rvz`, from an iso) beside
 `source` in the staging directory, and keeps the source. The core checks the result against the DAT before it lets the

@@ -113,14 +113,26 @@ else
     @if (_filing is not null)
     {
         <h2>Filing</h2>
-        <p class="muted small">How downloads are filed. Files already in the library stay as they are.</p>
+        <p class="muted small">How downloads are filed. Games already in the library move only when you format it, below.</p>
         <div class="card filing">
             <label class="field">
                 <span class="field-label">Folder</span>
                 <select disabled="@(!CanFile)" @onchange="e => SetFilingAsync(_filing with { Layout = Enum.Parse<LibraryLayout>((string)e.Value!) })">
-                    <option value="@LibraryLayout.Romm" selected="@(_filing.Layout == LibraryLayout.Romm)">A folder per platform, as RomM names them</option>
-                    <option value="@LibraryLayout.DatName" selected="@(_filing.Layout == LibraryLayout.DatName)">A folder named as the DAT is: @_system.Name</option>
+                    @foreach (var choice in SystemLayouts)
+                    {
+                        <option value="@choice" selected="@(_filing.Layout == choice)">@(choice == LibraryLayout.DatName ? $"Named as the DAT is: {_system.Name}" : LibraryFormatPanel.Label(choice))</option>
+                    }
                 </select>
+                @if (_filing.Layout == LibraryLayout.Custom)
+                {
+                    <input type="text" disabled="@(!CanFile)" placeholder="Such as Game Boy" value="@_filing.Folder" aria-label="The folder"
+                           @onchange="e => SetFilingAsync(_filing with { Folder = (string?)e.Value })" />
+                    <span class="muted small">Inside the games folder set under <a href="settings">Settings</a>.</span>
+                }
+                else if (_filing.Layout == LibraryLayout.Library)
+                {
+                    <span class="muted small">The layout set under <a href="settings">Settings</a>.</span>
+                }
             </label>
             <label class="field">
                 <span class="field-label">Stored as</span>
@@ -141,36 +153,7 @@ else
                 </select>
             </label>
             @if (_filingError is not null) { <div class="error small">@_filingError</div> }
-            <div class="toolbar">
-                <button @onclick="CheckLibraryAsync" disabled="@_checking"
-                        title="Compare the games already in the library with where Downloads would file them. Nothing is moved.">Check the library</button>
-                @if (_adoption is { Problem: null } report && report.Checked > 0)
-                {
-                    <span class="muted small">@report.InPlace.ToString("N0") of @Format.Count(report.Checked, "game is", "games are") where Downloads would file @(report.Checked == 1 ? "it" : "them").</span>
-                }
-                else if (_adoption is { Problem: null })
-                {
-                    <span class="muted small">None of this system's games are in the library whole.</span>
-                }
-            </div>
-            @if (_adoption?.Problem is { } problem) { <div class="error small">@problem</div> }
-            @if (_adoption is { Moves.Count: > 0 } moves)
-            {
-                <p class="muted small">These would go elsewhere. Moving them isn't something Romdex does yet: this is so you can see what the settings would mean for the library you have.</p>
-                <table class="table small">
-                    <thead><tr><th>Game</th><th>Now</th><th>Would be</th></tr></thead>
-                    <tbody>
-                        @foreach (var move in moves.Moves)
-                        {
-                            <tr>
-                                <td>@move.Dump.Name</td>
-                                <td>@foreach (var path in move.From) { <div><code>@path</code></div> }</td>
-                                <td>@foreach (var path in move.To) { <div><code>@path</code></div> }</td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            }
+            <FormatPreview SystemId="Id" @ref="_preview" />
         </div>
     }
 }
@@ -192,25 +175,13 @@ else
     private FilingSettings? _filing;
     private IReadOnlyList<StorageFormat> _formats = [];
     private string? _filingError;
-    private AdoptionReport? _adoption;
-    private bool _checking;
+    private FormatPreview? _preview;
 
-    private async Task CheckLibraryAsync()
-    {
-        _checking = true;
-        try
-        {
-            _adoption = await Api.GetAdoptionAsync(Id);
-        }
-        catch (Exception e) when (e is RomdexApiException or HttpRequestException)
-        {
-            _adoption = new AdoptionReport(0, 0, [], e.Message);
-        }
-        finally
-        {
-            _checking = false;
-        }
-    }
+    private static readonly LibraryLayout[] SystemLayouts =
+    [
+        LibraryLayout.Library, LibraryLayout.Romm, LibraryLayout.EsDe, LibraryLayout.Batocera, LibraryLayout.RetroDeck, LibraryLayout.Mister,
+        LibraryLayout.DatName, LibraryLayout.Custom,
+    ];
 
     private bool CanFile => Auth.May(UserPermissions.Files);
 
@@ -229,8 +200,14 @@ else
         _filingError = null;
         try
         {
+            // A folder of your own is saved once it's named.
+            if (filing.Layout == LibraryLayout.Custom && string.IsNullOrWhiteSpace(filing.Folder))
+            {
+                _filing = filing;
+                return;
+            }
             _filing = await Api.SetFilingAsync(Id, filing);
-            _adoption = null;
+            _preview?.Reset();
         }
         catch (Exception e) when (e is RomdexApiException or HttpRequestException)
         {

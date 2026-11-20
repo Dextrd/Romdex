@@ -1,0 +1,127 @@
+@inject RomdexClient Api
+@inject AuthState Auth
+
+@*
+    Formatting the library, or one system's games: a preview of what would move where, and nothing moves until it's
+    confirmed. Files that match nothing aren't games, and are never moved.
+*@
+<div class="toolbar">
+    <button @onclick="PreviewAsync" disabled="@_checking"
+            title="Compare the games in the library with where the layout puts them. Nothing is moved.">@(SystemId is null ? "Preview formatting" : "Check the library")</button>
+    @if (_report is { Problem: null } report && report.Checked > 0)
+    {
+        <span class="muted small">@report.InPlace.ToString("N0") of @Format.Count(report.Checked, "game is", "games are") where the layout puts @(report.Checked == 1 ? "it" : "them").</span>
+    }
+    else if (_report is { Problem: null })
+    {
+        <span class="muted small">@(SystemId is null ? "No games are" : "None of this system's games are") in the library whole.</span>
+    }
+</div>
+@if (_report?.Problem is { } problem) { <div class="error small">@problem</div> }
+@if (_started is not null)
+{
+    <div class="small">Formatting has started. It's on the <a href="activity">Activity</a> page, and the library follows each file as it moves.</div>
+}
+@if (_report is { Moves.Count: > 0 } moves)
+{
+    var movable = moves.Moves.Count(m => m.Blocked is null);
+    <p class="muted small">
+        @Format.Count(moves.Moves.Count, "game would move", "games would move").
+        @if (movable < moves.Moves.Count) { <text>@Format.Count(moves.Moves.Count - movable, "stays", "stay") where @(moves.Moves.Count - movable == 1 ? "it is" : "they are"), for the reason given. </text> }
+        Folders left empty are removed; files that match nothing stay where they are.
+    </p>
+    <div class="format-moves">
+        <table class="table small">
+            <thead><tr><th>Game</th><th>Now</th><th>Goes to</th></tr></thead>
+            <tbody>
+                @foreach (var move in moves.Moves.Take(_shown))
+                {
+                    <tr class="@(move.Blocked is null ? "" : "muted")">
+                        <td>@move.Dump.Name @if (move.Blocked is { } why) { <div class="error small">@why</div> }</td>
+                        <td>@foreach (var path in move.From) { <div><code>@path</code></div> }</td>
+                        <td>@foreach (var path in move.To) { <div><code>@path</code></div> }</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    @if (moves.Moves.Count > _shown)
+    {
+        <button class="link" @onclick="() => _shown += 200">Show more (@((moves.Moves.Count - _shown).ToString("N0")) to go)</button>
+    }
+    @if (Auth.May(UserPermissions.Files) && movable > 0)
+    {
+        <div class="toolbar">
+            <button class="primary" @onclick="() => _confirming = true">Move @Format.Count(movable, "game", "games")…</button>
+        </div>
+    }
+}
+
+@if (_confirming && _report is not null)
+{
+    <Dialog Title="Format the library?" OnClose="() => _confirming = false">
+        <p>
+            @Format.Count(_report.Moves.Count(m => m.Blocked is null), "game moves", "games move") to where the layout puts @(_report.Moves.Count(m => m.Blocked is null) == 1 ? "it" : "them"), as the preview shows.
+            Apps that read the library folder, such as an emulator frontend, will find them in their new places.
+        </p>
+        @if (_error is not null) { <div class="error small">@_error</div> }
+        <div class="toolbar">
+            <button class="primary" @onclick="FormatAsync">Move them</button>
+            <button @onclick="() => _confirming = false">Cancel</button>
+        </div>
+    </Dialog>
+}
+
+@code {
+    /// <summary>Just this system's games; null for the whole library.</summary>
+    [Parameter] public Guid? SystemId { get; set; }
+
+    private AdoptionReport? _report;
+    private bool _checking;
+    private bool _confirming;
+    private int _shown = 200;
+    private string? _error;
+    private TaskInfo? _started;
+
+    /// <summary>Forgets the preview, when the layout it was made for has changed.</summary>
+    public void Reset()
+    {
+        _report = null;
+        _started = null;
+        StateHasChanged();
+    }
+
+    private async Task PreviewAsync()
+    {
+        _checking = true;
+        _started = null;
+        _shown = 200;
+        try
+        {
+            _report = await Api.PreviewLibraryFormatAsync(SystemId);
+        }
+        catch (Exception e) when (e is RomdexApiException or HttpRequestException)
+        {
+            _report = new AdoptionReport(0, 0, [], e.Message);
+        }
+        finally
+        {
+            _checking = false;
+        }
+    }
+
+    private async Task FormatAsync()
+    {
+        _error = null;
+        try
+        {
+            _started = await Api.FormatLibraryAsync(SystemId);
+            _confirming = false;
+            _report = null;
+        }
+        catch (Exception e) when (e is RomdexApiException or HttpRequestException)
+        {
+            _error = e.Message;
+        }
+    }
+}

@@ -1762,3 +1762,11 @@ table.slots thead th { height: 32px; box-sizing: border-box; }
 .versions:has(.consoles) { display: block; max-width: 100%; overflow-x: auto; scrollbar-width: none; margin-top: .4rem; }
 .versions .consoles { font-size: .85rem; }
 .toolbar .layout-toggle { margin-left: auto; }
+
+/* Formatting the library: the moves scroll inside their card, and paths may wrap anywhere. */
+.format-moves { max-height: 28rem; overflow: auto; }
+.format-moves code { overflow-wrap: anywhere; }
+.detected { margin-top: .75rem; }
+.detected p { margin: 0 0 .5rem; }
+.check-line { display: flex; gap: .5rem; align-items: flex-start; margin: .5rem 0; }
+.check-line input { margin-top: .2rem; flex: none; }

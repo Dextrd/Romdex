@@ -39,7 +39,7 @@ public sealed class FakeWorker(string staging, string library) : IFilingWorker
         {
             if (_discs.TryGetValue(path, out var tracks) && tracks.All(t => roms.ContainsKey(t.Sha1)))
             {
-                var relative = Path.Combine(request.Layout == "romm" ? "romm" : system, name + ".chd");
+                var relative = Path.Combine(request.Folder, name + ".chd");
                 Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(library, relative))!);
                 File.Move(path, Path.Combine(library, relative));
                 _discs[Path.Combine(library, relative)] = tracks;
@@ -63,7 +63,7 @@ public sealed class FakeWorker(string staging, string library) : IFilingWorker
         if (found.Count < roms.Count)
             throw new FilingWorkerException($"igir found {found.Count} of {name}'s {roms.Count} files.");
 
-        var folder = request.Layout == "romm" ? "romm" : system;
+        var folder = request.Folder;
         if (roms.Count > 1)
             folder = Path.Combine(folder, name);
         Directory.CreateDirectory(Path.Combine(library, folder));
@@ -130,8 +130,32 @@ public sealed class FakeWorker(string staging, string library) : IFilingWorker
         return Task.FromResult(new ConvertResult(Path.GetRelativePath(Path.Combine(staging, request.StagingDirectory), output)));
     }
 
+    /// <summary>Names every system's folder after the layout, but for <c>datName</c>.</summary>
     public Task<FolderResult> FolderAsync(FolderRequest request, CancellationToken ct) =>
-        Task.FromResult(new FolderResult(request.Layout == "romm" ? "romm" : request.DatName));
+        Task.FromResult(new FolderResult(request.Layout == "datName" ? request.DatName : request.Layout));
+
+    public Task<MoveResult> MoveAsync(MoveRequest request, CancellationToken ct)
+    {
+        var moved = new List<LibraryMove>();
+        var failed = new List<FailedMove>();
+        foreach (var move in request.Moves)
+        {
+            var (source, target) = (Path.Combine(library, move.From), Path.Combine(library, move.To));
+            if (!File.Exists(source) || File.Exists(target))
+            {
+                failed.Add(new FailedMove(move.From, move.To, File.Exists(target) ? $"{move.To} is already there." : $"{move.From} isn't there."));
+                continue;
+            }
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Move(source, target);
+            if (_discs.Remove(source, out var tracks))
+                _discs[target] = tracks;
+            moved.Add(move);
+            for (var folder = Path.GetDirectoryName(source)!; folder != library && !Directory.EnumerateFileSystemEntries(folder).Any(); folder = Path.GetDirectoryName(folder)!)
+                Directory.Delete(folder);
+        }
+        return Task.FromResult(new MoveResult(moved, failed));
+    }
 
     public Task<StageResult> StageAsync(StageRequest request, CancellationToken ct)
     {

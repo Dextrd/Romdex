@@ -55,7 +55,7 @@ function disc(name, tracks) {
 test("a cartridge under any name is moved into its RomM folder, named as the DAT has it", async () => {
   const rom = data("Pixel Pond (USA)", 32768);
   const job = await stage("pond", [["whatever.gb", rom]]);
-  const result = await file({ stagingDirectory: job, dat: dat("Nintendo - Game Boy", "Pixel Pond (USA)", [["Pixel Pond (USA).gb", rom]]), layout: "romm", mode: "move" });
+  const result = await file({ stagingDirectory: job, dat: dat("Nintendo - Game Boy", "Pixel Pond (USA)", [["Pixel Pond (USA).gb", rom]]), folder: "gb", mode: "move" });
   assert.deepEqual(result.files, ["gb/Pixel Pond (USA).gb"]);
   assert.deepEqual(await fs.readFile(path.join(LIBRARY, "gb", "Pixel Pond (USA).gb")), rom);
   await assert.rejects(fs.access(path.join(STAGING, job, "whatever.gb")));
@@ -64,7 +64,7 @@ test("a cartridge under any name is moved into its RomM folder, named as the DAT
 test("zipped, in a folder named after the DAT", async () => {
   const rom = data("Moss Maze (Japan)", 32768);
   const job = await stage("maze", [["maze.gb", rom]]);
-  const result = await file({ stagingDirectory: job, dat: dat("Nintendo - Game Boy", "Moss Maze (Japan)", [["Moss Maze (Japan).gb", rom]]), layout: "datName", mode: "zip" });
+  const result = await file({ stagingDirectory: job, dat: dat("Nintendo - Game Boy", "Moss Maze (Japan)", [["Moss Maze (Japan).gb", rom]]), folder: "Nintendo - Game Boy", mode: "zip" });
   assert.deepEqual(result.files, ["Nintendo - Game Boy/Moss Maze (Japan).zip"]);
 });
 
@@ -73,18 +73,18 @@ test("a headered cartridge in a zip is found when it's written out of the zip", 
   const header = Buffer.from([0x4e, 0x45, 0x53, 0x1a, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
   const zip = await zipOf([["rabbit.nes", Buffer.concat([header, rom])]]);
   const job = await stage("rabbit", [["rabbit.zip", zip]]);
-  const result = await file({ stagingDirectory: job, dat: dat("Nintendo - Nintendo Entertainment System (Headerless)", "Rocket Rabbit (Europe)", [["Rocket Rabbit (Europe).nes", rom]]), layout: "romm", mode: "zip" });
+  const result = await file({ stagingDirectory: job, dat: dat("Nintendo - Nintendo Entertainment System (Headerless)", "Rocket Rabbit (Europe)", [["Rocket Rabbit (Europe).nes", rom]]), folder: "nes", mode: "zip" });
   assert.deepEqual(result.files, ["nes/Rocket Rabbit (Europe).zip"]);
 });
 
 test("a disc of several tracks goes in a folder of its own", async () => {
   const files = disc("Signal Lost (USA)", 2);
   const job = await stage("signal", files.map(([name, bytes]) => [`some folder/${name}`, bytes]));
-  const result = await file({ stagingDirectory: job, dat: dat("Sony - PlayStation", "Signal Lost (USA)", files), layout: "romm", mode: "move" });
+  const result = await file({ stagingDirectory: job, dat: dat("Sony - PlayStation", "Signal Lost (USA)", files), folder: "roms/psx", mode: "move" });
   assert.deepEqual(result.files, [
-    "psx/Signal Lost (USA)/Signal Lost (USA) (Track 1).bin",
-    "psx/Signal Lost (USA)/Signal Lost (USA) (Track 2).bin",
-    "psx/Signal Lost (USA)/Signal Lost (USA).cue",
+    "roms/psx/Signal Lost (USA)/Signal Lost (USA) (Track 1).bin",
+    "roms/psx/Signal Lost (USA)/Signal Lost (USA) (Track 2).bin",
+    "roms/psx/Signal Lost (USA)/Signal Lost (USA).cue",
   ]);
 });
 
@@ -92,7 +92,7 @@ test("files that aren't the dump are refused, and left where they are", async ()
   const job = await stage("junk", [["homebrew.gb", data("someone's own game", 8192)]]);
   const rom = data("Quiet Quarry (USA)", 32768);
   await assert.rejects(
-    file({ stagingDirectory: job, dat: dat("Nintendo - Game Boy", "Quiet Quarry (USA)", [["Quiet Quarry (USA).gb", rom]]), layout: "romm", mode: "move" }),
+    file({ stagingDirectory: job, dat: dat("Nintendo - Game Boy", "Quiet Quarry (USA)", [["Quiet Quarry (USA).gb", rom]]), folder: "gb", mode: "move" }),
     (e) => /didn't file it|igir exited/.test(e.message));
   await fs.access(path.join(STAGING, job, "homebrew.gb"));
 });

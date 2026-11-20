@@ -92,15 +92,61 @@ public sealed record DownloadSearchResult(IReadOnlyList<DownloadOffer> Offers, I
 /// <summary>Body of <c>POST /downloads/fetch</c>: a candidate from <c>POST /titles/{id}/search</c>, to stage and file.</summary>
 public sealed record StartDownload(Guid TitleId, Guid PluginId, Candidate Candidate, Guid? DumpId = null);
 
-/// <summary>How a system's games are laid out in the library folder.</summary>
+/// <summary>
+/// How games are laid out in the library folder: each system's folder named as an app or frontend names it. A system
+/// the layout has no name for gets a folder named as its DAT is.
+/// </summary>
 public enum LibraryLayout
 {
+    /// <summary>For a system: as the library's layout is, from <c>GET /library/format</c>.</summary>
+    Library,
+
     /// <summary>A folder per platform, named as RomM expects, such as <c>gb</c> or <c>psx</c>.</summary>
     Romm,
 
-    /// <summary>A folder per DAT, named as the DAT is, such as <c>Nintendo - Game Boy</c>.</summary>
+    /// <summary>A folder per DAT, named as the DAT is, such as <c>Nintendo - Game Boy</c>: as RetroArch's playlists are.</summary>
     DatName,
+
+    /// <summary>As ES-DE names them, such as <c>gb</c> or <c>gc</c>, which EmuDeck uses too.</summary>
+    EsDe,
+
+    /// <summary>As RetroDECK names them.</summary>
+    RetroDeck,
+
+    /// <summary>As Batocera names them, such as <c>gamecube</c>.</summary>
+    Batocera,
+
+    /// <summary>As MiSTer's cores look for them, such as <c>Gameboy</c>.</summary>
+    Mister,
+
+    /// <summary>For a system: a folder of your own naming, <see cref="FilingSettings.Folder"/>.</summary>
+    Custom,
 }
+
+/// <summary>
+/// The library's layout, which every system follows unless it has one of its own. Body and answer of
+/// <c>GET/PUT /library/format</c>.
+/// </summary>
+/// <param name="Layout">How systems' folders are named; not <see cref="LibraryLayout.Library"/> or <see cref="LibraryLayout.Custom"/>.</param>
+/// <param name="GamesFolder">The folder, inside the library folder, that systems' folders are in, such as <c>roms</c>; empty for the library folder itself.</param>
+/// <param name="BiosFolder">Where BIOS files go, such as <c>bios</c>; empty to keep them with the system's games.</param>
+/// <param name="BiosBySystem">Whether BIOS files go in a folder per system inside <paramref name="BiosFolder"/>, or all together in it.</param>
+public sealed record LibraryFormat(LibraryLayout Layout = LibraryLayout.Romm, string GamesFolder = "", string BiosFolder = "", bool BiosBySystem = true)
+{
+    public static LibraryFormat Default { get; } = new();
+}
+
+/// <summary>A system whose games are in a folder the library's layout wouldn't name.</summary>
+/// <param name="Folder">The folder its games are in, inside the games folder.</param>
+public sealed record SystemFolder(Guid SystemId, string System, string Folder);
+
+/// <summary>Answer to <c>GET /library/format/detect</c>: the layout the library's games are in now, as near as it can be told.</summary>
+/// <param name="Format">The layout and folders that fit the most games, or null when there are none to go by.</param>
+/// <param name="Systems">Systems the library has, by how many fit it.</param>
+/// <param name="Fitting">Of those, how many have their games where the layout would put them.</param>
+/// <param name="Others">Systems whose folder the layout names otherwise, which could keep theirs as a folder of their own.</param>
+/// <param name="Problem">Why it couldn't be told, such as no igir worker to name folders.</param>
+public sealed record LayoutDetection(LibraryFormat? Format, int Systems, int Fitting, IReadOnlyList<SystemFolder> Others, string? Problem = null);
 
 /// <summary>How a system's games are stored. Anything but <see cref="Keep"/> is checked against the DAT again after converting.</summary>
 public enum StorageFormat
@@ -135,23 +181,30 @@ public enum AlternativePolicy
 }
 
 /// <summary>How a system's arrivals are filed. Body and answer of <c>GET/PUT /systems/{id}/filing</c>.</summary>
-public sealed record FilingSettings(LibraryLayout Layout = LibraryLayout.Romm, StorageFormat Storage = StorageFormat.Keep,
-    AlternativePolicy Alternatives = AlternativePolicy.File)
+/// <param name="Layout">The library's layout, unless the system has one of its own.</param>
+/// <param name="Folder">With <see cref="LibraryLayout.Custom"/>: the system's folder, inside the games folder.</param>
+public sealed record FilingSettings(LibraryLayout Layout = LibraryLayout.Library, StorageFormat Storage = StorageFormat.Keep,
+    AlternativePolicy Alternatives = AlternativePolicy.File, string? Folder = null)
 {
     public static FilingSettings Default { get; } = new();
 }
 
-/// <summary>A game in the library that isn't where the system's filing settings would put it.</summary>
+/// <summary>A game in the library that isn't where the layout would put it.</summary>
 /// <param name="From">Where it is, relative to the library.</param>
-/// <param name="To">Where Downloads would file it.</param>
-public sealed record AdoptionMove(DumpRef Dump, IReadOnlyList<string> From, IReadOnlyList<string> To);
+/// <param name="To">Where it goes, file for file.</param>
+/// <param name="Blocked">Why it can't move, such as another file already being there.</param>
+public sealed record AdoptionMove(DumpRef Dump, IReadOnlyList<string> From, IReadOnlyList<string> To, string? Blocked = null);
 
 /// <summary>
-/// Answer to <c>GET /systems/{id}/filing/adoption</c>: how the system's games in the library compare with where its
-/// filing settings would put them. It only reports; nothing is moved.
+/// Answer to <c>GET /systems/{id}/filing/adoption</c> and <c>GET /library/format/preview</c>: how games in the library
+/// compare with where the layout would put them. It only reports; formatting moves them.
 /// </summary>
 /// <param name="Checked">Games in the library, whole.</param>
 /// <param name="InPlace">Those already where they'd be filed.</param>
 /// <param name="Moves">The rest, and where each would go.</param>
-/// <param name="Problem">Why it couldn't be worked out, such as no igir worker to name RomM folders.</param>
+/// <param name="Problem">Why it couldn't be worked out, such as no igir worker to name folders.</param>
 public sealed record AdoptionReport(int Checked, int InPlace, IReadOnlyList<AdoptionMove> Moves, string? Problem = null);
+
+/// <summary>Body of <c>POST /library/format/apply</c>: moves the library's games to where the layout puts them, as a task.</summary>
+/// <param name="SystemId">Just this system's; null for every system.</param>
+public sealed record FormatLibrary(Guid? SystemId = null);

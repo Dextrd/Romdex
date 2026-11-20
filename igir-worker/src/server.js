@@ -4,12 +4,13 @@ import http from "node:http";
 import { fileURLToPath } from "node:url";
 
 import { convert, read } from "./discs.js";
-import { file, folderFor } from "./filing.js";
+import { file, folderFor, layouts } from "./filing.js";
+import { move } from "./move.js";
 import { LIBRARY, RequestError, STAGING } from "./paths.js";
 import { stage } from "./stage.js";
 import { CHDMAN, DOLPHIN_TOOL, IGIR_VERSION, Queue, ToolError, versionOf } from "./tools.js";
 
-export const VERSION = "0.1.0";
+export const VERSION = "0.2.0";
 
 const queue = new Queue();
 
@@ -22,7 +23,9 @@ const routes = {
     dolphinTool: await versionOf(DOLPHIN_TOOL, ["--version"], /([0-9][0-9a-z.+-]*)/i),
   }),
   "POST /v1/file": (body) => queue.run(() => file(body)),
+  "GET /v1/layouts": async () => ({ layouts: ["datName", ...layouts()] }),
   "POST /v1/folder": async (body) => folderFor(body),
+  "POST /v1/move": (body) => queue.run(() => move(body)),
   "POST /v1/convert": (body) => queue.run(() => convert(body)),
   "POST /v1/read": (body) => read(body),
   "POST /v1/stage": (body) => queue.run(() => stage(body)),

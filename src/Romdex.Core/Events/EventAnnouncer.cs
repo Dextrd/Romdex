@@ -66,8 +66,24 @@ public sealed class EventAnnouncer(IServiceScopeFactory scopes, EventFeed feed, 
 
     private const int Batch = 100;
 
+    // One announcing at a time, or two would read the same changes and send them twice.
+    private readonly SemaphoreSlim _one = new(1, 1);
+
     /// <summary>Announces what changed since last time. True if there may be more.</summary>
     public async Task<bool> AnnounceAsync(CancellationToken ct)
+    {
+        await _one.WaitAsync(ct);
+        try
+        {
+            return await AnnounceOnceAsync(ct);
+        }
+        finally
+        {
+            _one.Release();
+        }
+    }
+
+    private async Task<bool> AnnounceOnceAsync(CancellationToken ct)
     {
         using var scope = scopes.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<RomdexDbContext>();

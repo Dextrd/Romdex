@@ -1,0 +1,193 @@
+@inject RomdexClient Api
+@inject AuthState Auth
+
+@*
+    The library's layout: how systems' folders are named, and where games and BIOS files go, as other apps expect them.
+    What arrives follows it from then on; formatting moves what's there already.
+*@
+@if (_format is not null)
+{
+    <h2>Library layout</h2>
+    <p class="muted small">
+        How the library folder is laid out, so the app you play with finds everything. What Downloads files goes where this says;
+        to move the games you have already, preview and format the library below. A system can have a layout of its own on its page.
+    </p>
+    <div class="card settings-card">
+        <label class="field">
+            <span class="field-label">Layout</span>
+            <select disabled="@(!CanFile)" @onchange="e => Edit(_format with { Layout = Enum.Parse<LibraryLayout>((string)e.Value!) })">
+                @foreach (var choice in Layouts)
+                {
+                    <option value="@choice" selected="@(_format.Layout == choice)">@Label(choice)</option>
+                }
+            </select>
+            <span class="muted small">@Example(_format.Layout)</span>
+        </label>
+        <label class="field">
+            <span class="field-label">Games folder</span>
+            <input type="text" disabled="@(!CanFile)" placeholder="The library folder itself" value="@_format.GamesFolder"
+                   @onchange="e => Edit(_format with { GamesFolder = (string?)e.Value ?? string.Empty })" />
+            <span class="muted small">The folder systems' folders are in, inside the library folder, such as <code>roms</code>. Leave it empty when they're right in it.</span>
+        </label>
+        <label class="field">
+            <span class="field-label">BIOS folder</span>
+            <input type="text" disabled="@(!CanFile)" placeholder="With each system's games" value="@_format.BiosFolder"
+                   @onchange="e => Edit(_format with { BiosFolder = (string?)e.Value ?? string.Empty })" />
+            <span class="muted small">Where BIOS files go, such as <code>bios</code>. Leave it empty to keep them with each system's games.</span>
+        </label>
+        @if (_format.BiosFolder.Length > 0)
+        {
+            <label class="check-line">
+                <input type="checkbox" disabled="@(!CanFile)" checked="@_format.BiosBySystem" @onchange="e => Edit(_format with { BiosBySystem = (bool)e.Value! })" />
+                A folder per system in it, as RomM expects; else all together, as ES-DE, EmuDeck and Batocera do
+            </label>
+        }
+
+        <div class="toolbar">
+            @if (CanFile)
+            {
+                <button class="primary" disabled="@(!_changed)" @onclick="SaveAsync">Save layout</button>
+            }
+            <button @onclick="DetectAsync" disabled="@_detecting" title="Work out the layout from where the games you have are. Nothing changes until you save.">Match my library</button>
+            @if (_saved) { <span class="muted small">Saved. What arrives from now on goes there.</span> }
+        </div>
+        @if (_error is not null) { <div class="error small">@_error</div> }
+        @if (_detected is { Problem: { } problem }) { <div class="error small">@problem</div> }
+        else if (_detected is { Format: null }) { <div class="muted small">There are no games in the library to go by yet.</div> }
+        else if (_detected is { Format: { } found } detected)
+        {
+            <div class="small detected">
+                <p>
+                    It looks like <strong>@Label(found.Layout)</strong>, with games in
+                    @if (found.GamesFolder.Length == 0) { <text>the library folder</text> } else { <code>@found.GamesFolder</code> } and BIOS files
+                    @(found.BiosFolder.Length == 0 ? "with each system's games" : found.BiosBySystem ? $"in {found.BiosFolder}, a folder per system" : $"all in {found.BiosFolder}"):
+                    @detected.Fitting.ToString("N0") of @Format.Count(detected.Systems, "system fits", "systems fit").
+                </p>
+                @if (detected.Others.Count > 0)
+                {
+                    <label class="check-line">
+                        <input type="checkbox" checked="@_keepOthers" @onchange="e => _keepOthers = (bool)e.Value!" />
+                        Keep the folders of @Format.Count(detected.Others.Count, "system", "systems") the layout names otherwise:
+                        @string.Join(", ", detected.Others.Take(6).Select(o => $"{o.System} in {o.Folder}"))@(detected.Others.Count > 6 ? ", …" : "")
+                    </label>
+                }
+                @if (CanFile)
+                {
+                    <div class="toolbar"><button @onclick="UseDetectedAsync">Use this layout</button></div>
+                }
+            </div>
+        }
+    </div>
+
+    <div class="card settings-card">
+        <div class="field-label">Format the library</div>
+        <div class="muted small">Moves the games you have to where the layout puts them, and renames them as the DATs name them. You see every move first.</div>
+        <FormatPreview @ref="_preview" />
+    </div>
+}
+
+@code {
+    private static readonly LibraryLayout[] Layouts =
+        [LibraryLayout.Romm, LibraryLayout.EsDe, LibraryLayout.Batocera, LibraryLayout.RetroDeck, LibraryLayout.Mister, LibraryLayout.DatName];
+
+    private LibraryFormat? _format;
+    private bool _changed;
+    private bool _saved;
+    private string? _error;
+    private LayoutDetection? _detected;
+    private bool _detecting;
+    private bool _keepOthers = true;
+    private FormatPreview? _preview;
+
+    private bool CanFile => Auth.May(UserPermissions.Files);
+
+    protected override async Task OnInitializedAsync() => _format = await Api.GetLibraryFormatAsync();
+
+    public static string Label(LibraryLayout layout) => layout switch
+    {
+        LibraryLayout.Library => "As the library is",
+        LibraryLayout.Romm => "RomM",
+        LibraryLayout.EsDe => "ES-DE and EmuDeck",
+        LibraryLayout.Batocera => "Batocera",
+        LibraryLayout.RetroDeck => "RetroDECK",
+        LibraryLayout.Mister => "MiSTer",
+        LibraryLayout.DatName => "Named as the DATs are, as RetroArch's playlists are",
+        LibraryLayout.Custom => "A folder of your own",
+        _ => layout.ToString(),
+    };
+
+    private static string Example(LibraryLayout layout) => layout switch
+    {
+        LibraryLayout.Romm => "A folder per platform as RomM names them, such as gb, psx and ngc.",
+        LibraryLayout.EsDe => "A folder per system as ES-DE names them, such as gb, psx and gc. EmuDeck uses ES-DE's.",
+        LibraryLayout.Batocera => "A folder per system as Batocera names them, such as gb, psx and gamecube.",
+        LibraryLayout.RetroDeck => "A folder per system as RetroDECK names them, such as gb, psx and gc.",
+        LibraryLayout.Mister => "A folder per core as MiSTer looks for them, such as Gameboy and PSX.",
+        LibraryLayout.DatName => "A folder per DAT, named as the DAT is, such as Nintendo - Game Boy.",
+        _ => "",
+    } + " A system the layout has no name for gets a folder named as its DAT is.";
+
+    private void Edit(LibraryFormat format)
+    {
+        _format = format;
+        _changed = true;
+        _saved = false;
+    }
+
+    private async Task SaveAsync()
+    {
+        _error = null;
+        try
+        {
+            _format = await Api.SetLibraryFormatAsync(_format!);
+            _changed = false;
+            _saved = true;
+            _preview?.Reset();
+        }
+        catch (Exception e) when (e is RomdexApiException or HttpRequestException)
+        {
+            _error = e.Message;
+        }
+    }
+
+    private async Task DetectAsync()
+    {
+        _detecting = true;
+        try
+        {
+            _detected = await Api.DetectLibraryFormatAsync();
+        }
+        catch (Exception e) when (e is RomdexApiException or HttpRequestException)
+        {
+            _detected = new LayoutDetection(null, 0, 0, [], e.Message);
+        }
+        finally
+        {
+            _detecting = false;
+        }
+    }
+
+    // Saves the layout found, and gives the systems that don't fit it their own folders, if asked to.
+    private async Task UseDetectedAsync()
+    {
+        if (_detected?.Format is not { } found)
+            return;
+        _format = found;
+        await SaveAsync();
+        if (_error is not null || !_keepOthers)
+            return;
+        try
+        {
+            foreach (var other in _detected.Others)
+            {
+                var filing = await Api.GetFilingAsync(other.SystemId);
+                await Api.SetFilingAsync(other.SystemId, filing with { Layout = LibraryLayout.Custom, Folder = other.Folder });
+            }
+        }
+        catch (Exception e) when (e is RomdexApiException or HttpRequestException)
+        {
+            _error = e.Message;
+        }
+        _detected = null;
+    }
+}

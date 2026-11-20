@@ -45,11 +45,16 @@ compose file: see [installing](docs/guide/installing.md).
 - `tools/compare-igir.py`, to check Romdex's report against igir's.
 - Downloads: dumps arrive through retrievers, are identified by hash and filed in the library, and whatever can't be
   verified waits on the new Downloads page to be accepted, rejected or retried. They show on the Activity page too.
-- The igir worker, the only thing that writes the library: it files each dump with igir, in RomM's folders or the
-  DAT's, and makes and reads CHDs (chdman) and RVZs (DolphinTool). It's GPL, so it's a container of its own.
-- Each system's filing, on its page: the folder layout, the storage format (CHD and RVZ checked against the DAT before
-  the original goes), and what to do with another dump of a game you have. **Check the library** reports which of
-  its games aren't where Downloads would file them, without moving anything.
+- The igir worker, the only thing that writes the library: it files each dump with igir, and makes and reads CHDs
+  (chdman) and RVZs (DolphinTool). It's GPL, so it's a container of its own.
+- The library's layout, under Settings: system folders named as RomM, ES-DE and EmuDeck, Batocera, RetroDECK or MiSTer
+  name them, or as the DATs are; a games folder, such as `roms`; and a BIOS folder, by system or all together.
+  **Match my library** works it out from where your games are. Everything Downloads files follows it.
+- Formatting the library: a preview of every game that would move to where the layout puts it, renamed as the DAT
+  names it, then the moves, once confirmed, for the whole library or one system. Folders left empty, or with only
+  `.DS_Store` or `Thumbs.db` in them, go; files that match nothing stay where they are.
+- Each system's filing, on its page: its own layout or folder, the storage format (CHD and RVZ checked against the DAT
+  before the original goes), and what to do with another dump of a game you have.
 - **Get** on Search and on a game's page asks the plugins that search, and fetches what you choose.
 - Review's **Send to Downloads** takes a file that matches nothing out of the library, to be identified again or rejected.
 - Three retrievers, each in a repository of its own (`dextrd/romdex-retriever-<name>`) with its own releases and

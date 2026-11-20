@@ -36,12 +36,42 @@ An arrival waits for you when:
 **Reject** throws an arrival's files away. **Retry** identifies it again, or fetches it again if its files are gone.
 Open an arrival to see its files' hashes, what each matched, and the plugin's notes, such as a ripper's log.
 
+## The library's layout
+
+Under **Settings**, **Library layout** says how the library folder is laid out, so the app you play with finds
+everything. Whatever Downloads files goes where it says.
+
+- **Layout:** how each system's folder is named, as an app expects:
+
+  | Layout | Game Boy | PlayStation | GameCube |
+  |---|---|---|---|
+  | RomM (the default) | `gb` | `psx` | `ngc` |
+  | ES-DE and EmuDeck | `gb` | `psx` | `gc` |
+  | Batocera | `gb` | `psx` | `gamecube` |
+  | RetroDECK | `gb` | `psx` | `gc` |
+  | MiSTer | `Gameboy` | `PSX` | (none: `Nintendo - GameCube`) |
+  | Named as the DATs are, as RetroArch's playlists are | `Nintendo - Game Boy` | `Sony - PlayStation` | `Nintendo - GameCube` |
+
+  The names are [igir](https://igir.io)'s. A system the layout has no name for gets a folder named as its DAT is.
+- **Games folder:** the folder systems' folders are in, inside the library folder, such as `roms`. Empty when they're
+  right in it.
+- **BIOS folder:** where BIOS files go, such as `bios`, in a folder per system (as RomM expects) or all together (as
+  ES-DE, EmuDeck and Batocera do). Empty to keep them with each system's games.
+
+A game of one file goes straight in its system's folder, named as the DAT names it; a game of several files gets a
+folder of its own inside it. An archive, CHD or RVZ is named after the dump.
+
+If your library is laid out already, mount its top folder as `ROMS_PATH` and choose **Match my library**: Romdex works
+out the layout and folders from where your games are. With an `emulation` folder holding `roms/<system>` and
+`bios/<system>`, say, that's games in `roms` and BIOS files in `bios`, by system. Systems whose folders the layout
+names otherwise can keep theirs. Nothing changes until you choose **Use this layout**.
+
 ## Each system's filing
 
 On a system's page, under **Filing**:
 
-- **Folder:** a folder per platform, named as RomM expects (`gb`, `psx`), which is the default; or a folder named as
-  the DAT is, such as `Nintendo - Game Boy`. A game of several files gets a folder of its own inside it.
+- **Folder:** as the library's layout is (the default), another layout, or a folder of your own naming, inside the
+  games folder.
 - **Stored as:**
   - **As it arrives**, which is the default;
   - **loose files** or **a zip per game**, for cartridges;
@@ -50,12 +80,22 @@ On a system's page, under **Filing**:
 - **Another dump of a game you have:** file it beside the one you have (the default), hold it for review, or throw it
   away.
 
-These apply to what arrives from then on. Files already in the library stay as they are.
+These apply to what arrives from then on. Games already in the library move only when you format it.
 
-## The library you already have
+## Formatting the library you have
 
-**Check the library**, under a system's **Filing**, compares the games already in the library with where Downloads
-would file them, and lists the ones that would go elsewhere. It moves nothing. Moving them comes in a later version.
+**Preview formatting**, under **Settings → Library layout**, compares the games in the library with where the layout
+puts them, and lists every one that would move, and where. On a system's page, **Check the library** does the same for
+its games. Nothing moves until you choose **Move** and confirm.
+
+Formatting moves each game to its system's folder and renames it as the DAT names it. Folders it leaves empty, or with
+only what operating systems leave behind (`.DS_Store`, `Thumbs.db`, `desktop.ini`), go; any folder with something else
+in it stays. It runs as a task on the Activity page, and the library follows each file as it moves, so nothing is
+hashed again. A connected app is asked to scan for them in their new places.
+
+Only games that are whole and match the DATs move. Files that match nothing stay where they are, and so does a game
+whose new place is taken, or whose archive holds other games too: the preview says why. Converting what you have to
+another storage format isn't part of formatting.
 
 Under **Review**, **Send to Downloads** takes a file that matches nothing, or can't be read, out of the library and
 through Downloads again. There it can be identified afresh, such as after you add a DAT, or rejected.
