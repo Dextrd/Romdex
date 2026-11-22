@@ -18,8 +18,12 @@ else if (_title is null)
 }
 else
 {
-    var held = _title.Dumps.Where(d => d.Status != DumpStatus.Missing).ToList();
-    var others = _title.Dumps.Where(d => d.Status == DumpStatus.Missing).ToList();
+    // The game's own ROMs; its updates and DLC are listed apart, below them.
+    var roms = _title.Dumps.Where(d => !d.Kinds.Contains(DumpKind.Update) && !d.Kinds.Contains(DumpKind.Dlc)).ToList();
+    var held = roms.Where(d => d.Status != DumpStatus.Missing).ToList();
+    var others = roms.Where(d => d.Status == DumpStatus.Missing).ToList();
+    var updates = _title.Dumps.Where(d => d.Kinds.Contains(DumpKind.Update)).ToList();
+    var dlc = _title.Dumps.Where(d => d.Kinds.Contains(DumpKind.Dlc) && !d.Kinds.Contains(DumpKind.Update)).ToList();
     // What plays: the first dump the library has whole that plays in the browser or opens in the connected app.
     var playable = held.Select(d => _play.GetValueOrDefault(d.Id)).FirstOrDefault(p => p is { PlayerUrl: not null } or { App: not null });
     var info = _info;
@@ -30,7 +34,7 @@ else
     @* The cover with what's known of the game below it; beside them, its name, what can be done with it, what it's about
        and what reviewers gave it. *@
     <div class="game-page">
-        <Cover Url="@_title.Cover" />
+        <Cover Url="@_title.Cover" Keep="true" />
         @if (info is not null && Facts(info) is { Count: > 0 } facts)
         {
             <dl class="game-facts">
@@ -174,9 +178,7 @@ else
                 <section class="game-reviews">
                     <h2 class="section">Reviews</h2>
                     @* A row that scrolls sideways, by its arrows or a swipe, fading out where there's more. *@
-                    <div class="carousel at-start">
-                        <button type="button" class="carousel-arrow" data-step="-1" aria-label="Earlier reviews"><span class="chevron left"></span></button>
-                        <div class="carousel-track" tabindex="0" aria-label="Reviews">
+                    <Carousel Label="Reviews">
                             @foreach (var score in info.Scores)
                             {
                                 var percent = Format.Percent(score.Score);
@@ -193,9 +195,7 @@ else
                                     <span class="score-by small">@score.Reviewer</span>
                                 </div>
                             }
-                        </div>
-                        <button type="button" class="carousel-arrow" data-step="1" aria-label="Later reviews"><span class="chevron right"></span></button>
-                    </div>
+                    </Carousel>
                 </section>
             }
 
@@ -203,9 +203,7 @@ else
             {
                 <section class="game-images">
                     <h2 class="section">Screenshots</h2>
-                    <div class="carousel at-start">
-                        <button type="button" class="carousel-arrow" data-step="-1" aria-label="Earlier pictures"><span class="chevron left"></span></button>
-                        <div class="carousel-track shots" tabindex="0" aria-label="Screenshots">
+                    <Carousel TrackClass="shots" Label="Screenshots">
                             @foreach (var image in info.Images)
                             {
                                 <button type="button" class="shot" title="See it bigger" @onclick="() => _viewing = image">
@@ -214,9 +212,7 @@ else
                                     <span class="shot-label small">@ImageName(image)</span>
                                 </button>
                             }
-                        </div>
-                        <button type="button" class="carousel-arrow" data-step="1" aria-label="Later pictures"><span class="chevron right"></span></button>
-                    </div>
+                    </Carousel>
                     <p class="muted small">From @string.Join(", ", info.Images.Select(i => i.Source).Distinct())</p>
                 </section>
             }
@@ -241,11 +237,13 @@ else
     }
     @if (others.Count > 0)
     {
-        <h2 class="section">@(held.Count == 0 ? $"Dumps the DAT lists ({others.Count})" : $"Other dumps the DAT lists ({others.Count})")</h2>
+        <h2 class="section">@(held.Count == 0 ? $"ROMs ({others.Count})" : $"Other ROMs ({others.Count})")</h2>
         <div class="card dumps">
             @foreach (var dump in others) { @Dump(dump) }
         </div>
     }
+    @AddOns("Updates", updates)
+    @AddOns("DLC", dlc)
 
     @if (info is { InSeries.Count: > 0 })
     {
@@ -254,17 +252,13 @@ else
         {
             <section class="game-series">
                 <h2 class="section">More of @series.Name</h2>
-                <div class="carousel at-start" data-series="@series.Name">
-                    <button type="button" class="carousel-arrow" data-step="-1" aria-label="Earlier games"><span class="chevron left"></span></button>
-                    <div class="carousel-track series-track" tabindex="0" aria-label="@($"Games in {series.Name}")">
+                <Carousel @key="series.Name" TrackClass="series-track" Label="@($"Games in {series.Name}")">
                         @foreach (var game in series.Games)
                         {
                             <GameTile @key="game.Id" Href="@($"titles/{game.Id}")" Name="@game.Name" Cover="@game.Cover" Status="game.Status"
                                       Systems="@string.Join(" · ", game.Titles.Select(t => _short.GetValueOrDefault(t.SystemId)).OfType<string>().Distinct())" />
                         }
-                    </div>
-                    <button type="button" class="carousel-arrow" data-step="1" aria-label="Later games"><span class="chevron right"></span></button>
-                </div>
+                </Carousel>
             </section>
         }
     }
@@ -283,7 +277,12 @@ else
     private bool _notFound;
     private Guid? _picked;
     private (Guid? DumpId, string Name)? _getting;
-    private readonly Dictionary<Guid, PlayInfo> _play = [];
+    private Dictionary<Guid, PlayInfo> _play = [];
+    // The game's versions on other systems, fetched while one's looked at, so picking another shows it at once; and
+    // whether what's shown of the game is still the version before's, until this one's details are all in.
+    private readonly Dictionary<Guid, (TitleDetail Title, GameInfo Info)> _versions = [];
+    private readonly HashSet<Guid> _fetching = [];
+    private bool _infoBefore;
     private readonly Dictionary<Guid, string> _opening = [];
     private ElementReference _summary;
     private Dictionary<Guid, string> _short = [];
@@ -299,26 +298,52 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
-        _title = await Api.GetTitleAsync(Id);
+        // The same game on another system is mostly the same page: what's known of it stays until this version's is in,
+        // rather than the page emptying while it's fetched. Another game starts afresh.
+        var sameGame = _title?.Versions?.Any(v => v.Id == Id) == true;
+        if (!sameGame)
+            _versions.Clear();
+        var fetched = _versions.Remove(Id, out var version) ? version : ((TitleDetail, GameInfo)?)null;
+        var title = fetched?.Item1 ?? await Api.GetTitleAsync(Id);
+        // Another may have been opened while this one was fetched.
+        if (title is not null && title.Id != Id)
+            return;
+        _title = title;
         _picked = null;
         _notFound = _title is null;
-        _info = null;
-        _summaryLong = null;
-        _summaryOpen = false;
+        _infoBefore = sameGame && fetched is null && _info is not null;
+        if (fetched is { } got)
+        {
+            if (got.Item2.Summary != _info?.Summary)
+                _summaryLong = null;
+            _info = got.Item2;
+        }
+        else if (!sameGame)
+            _info = null;
+        if (!sameGame)
+        {
+            _summaryLong = null;
+            _summaryOpen = false;
+        }
         _viewing = null;
-        _play.Clear();
         _opening.Clear();
         if (_title is null)
             return;
         // The details can take a few seconds the first time: the page is shown without them meanwhile.
-        _ = LoadInfoAsync(Id);
+        if (fetched is null)
+            _ = LoadInfoAsync(Id);
+        else
+            _ = FetchVersionsAsync(Id);
         if (_short.Count == 0)
             _short = (await Api.ListSystemsAsync()).ToDictionary(s => s.Id, Format.Short);
-        if (!Auth.May(UserPermissions.Play))
-            return;
-        foreach (var dump in _title.Dumps.Where(d => d.Status == DumpStatus.Good))
-            if (await Api.GetPlayAsync(dump.Id) is { } play)
-                _play[dump.Id] = play;
+        // What plays is worked out before it's shown, so the Play button doesn't blink out and back between versions.
+        var play = new Dictionary<Guid, PlayInfo>();
+        if (Auth.May(UserPermissions.Play))
+            foreach (var dump in _title.Dumps.Where(d => d.Status == DumpStatus.Good))
+                if (await Api.GetPlayAsync(dump.Id) is { } found)
+                    play[dump.Id] = found;
+        if (Id == _title.Id)
+            _play = play;
     }
 
     // What's known of the game, shown as it's found: each answer is what's been found so far, until there's no more.
@@ -338,12 +363,47 @@ else
             // Another game may have been opened meanwhile, or another page.
             if (id != Id || _gone)
                 return;
+            // The version before's details stay until this one's are all in, rather than giving way to a few at a time.
+            if (_infoBefore && info.Loading)
+                continue;
+            _infoBefore = false;
             // A summary that's changed is measured again.
             if (info.Summary != _info?.Summary)
                 _summaryLong = null;
             _info = info;
             StateHasChanged();
             if (!info.Loading)
+                break;
+        }
+        await FetchVersionsAsync(id);
+    }
+
+    // The game's versions on other systems, one at a time, while this one is looked at: the server looks each up as it
+    // would on opening it, and what it finds is kept for when it's picked.
+    private async Task FetchVersionsAsync(Guid id)
+    {
+        foreach (var version in _title?.Versions ?? [])
+        {
+            if (version.Id == id || _versions.ContainsKey(version.Id) || !_fetching.Add(version.Id))
+                continue;
+            try
+            {
+                var title = await Api.GetTitleAsync(version.Id);
+                var info = GameInfo.Empty with { Loading = true };
+                while (title is not null && info.Loading && !_gone && _title?.Versions?.Any(v => v.Id == version.Id) == true)
+                    info = await Api.GetGameInfoSoFarAsync(version.Id) ?? GameInfo.Empty;
+                // Kept only while it's still a version of the game shown, and not the one shown.
+                if (title is not null && !info.Loading && version.Id != Id && _title?.Versions?.Any(v => v.Id == version.Id) == true)
+                    _versions[version.Id] = (title, info);
+            }
+            catch (HttpRequestException)
+            {
+            }
+            finally
+            {
+                _fetching.Remove(version.Id);
+            }
+            if (_gone || id != Id)
                 return;
         }
     }
@@ -374,8 +434,6 @@ else
             if (_summaryLong == true)
                 StateHasChanged();
         }
-        // The rows that scroll sideways: each is set up once, and checked again for whether there's more past an edge.
-        await Js.InvokeVoidAsync("romdexGame.carousels");
     }
 
     private void CloseOnEscape(KeyboardEventArgs e)
@@ -454,6 +512,20 @@ else
         }
     }
 
+    // A game's updates or DLC, closed until opened, those in the library first.
+    private RenderFragment AddOns(string heading, List<DumpInfo> dumps) => __builder =>
+    {
+        if (dumps.Count == 0)
+            return;
+        var have = dumps.Count(d => d.Status != DumpStatus.Missing);
+        <details class="add-ons">
+            <summary class="section">@heading <span class="muted">(@dumps.Count@(have > 0 ? $", {have} in your library" : ""))</span></summary>
+            <div class="card dumps">
+                @foreach (var dump in dumps.OrderBy(d => d.Status == DumpStatus.Missing)) { @Dump(dump) }
+            </div>
+        </details>
+    };
+
     // A dump: its name, where it came out and in what languages, enough to tell it from the others; its serial, files,
     // hashes and where the library has it, opened.
     private RenderFragment Dump(DumpInfo dump) => __builder =>
@@ -465,7 +537,7 @@ else
                     <span class="dump-name">@dump.Name</span>
                     <span class="dump-line">
                         @string.Join(", ", dump.Regions)
-                        @if (dump.Kinds.Count > 0) { <span class="muted"> · @string.Join(", ", dump.Kinds)</span> }
+                        @if (dump.Kinds.Where(k => k is not (DumpKind.Update or DumpKind.Dlc)).ToList() is { Count: > 0 } kinds) { <span class="muted"> · @string.Join(", ", kinds)</span> }
                         @if (dump.Disc is not null) { <span class="muted"> · Disc @dump.Disc</span> }
                     </span>
                     @if (dump.Languages.Count > 0)

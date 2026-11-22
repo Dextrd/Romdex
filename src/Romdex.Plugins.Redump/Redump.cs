@@ -33,7 +33,7 @@ public sealed class RedumpFactory : IPluginFactory
                   "type": "array",
                   "default": ["PSX", "GC"],
                   "title": "Systems",
-                  "description": "The disc systems to fetch DATs for. Cartridge systems' DATs are No-Intro's: download them from DAT-o-MATIC into the DAT folder.",
+                  "description": "The disc systems to fetch DATs for. Cartridge systems' DATs are No-Intro's: the libretro DATs catalogue fetches them, or download them from DAT-o-MATIC into the DAT folder.",
                   "items": {
                     "type": "string",
                     "oneOf": [

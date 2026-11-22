@@ -21,6 +21,13 @@ public enum DumpKinds
     Bad = 1 << 9,
     Bios = 1 << 10,
     Alternate = 1 << 11,
+    /// <summary>An update or patch to a game, kept with it rather than as a game of its own.</summary>
+    Update = 1 << 12,
+    /// <summary>Downloadable content for a game, such as an expansion, a theme or an avatar, kept with it.</summary>
+    Dlc = 1 << 13,
+
+    /// <summary>What's added to a game rather than the game itself.</summary>
+    AddOn = Update | Dlc,
 }
 
 /// <summary>A dump's name, read into its parts.</summary>
@@ -66,13 +73,15 @@ public static partial class DumpNames
         ["Demo"] = DumpKinds.Demo, ["Kiosk"] = DumpKinds.Demo, ["Sample"] = DumpKinds.Demo, ["Beta"] = DumpKinds.Beta, ["Proto"] = DumpKinds.Proto,
         ["Prototype"] = DumpKinds.Proto, ["Pirate"] = DumpKinds.Pirate, ["Unl"] = DumpKinds.Unlicensed, ["Aftermarket"] = DumpKinds.Aftermarket,
         ["Homebrew"] = DumpKinds.Homebrew, ["Program"] = DumpKinds.Program, ["Test Program"] = DumpKinds.Program, ["Debug"] = DumpKinds.Debug,
-        ["Alt"] = DumpKinds.Alternate, ["Hack"] = DumpKinds.Pirate,
+        ["Alt"] = DumpKinds.Alternate, ["Hack"] = DumpKinds.Pirate, ["Update"] = DumpKinds.Update, ["Patch"] = DumpKinds.Update,
+        ["DLC"] = DumpKinds.Dlc, ["DLCTrial"] = DumpKinds.Dlc, ["Theme"] = DumpKinds.Dlc, ["Avatar"] = DumpKinds.Dlc,
     };
 
     // Redump's categories, where they say more than the name does.
     private static readonly Dictionary<string, DumpKinds> Categories = new(StringComparer.OrdinalIgnoreCase)
     {
         ["Demos"] = DumpKinds.Demo, ["Coverdiscs"] = DumpKinds.Demo, ["Preproduction"] = DumpKinds.Proto, ["Applications"] = DumpKinds.Program,
+        ["DLC"] = DumpKinds.Dlc, ["Add-Ons"] = DumpKinds.Dlc, ["Updates"] = DumpKinds.Update,
     };
 
     [GeneratedRegex(@"\(([^()]*)\)|\[([^\[\]]*)\]")]
@@ -141,6 +150,60 @@ public static partial class DumpNames
         var title = Tidy(Groups().Replace(name, ""));
         var release = discTag is null ? name : Tidy(name.Replace(discTag, ""));
         return new DumpName(title.Length > 0 ? title : name, release, regions, languages, revision, disc.Length > 0 ? disc : null, kinds);
+    }
+
+    // Articles DATs move to the end of a name, as in "Legend of Zelda, The", so lists sort by the word after them.
+    private static readonly string[] Articles =
+        ["The", "A", "An", "Die", "Der", "Das", "Ein", "Eine", "Le", "La", "Les", "L'", "Un", "Une", "El", "Los", "Las", "Il", "Lo", "Gli", "De", "Het"];
+
+    /// <summary>
+    /// A title as the game is written, from the DAT's name for it: each article back in front of its words, and the
+    /// first " - " a colon, as DATs write one where a file name can't have it. "Legend of Zelda, The - Majora's Mask" is
+    /// "The Legend of Zelda: Majora's Mask"; "Lord of the Rings, The - Two Towers, The" is "The Lord of the Rings: The
+    /// Two Towers". An article at the end of a later part, with none on the first, is the whole name's:
+    /// "Legend of Zelda - Spirit Tracks, The" is "The Legend of Zelda: Spirit Tracks".
+    /// </summary>
+    public static string Display(string title)
+    {
+        var parts = title.Split(" - ");
+        string? Article(ref string part)
+        {
+            foreach (var article in Articles)
+                if (part.EndsWith(", " + article, StringComparison.Ordinal) && part.Length > article.Length + 2)
+                {
+                    part = part[..^(article.Length + 2)];
+                    return article;
+                }
+            return null;
+        }
+        string Front(string article, string words) => article.EndsWith('\'') ? article + words : article + " " + words;
+
+        var first = Article(ref parts[0]);
+        string? whole = null;
+        for (var i = 1; i < parts.Length; i++)
+            if (Article(ref parts[i]) is { } article)
+            {
+                if (first is null && whole is null)
+                    whole = article;
+                else
+                    parts[i] = Front(article, parts[i]);
+            }
+        if (first is not null)
+            parts[0] = Front(first, parts[0]);
+        var name = parts.Length == 1 ? parts[0] : parts[0] + ": " + string.Join(" - ", parts[1..]);
+        return whole is null ? name : Front(whole, name);
+    }
+
+    /// <summary>
+    /// What titles are put in order by: the name without a leading English article, so "The Legend of Zelda" is with
+    /// the Ls. Others stay, as many start names of their own, such as Die Hard and Le Mans.
+    /// </summary>
+    public static string SortKey(string name)
+    {
+        foreach (var article in (string[])["The ", "A ", "An "])
+            if (name.StartsWith(article, StringComparison.OrdinalIgnoreCase) && name.Length > article.Length)
+                return name[article.Length..];
+        return name;
     }
 
     /// <summary>The key titles group on: the same however the name is cased or spaced.</summary>

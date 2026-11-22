@@ -77,6 +77,20 @@ public sealed class Games(RomdexDbContext db, LibraryViewBuilder views)
         return string.Concat(words.Length > 1 && words[0] == "the" ? words[1..] : words);
     }
 
+    // What isn't a game's release proper, so doesn't show how widely it came out.
+    private const DumpKinds NotARelease = DumpKinds.AddOn | DumpKinds.Bad | DumpKinds.Beta | DumpKinds.Proto | DumpKinds.Demo | DumpKinds.Debug
+                                          | DumpKinds.Pirate | DumpKinds.Program | DumpKinds.Bios;
+
+    /// <summary>
+    /// How widely a game came out, standing in for how well known it is, as the DATs don't say: the regions it was
+    /// released in, counted on each system. A game out in Japan, the USA and Europe on three systems is 9; a Japanese
+    /// spin-off on one is 1. A World release counts as three. Search and a game's series put games in this order.
+    /// </summary>
+    public static int Reach(IReadOnlyList<GameTitle> titles) =>
+        titles.Sum(t => t.Title.Dumps.Where(d => (d.Kinds & NotARelease) == 0)
+            .SelectMany(d => d.Regions).Distinct(StringComparer.OrdinalIgnoreCase)
+            .Sum(r => r.Equals("World", StringComparison.OrdinalIgnoreCase) ? 3 : 1));
+
     // Each title's IGDB IDs, from what the metadata plugins found for its dumps.
     private async Task<IEnumerable<(Guid TitleId, string Igdb)>> IgdbIdsAsync(CancellationToken ct)
     {

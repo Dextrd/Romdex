@@ -44,6 +44,8 @@ public enum DumpKind
     Debug,
     Bad,
     Alternate,
+    Update,
+    Dlc,
 }
 
 /// <summary>
@@ -155,7 +157,7 @@ public sealed record TitleDetail(
 /// <param name="Links">Pages about it elsewhere, such as IGDB's and Wikipedia's.</param>
 /// <param name="Ratings">What age rating boards gave it, one each.</param>
 /// <param name="Images">Pictures of it on this title's system, such as its title screen.</param>
-/// <param name="InSeries">The other games in each of its series that the catalogue has, on any system, earliest first.</param>
+/// <param name="InSeries">The other games in each of its series that the catalogue has, on any system, the most widely released first, as Search puts them.</param>
 public sealed record GameInfo(
     string? Summary,
     string? SummarySource,

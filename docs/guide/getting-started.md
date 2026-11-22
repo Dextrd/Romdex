@@ -27,8 +27,11 @@ a file is without trusting its name.
 - **Redump** covers disc systems, such as the PlayStation and the GameCube. Download its DATs from
   [redump.info](https://redump.info).
 
-Drop them into your DAT folder as they come, zipped or not. When there are two DATs for the same system, Romdex uses
-the newest. Redump's can be fetched for you instead: see [Plugins](plugins.md).
+Drop them into your DAT folder as they come, zipped or not. Or have them fetched for you: the Redump plugin fetches
+Redump's, and the libretro DATs plugin fetches No-Intro's as libretro keeps them for RetroArch. See [Plugins](plugins.md).
+
+When there are two DATs for the same system, from your DAT folder or a plugin, Romdex uses the newest, by the date
+each was made. On the same date, the catalogue first in order wins, which is the DAT folder unless you move it.
 
 ## Systems
 
@@ -82,7 +85,10 @@ opens to show its serial, files, checksums and where it is in your library. **Pl
 **Open in RomM** opens it there: see [Playing, covers and apps](playing-and-apps.md).
 
 **Search** finds any game the DATs list, whether or not you have it. Words can come in any order, and regions and
-versions count too, so *kart japan* finds the Japanese releases of a kart game. A game on more than one system, such
+versions count too, so *kart japan* finds the Japanese releases of a kart game. A game named just what you searched
+for comes first, then the most widely released, counting the regions it came out in on each system, so *sonic* puts
+Sonic the Hedgehog before a Japan-only spin-off. Games are named as they're written, *The Legend of Zelda: Majora's
+Mask*, where the DATs put the article last and a dash for the colon. A game on more than one system, such
 as *Sonic Heroes* on the GameCube and the PlayStation 2, is listed once, with each system it's on, and counts as owned
 if you have it on any. Its page has a switch with each system it's on, green where you have a copy: pick one to see
 the game there, with the review scores given for that system. Scores given without saying which system they're for

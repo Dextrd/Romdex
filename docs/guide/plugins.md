@@ -17,12 +17,21 @@ Only the catalogue decides what you have, what's missing and what's bad. The oth
 ## Catalogue
 
 Index plugins say which systems and dumps exist, from No-Intro's and Redump's DATs. Your files are matched against
-them by checksum. Romdex asks them in order; where two have a DAT for the same system, the first wins.
+them by checksum. Where two have a DAT for the same system, the newest wins, by the date each was made, however each
+writes it; on the same date, the one first in order wins. A headered and a headerless DAT of a system count as the
+same system.
 
-- **DAT folder** (built in, set up from the start) reads the No-Intro and Redump DATs in your DAT folder.
+- **DAT folder** (built in, set up from the start) reads the No-Intro and Redump DATs in your DAT folder, as Logiqx
+  XML or clrmamepro.
 - **Redump** (built in, off until you add it) downloads Redump's DATs for the disc systems you tick, from the PlayStation to the PlayStation 5 and Xbox Series X,
   and their BIOS DATs, and checks for new ones every week. It also fetches [Retool's](https://github.com/unexpectedpanda/retool-clonelists-metadata)
   clone lists for them, unless you turn **Retool's clone lists** off.
+- **libretro DATs** (built in, off until you add it) downloads No-Intro's DATs for the cartridge systems you tick, from
+  the copies libretro keeps for RetroArch on GitHub, and checks for new ones every week. No-Intro doesn't let its own
+  DATs be fetched automatically. libretro updates its copies every month or two, so they can trail DAT-o-MATIC's, and
+  they leave out No-Intro's parent and clone links, so a game's regions are grouped by name, and Retool's clone lists
+  join a game released under different names, unless you turn **Retool's clone lists** off. A newer DAT from
+  DAT-o-MATIC dropped into the DAT folder wins over it.
 
 Redump's DATs don't say which of their entries are one game under other names, such as *Crash Twinsanity* and its
 Japanese release, *Crash Bandicoot 5*. Retool's clone lists do, and Romdex makes each such game one title. The DAT

@@ -17,10 +17,10 @@ public sealed class DatFolderFactory : IPluginFactory
     {
         Id = PluginId,
         Name = "DAT folder",
-        Version = "0.1.0",
+        Version = "0.2.0",
         Type = PluginType.Index,
         ContractVersion = ContractVersions.Index.ToString(),
-        Description = "Reads No-Intro and Redump DATs (Logiqx XML) from a folder, plain or zipped. Download them from DAT-o-MATIC and "
+        Description = "Reads No-Intro and Redump DATs from a folder, plain or zipped, as Logiqx XML or clrmamepro. Download them from DAT-o-MATIC and "
                       + "redump.info and drop them in; a newer DAT for a system replaces the older one. Retool's clone lists beside them, "
                       + "such as Sony - PlayStation 2 (Redump).json, make one title of a game released under different names.",
         Access = new PluginAccess { Files = ["DAT folder (read)"] },
@@ -84,7 +84,7 @@ public sealed class DatFolder(string folder) : IIndexPlugin
         var (systems, _) = Read(cancellationToken);
         if (!systems.TryGetValue(systemId, out var found))
             return Task.FromResult<IndexSystemDetail?>(null);
-        var dumps = ReadDat(found.File, s => Logiqx.ReadDumps(s, cancellationToken));
+        var dumps = ReadDat(found.File, s => Dats.ReadDumps(s, cancellationToken));
         if (found.Clones is { } clones)
             dumps = Retool.Apply(dumps, clones);
         return Task.FromResult<IndexSystemDetail?>(new IndexSystemDetail(found.System, dumps));
@@ -98,13 +98,13 @@ public sealed class DatFolder(string folder) : IIndexPlugin
         var systems = new Dictionary<string, (IndexSystem System, string File, Retool.CloneList? Clones)>(StringComparer.Ordinal);
         foreach (var (id, (system, file)) in dats)
         {
-            var list = clones.GetValueOrDefault(system.Name);
+            var list = clones.GetValueOrDefault(Retool.SystemKey(system.Name));
             systems[id] = (list is null ? system : system with { CloneList = list.Version }, file, list);
         }
         return (systems, unreadable);
     }
 
-    // The newest clone list for each system.
+    // The newest clone list for each system, by its key.
     private Dictionary<string, Retool.CloneList> ReadCloneLists(CancellationToken ct)
     {
         var lists = new Dictionary<string, Retool.CloneList>(StringComparer.OrdinalIgnoreCase);
@@ -123,8 +123,8 @@ public sealed class DatFolder(string folder) : IIndexPlugin
             {
                 list = null;
             }
-            if (list is not null && (!lists.TryGetValue(list.System, out var kept) || string.CompareOrdinal(list.Version, kept.Version) > 0))
-                lists[list.System] = list;
+            if (list is not null && (!lists.TryGetValue(Retool.SystemKey(list.System), out var kept) || string.CompareOrdinal(list.Version, kept.Version) > 0))
+                lists[Retool.SystemKey(list.System)] = list;
         }
         return lists;
     }
@@ -152,7 +152,7 @@ public sealed class DatFolder(string folder) : IIndexPlugin
             IndexSystem? system;
             try
             {
-                system = ReadDat(file, Logiqx.ReadHeader);
+                system = ReadDat(file, Dats.ReadHeader);
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidDataException or System.Xml.XmlException)
             {
@@ -160,7 +160,7 @@ public sealed class DatFolder(string folder) : IIndexPlugin
             }
             if (system is null)
                 unreadable.Add(Path.GetRelativePath(folder, file));
-            else if (!systems.TryGetValue(system.Id, out var kept) || string.CompareOrdinal(system.Version, kept.System.Version) > 0)
+            else if (!systems.TryGetValue(system.Id, out var kept) || Dats.IsNewer(system, kept.System))
                 systems[system.Id] = (system, file);
         }
         return (systems, unreadable);

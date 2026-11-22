@@ -228,11 +228,11 @@ public sealed class PlayTests : IDisposable
         // Ratings by their boards' marks; one the page has no mark for is left out.
         Assert.Equal([new AgeRating("ESRB", "e", "Everyone"), new AgeRating("PEGI", "7", "PEGI 7")], info.Ratings);
         Assert.Empty(info.Images);
-        // The rest of its series that the catalogue has, earliest first, each once on every system it's on; then the
-        // series that one's part of, without those already listed.
-        Assert.Equal([("Pond Tales", ["Lily Leap", "Pixel Pond 2"]), ("Pond Universe", ["Frog Racer"])],
+        // The rest of its series that the catalogue has, the most widely released first (Pixel Pond 2 is on two
+        // systems), each once on every system it's on; then the series that one's part of, without those already listed.
+        Assert.Equal([("Pond Tales", ["Pixel Pond 2", "Lily Leap"]), ("Pond Universe", ["Frog Racer"])],
             info.InSeries.Select(s => (s.Name, s.Games.Select(g => g.Name).ToArray())).ToArray());
-        Assert.Equal(2, info.InSeries[0].Games[1].Titles.Count);
+        Assert.Equal(2, info.InSeries[0].Games[0].Titles.Count);
 
         // Kept: the page shown again doesn't ask Wikipedia again.
         var asked = _services.WikipediaLookups;

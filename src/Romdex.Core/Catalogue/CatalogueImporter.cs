@@ -39,8 +39,26 @@ public sealed partial class CatalogueImporter(RomdexDbContext db)
         // No-Intro's standard DATs don't say which entries are clones. A clone list, such as Retool's, applied by the
         // plugin, makes clones of entries that are one game under other names.
         var names = detail.Dumps.GroupBy(d => d.Name).Select(g => g.First()).ToDictionary(d => d.Name, d => DumpNames.Parse(d.Name, d.Category, d.IsBios));
-        string TitleOf(IndexDump dump) =>
+        string GameOf(IndexDump dump) =>
             dump.CloneOf is { } parent && names.TryGetValue(parent, out var parentName) ? parentName.Title : names[dump.Name].Title;
+        // An update or DLC joins its game's title: DATs name them as the game, then what they add, such as
+        // Uncharted - Fight for Fortune - Among Thieves Expansion (DLC). The longest start of its name that's a game in
+        // the DAT is its game; one whose game isn't in the DAT is a title of its own.
+        var games = detail.Dumps.Where(d => (names[d.Name].Kinds & DumpKinds.AddOn) == 0)
+            .GroupBy(d => DumpNames.TitleKey(GameOf(d))).ToDictionary(g => g.Key, g => GameOf(g.First()), StringComparer.Ordinal);
+        string TitleOf(IndexDump dump)
+        {
+            var title = GameOf(dump);
+            if ((names[dump.Name].Kinds & DumpKinds.AddOn) == 0)
+                return title;
+            for (var start = title; ; start = start[..start.LastIndexOf(" - ", StringComparison.Ordinal)])
+            {
+                if (games.TryGetValue(DumpNames.TitleKey(start), out var game))
+                    return game;
+                if (!start.Contains(" - ", StringComparison.Ordinal))
+                    return title;
+            }
+        }
 
         var seen = new HashSet<string>(StringComparer.Ordinal);
         int added = 0;
@@ -50,16 +68,18 @@ public sealed partial class CatalogueImporter(RomdexDbContext db)
             if (!seen.Add(entry.Name))
                 continue;
             var name = names[entry.Name];
-            var titleName = TitleOf(entry);
-            var key = DumpNames.TitleKey(titleName);
+            // Titles are keyed on the DAT's name for them, and named as the game is written.
+            var datTitle = TitleOf(entry);
+            var key = DumpNames.TitleKey(datTitle);
+            var titleName = DumpNames.Display(datTitle);
             if (!titles.TryGetValue(key, out var title))
             {
                 title = new Title { SystemId = system.Id, Name = titleName, Key = key };
                 titles[key] = title;
                 db.Titles.Add(title);
             }
-            // The parent names the title, where there is one.
-            else if (entry.CloneOf is null && title.Name != titleName)
+            // The parent names the title, where there is one; an update or DLC never does.
+            else if (entry.CloneOf is null && (name.Kinds & DumpKinds.AddOn) == 0 && title.Name != titleName)
                 title.Name = titleName;
 
             if (!dumps.TryGetValue(entry.Name, out var dump))

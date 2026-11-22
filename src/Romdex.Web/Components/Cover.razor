@@ -1,6 +1,7 @@
 @*
     A game's cover, as tall as a box is to its width. It shimmers while the picture is looked up and loads, and shows a
-    placeholder controller only if there's no cover or it doesn't load. Fills its container's width.
+    placeholder controller only if there's no cover or it doesn't load. Fills its container's width. With Keep, a
+    cover that changes shows the one before until the new one's in, rather than shimmering in between.
 *@
 <div @key="Url" class="cover box @(Url is null ? "blank" : "pending") @Class" aria-hidden="true">
     <svg viewBox="0 0 24 24">
@@ -16,6 +17,10 @@
             cover still being looked up is asked for again (cover.js). One that fails is hidden, not removed: Blazor still
             counts it, and removing it breaks later updates.
         *@
+        @if (Keep && _before is not null)
+        {
+            <img class="before" src="@_before" alt="" />
+        }
         <img src="@Url" alt="" loading="lazy"
              onload="this.parentElement.classList.replace('pending', 'loaded')"
              onerror="romdexCoverFailed(this)" />
@@ -25,4 +30,17 @@
 @code {
     [Parameter] public string? Url { get; set; }
     [Parameter] public string? Class { get; set; }
+
+    /// <summary>Show the cover before while a changed one loads, as a game's page does going to its version on another system.</summary>
+    [Parameter] public bool Keep { get; set; }
+
+    private string? _shown, _before;
+
+    protected override void OnParametersSet()
+    {
+        if (Url == _shown)
+            return;
+        _before = _shown;
+        _shown = Url;
+    }
 }

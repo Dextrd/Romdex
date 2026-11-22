@@ -411,6 +411,12 @@ h2.section { margin: 1.5rem 0 .5rem; }
 .chevron.open { transform: rotate(45deg); }
 
 /* Album lists start with a small cover. */
+/* A row of a long list still being fetched: a cover's shape, shimmering, as tall as the rows it stands for. */
+.table tr.row-waiting td { height: 3.55rem; }
+.table tr.row-waiting .cover {
+    display: block; width: 2.5rem; height: 2.5rem; border-radius: 6px;
+    background: linear-gradient(100deg, var(--bg) 30%, var(--border) 50%, var(--bg) 70%) 0 0 / 300% 100%; animation: shimmer 1.4s linear infinite;
+}
 .table .cover-col { width: 3.5rem; padding-right: 0; }
 .table td.cover-col > a { display: block; width: 2.5rem; }
 .table td.cover-col .cover { width: 2.5rem; }
@@ -873,6 +879,10 @@ td.actions > :is(.icon-button, .queue-menu, .move-menu) + .badge, td.actions > .
 /* "blank", not "empty": that's the padded "nothing here" card. */
 .cover.blank img { display: none; }
 .cover.loaded img { animation: fade-in .25s ease-out; }
+/* The cover before a changed one, shown until it's in (Cover's Keep). */
+.cover.pending img.before { opacity: 1; }
+.cover.pending:has(img.before) { animation: none; background: none; }
+.cover.loaded img.before { display: none; }
 .cover.pending {
     background: linear-gradient(100deg, var(--bg) 30%, var(--border) 50%, var(--bg) 70%) 0 0 / 300% 100%;
     animation: shimmer 1.4s linear infinite;
@@ -1554,6 +1564,17 @@ table.slots thead th { height: 32px; box-sizing: border-box; }
 .hashes dd { margin: 0; }
 .hashes code { font-size: .78rem; overflow-wrap: anywhere; }
 @media (max-width: 640px) { .dump { flex-direction: column; gap: .4rem; } .dump-aside { padding-left: 1.1rem; } }
+/* A game's updates and DLC: each a heading that opens onto its list, with the arrow the dumps in it have. */
+.add-ons > summary.section {
+    margin: 1.5rem 0 .5rem; color: var(--text); font-size: 1.15rem; font-weight: 600; list-style: none; position: relative; padding-left: 1.3rem;
+}
+.add-ons > summary.section::-webkit-details-marker { display: none; }
+.add-ons > summary.section::before {
+    content: ""; position: absolute; left: 0; top: .55rem; width: .5rem; height: .5rem; border: solid var(--muted);
+    border-width: 0 2px 2px 0; transform: rotate(-45deg); transition: transform .15s;
+}
+.add-ons[open] > summary.section::before { transform: rotate(45deg); top: .35rem; }
+.add-ons > summary.section .muted { font-weight: 400; }
 .toolbar .search-box { flex: 1; min-width: 12rem; }
 
 /* Downloads: what's arriving, and getting a game through the plugins. */
@@ -1640,33 +1661,33 @@ table.slots thead th { height: 32px; box-sizing: border-box; }
 /* Reviews: a row that scrolls sideways between its arrows, fading out at an edge with more past it. Each is coloured
    green, amber or red where it reads as a score, with its reviewer's badge. */
 .game-reviews h2.section { margin-top: 1rem; }
-.carousel { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .4rem; --fade-start: 2.5rem; --fade-end: 2.5rem; }
-.carousel.at-start { --fade-start: 0px; }
-.carousel.at-end { --fade-end: 0px; }
+/*
+    A row that scrolls sideways (Carousel.razor), as Melodex's do. Round arrows float over its ends, each only while
+    there's more that way, and that end fades out rather than cutting off. On a touch screen it's swiped.
+*/
+.carousel { position: relative; --carousel-fade: 3rem; }
 .carousel-track {
-    display: flex; gap: .6rem; overflow-x: auto; scroll-snap-type: x proximity; scroll-padding-inline: 2px; scrollbar-width: none; padding: 2px;
-    mask-image: linear-gradient(to right, transparent, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent);
+    display: flex; gap: .6rem; overflow-x: auto; scroll-snap-type: x proximity; scroll-padding-inline: 2px; scrollbar-width: none;
+    overscroll-behavior-x: contain; padding: 2px;
 }
 .carousel-track::-webkit-scrollbar { display: none; }
 .carousel-track > * { flex: none; scroll-snap-align: start; }
-.carousel-arrow {
-    width: 2rem; height: 2rem; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--border);
-    background: var(--surface); cursor: pointer; transition: transform .12s ease, opacity .2s ease, border-color .15s;
+.carousel.can-back .carousel-track { mask-image: linear-gradient(to right, transparent, #000 var(--carousel-fade)); }
+.carousel.can-on .carousel-track { mask-image: linear-gradient(to left, transparent, #000 var(--carousel-fade)); }
+.carousel.can-back.can-on .carousel-track {
+    mask-image: linear-gradient(to right, transparent, #000 var(--carousel-fade), #000 calc(100% - var(--carousel-fade)), transparent);
 }
-.carousel-arrow .chevron { border-color: var(--text); }
-.carousel-arrow .chevron.left { margin-left: .2rem; }
-.carousel-arrow .chevron.right { margin-right: .2rem; }
-.carousel-arrow:hover { border-color: var(--accent); }
-.carousel-arrow:hover .chevron { border-color: var(--accent); }
-.carousel-arrow:active { transform: scale(.88); }
-.carousel.at-start .carousel-arrow[data-step="-1"], .carousel.at-end .carousel-arrow[data-step="1"] { opacity: .3; pointer-events: none; }
-/* Everything fits: no arrows. */
-.carousel.at-start.at-end { grid-template-columns: minmax(0, 1fr); }
-.carousel.at-start.at-end .carousel-arrow { display: none; }
-/* On a phone or anything touched rather than pointed at: swiped, without arrows taking its room. */
-@media (hover: none), (max-width: 640px) {
-    .carousel { grid-template-columns: minmax(0, 1fr); }
-    .carousel-arrow { display: none; }
+.carousel > .icon-button {
+    position: absolute; top: 50%; z-index: 1; width: 2.4rem; min-width: 0; height: 2.4rem; padding: 0; border-radius: 50%;
+    background: var(--surface); box-shadow: 0 2px 8px rgb(0 0 0 / .35);
+    transform: translateY(-50%); opacity: 0; pointer-events: none; transition: opacity .2s ease;
+}
+.carousel > .carousel-back { left: .25rem; }
+.carousel > .carousel-on { right: .25rem; }
+.carousel.can-back > .carousel-back, .carousel.can-on > .carousel-on { opacity: 1; pointer-events: auto; }
+@media (max-width: 640px), (hover: none) {
+    .carousel > .icon-button { display: none; }
+    .carousel { --carousel-fade: 1.5rem; }
     .carousel-track { scroll-snap-type: x mandatory; }
 }
 .score {

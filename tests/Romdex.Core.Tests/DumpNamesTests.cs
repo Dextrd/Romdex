@@ -28,6 +28,10 @@ public sealed class DumpNamesTests
 
     [Theory]
     [InlineData("Hopper Quest (USA) (Demo)", DumpKinds.Demo)]
+    [InlineData("Hopper Quest (USA) (Update)", DumpKinds.Update)]
+    [InlineData("Hopper Quest - Sky Levels (USA) (En,Fr,Es) (DLC)", DumpKinds.Dlc)]
+    [InlineData("Hopper Quest (Europe) (Theme)", DumpKinds.Dlc)]
+    [InlineData("Hopper Quest (Japan) (Avatar)", DumpKinds.Dlc)]
     [InlineData("Hopper Quest (USA) (Kiosk)", DumpKinds.Demo)]
     [InlineData("Hopper Quest (USA) (Beta 2)", DumpKinds.Beta)]
     [InlineData("Hopper Quest (USA) (Proto 1)", DumpKinds.Proto)]
@@ -138,5 +142,26 @@ public sealed class DumpNamesTests
         Assert.Null(GameDetailsCache.ScoreHere("Nintendo Power", "8/10", SystemNames.Names("Sony - PlayStation 2")));
         Assert.Equal("8/10", GameDetailsCache.ScoreHere("Nintendo Power", "8/10", SystemNames.Names("Nintendo - GameCube")));
         Assert.Null(GameDetailsCache.ScoreHere("Official Xbox Magazine (UK)", "7/10", SystemNames.Names("Nintendo - GameCube")));
+    }
+    [Theory]
+    [InlineData("Legend of Zelda, The - Majora's Mask", "The Legend of Zelda: Majora's Mask")]
+    [InlineData("Legend of Zelda, The", "The Legend of Zelda")]
+    [InlineData("Lord of the Rings, The - Two Towers, The", "The Lord of the Rings: The Two Towers")]
+    [InlineData("Legend of Zelda - Spirit Tracks, The", "The Legend of Zelda: Spirit Tracks")]
+    [InlineData("Star Wars - Episode I - Racer", "Star Wars: Episode I - Racer")]
+    [InlineData("Siedler, Die", "Die Siedler")]
+    [InlineData("Aventure, L'", "L'Aventure")]
+    [InlineData("Sonic the Hedgehog 2", "Sonic the Hedgehog 2")]
+    [InlineData("Spider-Man", "Spider-Man")]
+    [InlineData("Him, The", "The Him")]
+    public void A_DAT_title_is_named_as_the_game_is_written(string dat, string written) => Assert.Equal(written, DumpNames.Display(dat));
+
+    [Fact]
+    public void Titles_sort_by_the_word_after_an_article()
+    {
+        Assert.Equal("Legend of Zelda: Majora's Mask", DumpNames.SortKey("The Legend of Zelda: Majora's Mask"));
+        Assert.Equal("Boy and His Blob", DumpNames.SortKey("A Boy and His Blob"));
+        Assert.Equal("Die Hard", DumpNames.SortKey("Die Hard"));
+        Assert.Equal("Theme Park", DumpNames.SortKey("Theme Park"));
     }
 }

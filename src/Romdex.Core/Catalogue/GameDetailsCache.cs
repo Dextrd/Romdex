@@ -322,7 +322,7 @@ public sealed class GameDetailsCache(IServiceScopeFactory scopes, CoverCache cov
     }
 
     // The games of each of the game's series that the catalogue has, by their names the same but for punctuation, as
-    // Search joins games: on every system, without this one.
+    // Search joins games: on every system, without this one, the most widely released first, as Search puts them.
     private static async Task<IReadOnlyList<SeriesGames>> SeriesAsync(Games games, Guid titleId, GameDetails? details, CancellationToken ct)
     {
         if (details?.SeriesGames is not { Count: > 0 } all)
@@ -340,7 +340,7 @@ public sealed class GameDetailsCache(IServiceScopeFactory scopes, CoverCache cov
         foreach (var series in all)
         {
             var listed = series.Games.Select(name => byName.GetValueOrDefault(Games.Key(name))).OfType<IReadOnlyList<GameTitle>>()
-                .Where(shown.Add).Select(Api.CatalogueEndpoints.Game).ToList();
+                .Where(shown.Add).OrderByDescending(Games.Reach).Select(Api.CatalogueEndpoints.Game).ToList();
             if (listed.Count > 0)
                 found.Add(new SeriesGames(series.Name, listed));
         }

@@ -17,7 +17,10 @@ compose file: see [installing](docs/guide/installing.md).
   Redump DATs, zipped or not.
 - The web app: first-run setup, Activity, and Settings.
 - The catalogue: DATs imported by system and grouped into titles, updated daily, with IDs that survive a new DAT
-  version. The Redump plugin fetches Redump's DATs and BIOS DATs.
+  version. The Redump plugin fetches Redump's DATs and BIOS DATs, and a libretro DATs plugin fetches No-Intro's, as
+  libretro keeps them. Where catalogues have DATs of the same system, the newest wins, and the DAT folder reads
+  clrmamepro DATs as well as Logiqx ones. Updates and DLC join their game's page, under Updates and DLC beside its ROMs, and
+  don't count towards owning it.
 - The library: every file hashed once (CRC32, MD5 and SHA-1, with and without a header), inside zips, 7z and CHDs, and
   matched against the catalogue.
 - The Library, with Systems and Games views, a system's games, a game's dumps, and Review: what's verified, partial
@@ -26,6 +29,15 @@ compose file: see [installing](docs/guide/installing.md).
 - Search: every game the DATs list, in the library or not, by system and by whether you have it. A game on several
   systems is one result, owned if you have it on any, and its page lists each system's version. Names count as the
   same whatever their punctuation, and titles with the same IGDB ID from a metadata plugin are one game too.
+- Search is one long list, however many games it finds, drawing and fetching only what's near the screen. A game named
+  just what you searched for comes first, then the most widely released: the DATs don't say how well known a game is,
+  so the regions it came out in, on each system, stand in for it.
+- Games are named as they're written, "The Legend of Zelda: Majora's Mask" rather than the DATs' "Legend of Zelda,
+  The - Majora's Mask", and lists still put it with the Ls.
+- Switching a game's page to another system keeps what's the same, such as what it's about, until that version's
+  details are in, and the cover until the new one has loaded. The other systems' versions are fetched while you look,
+  so switching is usually instant. Its rows that scroll sideways are Melodex's: round arrows float over each end only
+  while there's more that way, and the "More of" rows put the most widely released games first, as Search does.
 - Grid and list layouts for the Library's games, a system's and Search, with tiles coloured for owned and missing,
   and short system names, such as PS2 and GC, in lists.
 - A game's page has what it is, from a new Wikipedia plugin and Hasheous: what it's about, its release dates, who

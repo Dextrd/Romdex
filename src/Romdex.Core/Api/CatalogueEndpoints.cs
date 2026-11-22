@@ -105,7 +105,7 @@ public static class CatalogueEndpoints
                 foreach (var view in await views.GetAllAsync(ct))
                     found.AddRange(Filter(view.Titles, status, q, have == true ? null : ignored ?? false, hidden ?? false, have ?? false)
                         .Select(t => Summary(view.Summary.Id, t)));
-                return Page(found.OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase), skip, take);
+                return Page(found.OrderBy(t => DumpNames.SortKey(t.Name), StringComparer.OrdinalIgnoreCase), skip, take);
             })
             .WithName("ListAllTitles")
             .WithSummary("Every system's titles together, by name, filtered as a system's are.");
@@ -219,15 +219,17 @@ public static class CatalogueEndpoints
                 var matched = found
                     .Where(g => system is not { } id || g.Titles.Any(t => t.System.Summary.Id == id))
                     .Where(g => have is null || have == (g.Titles[0].Title.Status != TitleStatus.Missing))
-                    .OrderBy(g => g.Rank).ThenBy(g => g.Titles[0].Title.Name, StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(g => g.Rank).ThenByDescending(g => Games.Reach(g.Titles)).ThenByDescending(g => g.Titles.Count)
+                    .ThenBy(g => DumpNames.SortKey(g.Titles[0].Title.Name), StringComparer.OrdinalIgnoreCase)
                     .Select(g => Game(g.Titles))
                     .ToList();
                 return Results.Ok(new GamePage(matched.Skip(Math.Max(0, skip ?? 0)).Take(Math.Clamp(take ?? 100, 1, 1000)).ToList(), matched.Count));
             })
             .WithTags("Catalogue").WithName("SearchCatalogue")
             .WithSummary("Every game the DATs list, in the library or not, whose name or a dump's name has every word searched for, once with its title on every "
-                         + "system it's on. The closest names come first; system narrows it to games on one system, have to games the library has on some "
-                         + "system (true) or on none (false).")
+                         + "system it's on. A game named just that comes first, then those whose names have the words, then those only a dump's name "
+                         + "has; among each, the most widely released first, counting the regions it came out in on each system. system narrows it to "
+                         + "games on one system, have to games the library has on some system (true) or on none (false).")
             .Produces<GamePage>().ProducesValidationProblem();
 
         api.MapPost("/catalogue/refresh", async (TaskQueue queue, TaskTitles titles, CancellationToken ct) =>
@@ -257,17 +259,16 @@ public static class CatalogueEndpoints
                                                            || t.Dumps.Any(d => d.Name.Contains(q.Trim(), StringComparison.OrdinalIgnoreCase))));
 
     // How close a title is to what was searched for, best first; null when it doesn't match. Its own name counts for
-    // more than its dumps', which also name regions and versions.
+    // more than its dumps', which also name regions and versions. Where a name only starts with what was searched for
+    // doesn't count: "zelda" is as much The Legend of Zelda as Zelda's Adventure.
     private static int? SearchRank(TitleView title, string q, string[] words)
     {
         bool Has(string name) => words.All(w => name.Contains(w, StringComparison.OrdinalIgnoreCase));
-        if (title.Name.Equals(q, StringComparison.OrdinalIgnoreCase))
+        if (Games.Key(title.Name) == Games.Key(q))
             return 0;
-        if (title.Name.StartsWith(q, StringComparison.OrdinalIgnoreCase))
-            return 1;
         if (Has(title.Name))
-            return 2;
-        return title.Dumps.Any(d => Has(d.Name)) ? 3 : null;
+            return 1;
+        return title.Dumps.Any(d => Has(d.Name)) ? 2 : null;
     }
 
     public static TitleSummary Summary(Guid systemId, TitleView t) =>
@@ -308,7 +309,7 @@ public static class CatalogueEndpoints
         var preferred = titleView.Dumps.Where(d => d.Release == titleView.Preferred.Release).Select(d => d.Id).ToHashSet();
         var dumps = await DumpInfosAsync(db, titleView.Dumps.OrderBy(d => !preferred.Contains(d.Id)).ThenBy(d => d.Name, StringComparer.OrdinalIgnoreCase), preferred, ct);
         var art = await CoverCache.BestAsync(db, id, ct);
-        var knownAs = art?.Name is { } name && !DumpNames.TitleKey(name).Equals(title.Key, StringComparison.Ordinal) ? name : null;
+        var knownAs = art?.Name is { } name && !Games.Key(name).Equals(Games.Key(title.Name), StringComparison.Ordinal) ? name : null;
         var versions = games is null || !(await games.GetAsync(ct)).TryGetValue(id, out var game) ? null
             : game.Select(t => new TitleVersion(t.Title.Id, t.System.Summary.Id, t.System.Summary.ShortName ?? t.System.Summary.Name, t.Title.Name, t.Title.Status)).ToList();
         return new TitleDetail(title.Id, title.SystemId, title.System!.Name, title.Name, titleView.Status, titleView.Ignored, title.PreferredDumpId, dumps,

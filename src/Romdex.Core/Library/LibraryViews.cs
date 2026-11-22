@@ -141,11 +141,14 @@ public sealed class LibraryViewBuilder(RomdexDbContext db, LibraryViews cache, P
             var own = dumpsByTitle[title.Id].ToList();
             if (own.Count == 0)
                 continue;
-            var releases = own.GroupBy(d => d.Release).Select(g => g.OrderBy(d => d.Disc, StringComparer.OrdinalIgnoreCase).ToList()).ToList();
+            // Whether a game is owned, and which release is preferred, goes by the game itself, not its updates and
+            // DLC; a title of DLC alone, whose game the DAT doesn't have, goes by those.
+            var games = own.Where(d => (d.Kinds & DumpKinds.AddOn) == 0).ToList() is { Count: > 0 } roms ? roms : own;
+            var releases = games.GroupBy(d => d.Release).Select(g => g.OrderBy(d => d.Disc, StringComparer.OrdinalIgnoreCase).ToList()).ToList();
             var complete = releases.Where(r => r.All(d => d.Status == DumpStatus.Good)).ToList();
             var status = complete.Count > 0 ? TitleStatus.Owned
-                : own.Any(d => d.Status == DumpStatus.Good) ? TitleStatus.Partial
-                : own.Any(d => d.Status is DumpStatus.Incomplete or DumpStatus.Bad) ? TitleStatus.Bad
+                : games.Any(d => d.Status == DumpStatus.Good) ? TitleStatus.Partial
+                : games.Any(d => d.Status is DumpStatus.Incomplete or DumpStatus.Bad) ? TitleStatus.Bad
                 : TitleStatus.Missing;
             var visible = releases.Where(r => !r[0].Hidden).ToList();
             var chosen = title.PreferredDumpId is { } chosenId ? releases.FirstOrDefault(r => r.Any(d => d.Id == chosenId)) : null;
@@ -154,7 +157,7 @@ public sealed class LibraryViewBuilder(RomdexDbContext db, LibraryViews cache, P
             titleViews.Add(new TitleView(title.Id, title.Name, status, preferred[0], have?[0], title.IgnoredAt is not null,
                 visible.Count > 0 || status != TitleStatus.Missing, own));
         }
-        titleViews.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+        titleViews.Sort((a, b) => string.Compare(DumpNames.SortKey(a.Name), DumpNames.SortKey(b.Name), StringComparison.OrdinalIgnoreCase));
 
         var bios = views.Where(v => (v.Kinds & DumpKinds.Bios) != 0).OrderBy(v => v.Name, StringComparer.OrdinalIgnoreCase).ToList();
         var shown = titleViews.Where(t => t.Shown && !t.Ignored).ToList();

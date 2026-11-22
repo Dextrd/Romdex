@@ -4,8 +4,8 @@ using System.Text.Json.Nodes;
 namespace Romdex.Core.Plugins;
 
 /// <summary>
-/// The parts of JSON Schema plugin settings use: a flat object of strings, numbers, integers and booleans, with
-/// defaults, enums, ranges and required fields. Secrets are marked <c>writeOnly</c>, never returned, and kept when an
+/// The parts of JSON Schema plugin settings use: a flat object of strings, numbers, integers and booleans, and lists
+/// of them, with defaults, choices (<c>enum</c>, or <c>oneOf</c> with a <c>const</c> each), ranges and required fields. Secrets are marked <c>writeOnly</c>, never returned, and kept when an
 /// update leaves them out.
 /// </summary>
 public static class SettingsSchema
@@ -69,6 +69,17 @@ public static class SettingsSchema
     private static string? Check(JsonElement property, JsonNode node)
     {
         var type = property.TryGetProperty("type", out var t) ? t.GetString() : null;
+        if (type == "array")
+        {
+            if (node is not JsonArray list)
+                return "Must be a list.";
+            if (property.TryGetProperty("uniqueItems", out var unique) && unique.ValueKind == JsonValueKind.True
+                && list.Select(i => i?.ToJsonString()).Distinct().Count() != list.Count)
+                return "Must list each only once.";
+            var items = property.TryGetProperty("items", out var i) && i.ValueKind == JsonValueKind.Object ? i : default;
+            return items.ValueKind == JsonValueKind.Undefined ? null
+                : list.Select(item => item is null ? "Can't list nothing." : Check(items, item)).FirstOrDefault(p => p is not null);
+        }
         if (node is not JsonValue value)
             return "Must be a single value.";
         switch (type)
@@ -85,6 +96,10 @@ public static class SettingsSchema
         if (property.TryGetProperty("enum", out var options) && options.ValueKind == JsonValueKind.Array
             && !options.EnumerateArray().Any(o => JsonNode.DeepEquals(JsonNode.Parse(o.GetRawText()), node)))
             return $"Must be one of {string.Join(", ", options.EnumerateArray().Select(o => o.ToString()))}.";
+        if (property.TryGetProperty("oneOf", out var choices) && choices.ValueKind == JsonValueKind.Array
+            && choices.EnumerateArray().Where(c => c.TryGetProperty("const", out _)).Select(c => c.GetProperty("const")).ToList() is { Count: > 0 } consts
+            && !consts.Any(c => JsonNode.DeepEquals(JsonNode.Parse(c.GetRawText()), node)))
+            return $"Must be one of {string.Join(", ", consts.Select(c => c.ToString()))}.";
         if (value.TryGetValue<double>(out var number))
         {
             if (property.TryGetProperty("minimum", out var min) && number < min.GetDouble())

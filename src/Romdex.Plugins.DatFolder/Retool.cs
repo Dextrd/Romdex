@@ -121,11 +121,28 @@ public static partial class Retool
         }
     }
 
+    /// <summary>
+    /// What makes a list's system and a DAT's one, as Retool and each DAT write them a little differently: without what
+    /// says only how the files are kept, such as <c>(Headered)</c>, the maker said once, as in <c>Atari - Atari 2600</c>
+    /// for <c>Atari - 2600</c>, and whatever the spacing and punctuation, as in <c>NeoGeo</c> for <c>Neo Geo</c>.
+    /// </summary>
+    public static string SystemKey(string name)
+    {
+        name = FormatOnly().Replace(name, "").Trim();
+        var dash = name.IndexOf(" - ", StringComparison.Ordinal);
+        if (dash > 0 && name[(dash + 3)..].StartsWith(name[..dash] + " ", StringComparison.OrdinalIgnoreCase))
+            name = name[..(dash + 3)] + name[(dash + 3 + dash + 1)..];
+        return string.Concat(name.Where(char.IsLetterOrDigit)).ToLowerInvariant();
+    }
+
     private static string? Text(JsonElement element, string property) =>
         element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String && value.GetString() is { Length: > 0 } text ? text : null;
 
     [GeneratedRegex(@"\s*(\([^)]*\)|\[[^\]]*\])")]
     private static partial Regex Tags();
+
+    [GeneratedRegex(@"\s*\((?:Headered|Headerless|Decrypted|Encrypted|Parent-Clone|Retool)\)", RegexOptions.IgnoreCase)]
+    private static partial Regex FormatOnly();
 
     // The list names its DAT with who publishes it, such as "Sony - PlayStation 2 (Redump)".
     [GeneratedRegex(@"\s*\((Redump|No-Intro)\)\s*$", RegexOptions.IgnoreCase)]

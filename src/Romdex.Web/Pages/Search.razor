@@ -1,4 +1,5 @@
 @page "/search"
+@using Microsoft.AspNetCore.Components.Web.Virtualization
 @inject RomdexClient Api
 @inject NavigationManager Nav
 @inject AuthState Auth
@@ -32,36 +33,34 @@ else if (_systems.Count == 0 && _loaded)
 {
     <div class="empty card">There's nothing to search yet. Search uses the catalogue: add DATs, then update it from the Library.</div>
 }
-else if (_page is null)
+else if (_games is null)
 {
     <div class="empty card">
         Search for any game the catalogue's DATs list, whether or not it's in your library. Words can come in any order, and a game's
         regions and versions count too: <em>kart japan</em> finds the Japanese releases of a kart game.
     </div>
 }
-else if (_page.Total == 0)
+else if (_games.Total == 0)
 {
     <div class="empty card">No games match@(_have != "" || _system is not null ? " with these filters" : "").</div>
 }
 else
 {
     <div class="toolbar">
-        <span class="muted small">@Format.Count(_page.Total, "game", "games")</span>
+        <span class="muted small">@Format.Count(_games.Total, "game", "games")</span>
         <LayoutToggle Value="@_layout" OnChange="l => _layout = l" />
     </div>
     @if (_layout == GameLayout.Grid)
     {
-        <div class="tiles game-tiles">
-            @foreach (var game in _titles)
-            {
+        @* Only the rows near the screen are drawn, and fetched as they're scrolled to. *@
+        <TileGrid @key="_games" Items="_games" Class="game-tiles" Context="game">
                 <GameTile @key="game.Id" Href="@($"titles/{game.Id}")" Name="@game.Name" Cover="@game.Cover" Status="game.Status" Systems="@Systems(game)">
                     @if (CanGet && game.Status != TitleStatus.Owned)
                     {
                         <IconButton Icon="get" Title="@($"Get {game.Name}")" Class="small" OnClick="() => _getting = game" />
                     }
                 </GameTile>
-            }
-        </div>
+        </TileGrid>
     }
     else
     {
@@ -76,8 +75,8 @@ else
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var game in _titles)
-                    {
+                    <Virtualize @key="_games" ItemsProvider="RowsAsync" Context="game" ItemSize="57" OverscanCount="15" SpacerElement="tr">
+                        <ItemContent>
                         <tr @key="game.Id">
                             <td><a class="game-name" href="titles/@game.Id"><Cover Url="@game.Cover" />@game.Name</a></td>
                             <td class="hide-narrow small"><SystemList Titles="@game.Titles.Select(t => (t.Id, Short(t.SystemId), t.Status, $"{t.Name} on {_names.GetValueOrDefault(t.SystemId)}")).ToList()" /></td>
@@ -89,16 +88,13 @@ else
                                 </td>
                             }
                         </tr>
-                    }
+                        </ItemContent>
+                        <Placeholder>
+                            <tr class="row-waiting"><td colspan="@(CanGet ? 4 : 3)"><span class="cover"></span></td></tr>
+                        </Placeholder>
+                    </Virtualize>
                 </tbody>
             </table>
-        </div>
-    }
-    @if (_titles.Count < _page.Total)
-    {
-        <div class="toolbar">
-            <button @onclick="MoreAsync">Show more</button>
-            <span class="muted small">@_titles.Count.ToString("N0") of @_page.Total.ToString("N0")</span>
         </div>
     }
 }
@@ -111,7 +107,7 @@ else
 }
 
 @code {
-    private const int PageSize = 50;
+    private const int PageSize = 100;
     private static readonly IReadOnlyList<(string Value, string Label, string? Hint)> HaveOptions =
         [("owned", "Owned", "Only what you have"), ("", "All", "Whether you have it or not"), ("missing", "Missing", "Only what you don't have")];
 
@@ -126,8 +122,9 @@ else
     private string _query = "";
     private Guid? _system;
     private string _have = "";
-    private GamePage? _page;
-    private List<GameSummary> _titles = [];
+    // The games found, fetched a page at a time as they're scrolled to; null before anything's searched for.
+    private PagedItems<GameSummary>? _games;
+    private int _searched;
     private string? _error;
     private int _search;
     private GameSummary? _getting;
@@ -181,21 +178,27 @@ else
         return SearchAsync();
     }
 
-    private async Task SearchAsync(int skip = 0)
+    private async Task SearchAsync()
     {
         _error = null;
         if (_query.Trim().Length == 0)
         {
-            _page = null;
-            _titles = [];
+            _games = null;
             return;
         }
         try
         {
-            var have = _have switch { "owned" => true, "missing" => false, _ => (bool?)null };
-            var page = await Api.SearchCatalogueAsync(_query.Trim(), _system, have, skip, PageSize);
-            _page = page;
-            _titles = skip == 0 ? [.. page.Items] : [.. _titles, .. page.Items];
+            var (query, system, have) = (_query.Trim(), _system, _have switch { "owned" => true, "missing" => false, _ => (bool?)null });
+            var games = new PagedItems<GameSummary>(async (skip, take) =>
+            {
+                var page = await Api.SearchCatalogueAsync(query, system, have, skip, take);
+                return (page.Items, page.Total);
+            }, PageSize);
+            var search = ++_searched;
+            await games.StartAsync();
+            // A search begun since this one is the one shown.
+            if (search == _searched)
+                _games = games;
         }
         catch (HttpRequestException e)
         {
@@ -203,5 +206,6 @@ else
         }
     }
 
-    private Task MoreAsync() => SearchAsync(_titles.Count);
+    private async ValueTask<ItemsProviderResult<GameSummary>> RowsAsync(ItemsProviderRequest request) =>
+        new(await _games!.GetAsync(request.StartIndex, request.Count), _games.Total);
 }

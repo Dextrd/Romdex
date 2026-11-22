@@ -1,0 +1,37 @@
+@using Microsoft.JSInterop
+@inject IJSRuntime Js
+
+@*
+    One row that scrolls sideways (carousel.js), as Melodex's are. On a computer, a round arrow floats over each end
+    while there's more that way, and that end fades out; on a touch screen it's swiped.
+*@
+<div class="carousel @Class" @ref="_box">
+    <IconButton Icon="back" Class="small carousel-back" Title="Back" />
+    <div class="carousel-track @TrackClass" tabindex="0" aria-label="@Label">@ChildContent</div>
+    <IconButton Icon="forward" Class="small carousel-on" Title="More" />
+</div>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter] public string? Class { get; set; }
+
+    /// <summary>Classes for the row itself, such as <c>shots</c>, which sets how wide each is.</summary>
+    [Parameter] public string? TrackClass { get; set; }
+
+    /// <summary>What the row is, for screen readers.</summary>
+    [Parameter] public string? Label { get; set; }
+
+    private ElementReference _box;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        try
+        {
+            await Js.InvokeVoidAsync("romdexCarousel.update", _box);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+}

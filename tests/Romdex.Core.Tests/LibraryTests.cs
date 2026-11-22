@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -160,6 +161,27 @@ public sealed class LibraryTests : IDisposable
     }
 
     [Fact]
+    public async Task Search_puts_the_game_named_first_then_the_most_widely_released()
+    {
+        _dats.Dump(Handheld, "Kart Pocket (Japan)", [".gb"]);
+        _dats.Dump(Handheld, "Kart Pocket (Japan) (Beta)", [".gb"]);
+        _dats.Dump(Console, "Super Kart (USA)", [".nes"]);
+        _dats.Dump(Console, "Super Kart (Europe)", [".nes"]);
+        _dats.Dump(Handheld, "Super Kart (World)", [".gb"]);
+        _dats.Dump(Console, "Kart (Japan)", [".nes"]);
+        _dats.Dump(Console, "Racing Pack (USA) (Kart)", [".nes"]);
+        _dats.Dump(Console, "Fastest Kart, The (USA)", [".nes"]);
+        _dats.WriteDats();
+        await RefreshAndScanAsync();
+
+        // Named just that first; then by how widely each came out, not by which starts with the word; then those only a
+        // dump's name has. Names are as the game is written, and sort by the word after an article.
+        var found = await _api.SearchCatalogueAsync("kart");
+        Assert.Equal(["Kart", "Super Kart", "The Fastest Kart", "Kart Pocket", "Racing Pack"], found.Items.Select(g => g.Name));
+        Assert.Equal("The Fastest Kart", Assert.Single((await _api.SearchCatalogueAsync("the fastest kart")).Items).Name);
+    }
+
+    [Fact]
     public async Task A_disc_is_owned_only_with_every_track_and_a_release_only_with_every_disc()
     {
         var whole = _dats.Dump(Disc, "Track Star (USA)", [".cue", ".bin", ".bin"]);
@@ -269,6 +291,87 @@ public sealed class LibraryTests : IDisposable
         Assert.Single(Assert.Single((await _api.SearchCatalogueAsync("tako")).Items).Titles);
         // Found by its other name, a game is named as it was searched for.
         Assert.Equal("Fukurou no Yoru", Assert.Single((await _api.SearchCatalogueAsync("fukurou")).Items).Name);
+    }
+
+    [Fact]
+    public async Task Updates_and_DLC_join_their_game_and_dont_make_it_owned()
+    {
+        _dats.Dump(Handheld, "Hopper Quest (USA)", [".gb"]);
+        _dats.Dump(Handheld, "Hopper Quest (Japan)", [".gb"]);
+        var update = _dats.Dump(Handheld, "Hopper Quest (USA) (Update)", [".gb"]);
+        var expansion = _dats.Dump(Handheld, "Hopper Quest - Sky Levels (USA) (DLC)", [".gb"]);
+        _dats.Dump(Handheld, "Hopper Quest (Japan) (Theme)", [".gb"]);
+        // DLC for a game the DAT doesn't have is a title of its own.
+        _dats.Dump(Handheld, "Kite Story - Wind Pack (USA) (DLC)", [".gb"]);
+        _dats.WriteDats();
+        _dats.Put("Handheld/update.gb", update[0].Data);
+        _dats.Put("Handheld/expansion.gb", expansion[0].Data);
+        await RefreshAndScanAsync();
+
+        var system = Assert.Single(await _api.ListSystemsAsync());
+        var titles = (await _api.ListTitlesAsync(system.Id)).Items;
+        Assert.Equal(["Hopper Quest", "Kite Story: Wind Pack"], titles.Select(t => t.Name));
+        var hopper = titles[0];
+        // Its update and DLC are in the library, but the game isn't.
+        Assert.Equal(TitleStatus.Missing, hopper.Status);
+        Assert.Equal("Hopper Quest (USA)", hopper.Preferred.Name);
+        var detail = (await _api.GetTitleAsync(hopper.Id))!;
+        Assert.Equal(5, detail.Dumps.Count);
+        Assert.Equal(["Hopper Quest (USA) (Update)"], detail.Dumps.Where(d => d.Kinds.Contains(DumpKind.Update)).Select(d => d.Name));
+        Assert.Equal(["Hopper Quest (Japan) (Theme)", "Hopper Quest - Sky Levels (USA) (DLC)"],
+            detail.Dumps.Where(d => d.Kinds.Contains(DumpKind.Dlc)).Select(d => d.Name).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task Where_catalogues_list_one_system_the_newest_DAT_wins_it()
+    {
+        _dats.Dump(Console, "Header Hero (USA)", [".nes"]);
+        _dats.WriteDats("20261101-000000");
+        // A second catalogue, later in order, with the same system made on the 14th, as libretro writes it.
+        var more = Path.Combine(_dats.Root, "more");
+        Directory.CreateDirectory(more);
+        void Libretro(string version) => File.WriteAllText(Path.Combine(more, "console.dat"), $$"""
+            clrmamepro (
+            	name "{{Console}}"
+            	version "{{version}}"
+            )
+            game (
+            	name "Newer Game (USA)"
+            	rom ( name "Newer Game (USA).nes" size 1 crc 00000001 )
+            )
+            """);
+        Libretro("2026.11.14");
+        await _api.AddPluginAsync(new AddPlugin("romdex.index.dat-folder", Name: "More DATs", Settings: JsonSerializer.SerializeToElement(new { folder = more })));
+
+        await RunAsync(await _api.RefreshCatalogueAsync());
+        var system = Assert.Single(await _api.ListSystemsAsync());
+        Assert.Equal("2026.11.14", system.DatVersion);
+        Assert.Equal(["Newer Game"], (await _api.ListTitlesAsync(system.Id)).Items.Select(t => t.Name));
+
+        // A newer one dropped in wins it back; on the same day, the catalogue first in order does.
+        _dats.WriteDats("20261120-000000");
+        Libretro("2026.11.20");
+        await RunAsync(await _api.RefreshCatalogueAsync());
+        system = Assert.Single(await _api.ListSystemsAsync());
+        Assert.Equal("20261120-000000", system.DatVersion);
+        Assert.Equal(["Header Hero"], (await _api.ListTitlesAsync(system.Id)).Items.Select(t => t.Name));
+    }
+
+    [Fact]
+    public async Task Catalogues_systems_are_ticked_from_their_lists()
+    {
+        var libretro = await _api.AddPluginAsync(new AddPlugin("romdex.index.libretro-dats",
+            Settings: JsonSerializer.SerializeToElement(new { systems = new[] { "Sega - Game Gear", "Atari - Lynx" } })));
+        Assert.Equal(["Sega - Game Gear", "Atari - Lynx"], libretro.Settings.GetProperty("systems").EnumerateArray().Select(s => s.GetString()));
+        await _api.AddPluginAsync(new AddPlugin("romdex.index.redump", Settings: JsonSerializer.SerializeToElement(new { systems = new[] { "PS2", "WIIU" } })));
+
+        // Only what's on the list, each once, as a list.
+        foreach (var systems in new object[] { new[] { "Nintendo - Nothing" }, new[] { "Atari - Lynx", "Atari - Lynx" }, "Atari - Lynx" })
+        {
+            var error = await Assert.ThrowsAsync<RomdexApiException>(() => _api.AddPluginAsync(new AddPlugin("romdex.index.libretro-dats",
+                Settings: JsonSerializer.SerializeToElement(new { systems }))));
+            Assert.Equal(System.Net.HttpStatusCode.BadRequest, error.Status);
+        }
     }
 
     private async Task RefreshAndScanAsync()

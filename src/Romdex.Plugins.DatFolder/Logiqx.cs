@@ -20,9 +20,14 @@ public static class Logiqx
     };
 
     /// <summary>The system a DAT describes, from its header alone; null when it isn't a Logiqx DAT.</summary>
-    public static IndexSystem? ReadHeader(Stream stream)
+    public static IndexSystem? ReadHeader(Stream stream) => ReadHeader(XmlReader.Create(stream, Settings));
+
+    /// <inheritdoc cref="ReadHeader(Stream)"/>
+    public static IndexSystem? ReadHeader(TextReader text) => ReadHeader(XmlReader.Create(text, Settings));
+
+    private static IndexSystem? ReadHeader(XmlReader xml)
     {
-        using var reader = XmlReader.Create(stream, Settings);
+        using var reader = xml;
         if (!reader.ReadToFollowing("datafile") || !reader.ReadToDescendant("header"))
             return null;
         var fields = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -43,13 +48,18 @@ public static class Logiqx
     }
 
     /// <summary>Every dump a DAT lists, in its order.</summary>
-    public static IReadOnlyList<IndexDump> ReadDumps(Stream stream, CancellationToken ct)
+    public static IReadOnlyList<IndexDump> ReadDumps(Stream stream, CancellationToken ct) => ReadDumps(XmlReader.Create(stream, Settings), ct);
+
+    /// <inheritdoc cref="ReadDumps(Stream, CancellationToken)"/>
+    public static IReadOnlyList<IndexDump> ReadDumps(TextReader text, CancellationToken ct) => ReadDumps(XmlReader.Create(text, Settings), ct);
+
+    private static IReadOnlyList<IndexDump> ReadDumps(XmlReader xml, CancellationToken ct)
     {
         var dumps = new List<IndexDump>();
         // No-Intro's newer DATs name a clone's parent by its id rather than by name, so ids are resolved at the end.
         var ids = new Dictionary<string, string>(StringComparer.Ordinal);
         var parentIds = new Dictionary<int, string>();
-        using var reader = XmlReader.Create(stream, Settings);
+        using var reader = xml;
         while (reader.Read())
         {
             if (reader.NodeType != XmlNodeType.Element || reader.Name is not ("game" or "machine") || reader.GetAttribute("name") is not { } name)
@@ -110,7 +120,7 @@ public static class Logiqx
     private static string? Hash(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim().ToLowerInvariant();
 
     // No-Intro and Redump each say who they are in the header's homepage or url.
-    private static string SourceOf(Dictionary<string, string> header)
+    internal static string SourceOf(Dictionary<string, string> header)
     {
         var said = $"{header.GetValueOrDefault("homepage")} {header.GetValueOrDefault("url")}";
         return said.Contains("no-intro", StringComparison.OrdinalIgnoreCase) ? DatSources.NoIntro
@@ -118,11 +128,12 @@ public static class Logiqx
             : DatSources.Other;
     }
 
-    // Redump writes its dates with dashes in the time too, such as 2026-11-09 22-03-17.
-    private static readonly string[] DateFormats = ["yyyy-MM-dd HH-mm-ss", "yyyyMMdd-HHmmss", "yyyyMMdd"];
+    // No-Intro writes its versions as 20261113-071530; Redump with dashes in the time too, such as 2026-11-09 22-03-17;
+    // libretro with dots, such as 2026.11.14.
+    private static readonly string[] DateFormats = ["yyyy-MM-dd HH-mm-ss", "yyyyMMdd-HHmmss", "yyyyMMdd", "yyyy.MM.dd"];
 
-    private static DateTimeOffset? DateOf(string? value) =>
-        value is null ? null
+    internal static DateTimeOffset? DateOf(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null
         : DateTimeOffset.TryParseExact(value.Trim(), DateFormats, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var exact) ? exact
         : DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var date) ? date
         : null;

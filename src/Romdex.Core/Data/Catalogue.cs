@@ -10,7 +10,7 @@ public class CatalogueSystem
 {
     public Guid Id { get; set; } = Guid.CreateVersion7();
 
-    /// <summary>The DAT's name for it. Where two index plugins have the same system, the first in order wins.</summary>
+    /// <summary>The DAT's name for it. Where two index plugins have the same system, the newest DAT wins.</summary>
     public required string Name { get; set; }
 
     /// <summary>Who publishes the DAT, such as <c>no-intro</c> or <c>redump</c>.</summary>

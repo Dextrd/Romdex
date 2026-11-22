@@ -2,11 +2,12 @@
 
   <PropertyGroup>
     <RootNamespace>Romdex.Plugins.Libretro</RootNamespace>
-    <Description>Romdex metadata plugin that finds title screens and screenshots of games in libretro's thumbnails, by their DAT names.</Description>
+    <Description>Romdex plugins for libretro: a catalogue of No-Intro's DATs as libretro keeps them, and title screens and screenshots of games from its thumbnails.</Description>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Romdex.Contracts\Romdex.Contracts.csproj" />
+    <ProjectReference Include="..\Romdex.Plugins.DatFolder\Romdex.Plugins.DatFolder.csproj" />
   </ItemGroup>
 
 </Project>
