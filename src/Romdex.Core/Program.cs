@@ -99,11 +99,12 @@ builder.Services.AddScoped<ITaskHandler, DownloadTask>();
 builder.Services.AddSingleton<DownloadSignal>();
 builder.Services.AddHostedService<DownloadWatcher>();
 
-// Playing games in the browser, through the emulatorjs container, and opening them in the connected app.
+// Playing games in the browser, through the player plugins, such as EmulatorJS, and opening them in the connected app.
 builder.Services.AddSingleton<StreamSigner>();
-builder.Services.AddSingleton<EmulatorCheck>();
+builder.Services.AddSingleton<PlayerHealth>();
+builder.Services.AddScoped<PlayerPlugins>();
 builder.Services.AddScoped<PlayService>();
-builder.Services.AddHttpClient(PlayEndpoints.EmulatorClient, http => http.Timeout = TimeSpan.FromMinutes(5));
+builder.Services.AddHttpClient(PlayEndpoints.PlayerFilesClient, http => http.Timeout = TimeSpan.FromMinutes(5));
 builder.Services.AddScoped<AppLinks>();
 builder.Services.AddSingleton<AppSync>();
 builder.Services.AddHostedService(services => services.GetRequiredService<AppSync>());
@@ -127,6 +128,7 @@ using (var scope = app.Services.CreateScope())
     // Write-ahead logging, so pages keep reading while a scan writes. It's stored in the file, so this is once.
     await db.Database.ExecuteSqlRawAsync("PRAGMA journal_mode=WAL;");
     await IndexPlugins.EnsureDefaultAsync(db, scope.ServiceProvider.GetRequiredService<PluginCatalog>(), options);
+    await PlayerPlugins.EnsureDefaultAsync(db, scope.ServiceProvider.GetRequiredService<PluginCatalog>(), options);
     await app.Services.GetRequiredService<StreamSigner>().InitialiseAsync(db);
 }
 
@@ -186,7 +188,7 @@ api.MapPlayEndpoints();
 api.MapPluginEndpoints();
 api.MapAccessEndpoints();
 api.MapWebhookEndpoints();
-app.MapEmulator();
+app.MapPlayerFiles();
 
 // The web app: Blazor WebAssembly, served from the same origin and talking only to the public API.
 app.MapStaticAssets();

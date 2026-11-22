@@ -36,6 +36,7 @@
     <ProjectReference Include="..\Romdex.Plugins.Libretro\Romdex.Plugins.Libretro.csproj" />
     <ProjectReference Include="..\Romdex.Plugins.TheGamesDb\Romdex.Plugins.TheGamesDb.csproj" />
     <ProjectReference Include="..\Romdex.Plugins.ScreenScraper\Romdex.Plugins.ScreenScraper.csproj" />
+    <ProjectReference Include="..\Romdex.Plugins.EmulatorJs\Romdex.Plugins.EmulatorJs.csproj" />
   </ItemGroup>
 
 </Project>

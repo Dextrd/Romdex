@@ -87,6 +87,11 @@ compose file: see [installing](docs/guide/installing.md).
   that's good for 12 hours. A disc of several files goes to it as one zip. A system's page lists the BIOS files its
   emulator looks for, each known by its checksum, and whether you have them. Every dump in a DAT of BIOS files, such as
   Redump's, counts as a BIOS, whether or not the DAT marks it as one.
+- Players, a kind of plugin of their own (`player`): they play the games you have in the browser. EmulatorJS is one,
+  built in, and set up from `Romdex__EmulatorUrl` the first time Romdex starts, as the compose file gives it; after
+  that its address is its own setting. A player says which systems it plays and which BIOS files it takes, and
+  writes the page that plays a game; Romdex still finds the game's files, picks the BIOS and signs the links, and
+  passes the player's own files on at `/players/{id}/`. A game plays in the first player that plays its system.
 - Plugins for titles and covers, a kind of their own (`metadata`, beside `index`, `retrieval` and `connector`): they
   look up the games you have by checksum, and only change how those are shown, never what exists. The Hasheous one
   finds covers and the names people know games by. The games you have are looked up ahead; any other, such as one in

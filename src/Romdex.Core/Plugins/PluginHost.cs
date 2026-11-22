@@ -6,8 +6,10 @@ using Romdex.Contracts.Plugins;
 using Romdex.Contracts.Plugins.Connectors;
 using Romdex.Contracts.Plugins.Index;
 using Romdex.Contracts.Plugins.Metadata;
+using Romdex.Contracts.Plugins.Players;
 using Romdex.Core.Data;
 using Romdex.Plugins.DatFolder;
+using Romdex.Plugins.EmulatorJs;
 
 namespace Romdex.Core.Plugins;
 
@@ -136,5 +138,94 @@ public sealed class ConnectorPlugins(RomdexDbContext db, PluginHost host)
             .OrderBy(p => p.Priority)
             .FirstOrDefaultAsync(cancellationToken);
         return instance is null ? null : (instance, host.Get<IConnector>(instance));
+    }
+}
+
+/// <summary>
+/// The players that are on, in the user's order: a game plays in the first that plays its system and answers. Their
+/// health is asked at most once a minute each, as it's asked whenever a game's page is shown.
+/// </summary>
+public sealed class PlayerPlugins(RomdexDbContext db, PluginHost host, PlayerHealth health)
+{
+    public const string DefaultsSetting = "player.defaults";
+
+    public async Task<IReadOnlyList<(PluginInstance Instance, IPlayer Player)>> GetAllAsync(CancellationToken cancellationToken)
+    {
+        var instances = await db.PluginInstances
+            .Where(p => p.Type == PluginType.Player && p.Enabled)
+            .OrderBy(p => p.Priority)
+            .ToListAsync(cancellationToken);
+        return instances.Select(i => (i, host.Get<IPlayer>(i))).ToList();
+    }
+
+    /// <summary>
+    /// The player for a system: the first that plays it and is healthy, else the first that plays it, with what's wrong
+    /// with it. Null when none plays it.
+    /// </summary>
+    public async Task<(PluginInstance Instance, IPlayer Player, PlayerSupport Support, HealthReport Health)?> ForAsync(PlayerSystem system,
+        CancellationToken cancellationToken)
+    {
+        (PluginInstance, IPlayer, PlayerSupport, HealthReport)? first = null;
+        foreach (var (instance, player) in await GetAllAsync(cancellationToken))
+        {
+            if (player.Supports(system) is not { } support)
+                continue;
+            var report = await health.CheckAsync(instance, player, cancellationToken);
+            if (report.Status != HealthStatus.Unhealthy)
+                return (instance, player, support, report);
+            first ??= (instance, player, support, report);
+        }
+        return first;
+    }
+
+    /// <summary>
+    /// On first run, sets up EmulatorJS as the player when Romdex was given the emulatorjs container's address, as its
+    /// stack does, and as Romdex before players were plugins was. Only once: removed, it stays removed.
+    /// </summary>
+    public static async Task EnsureDefaultAsync(RomdexDbContext db, PluginCatalog catalog, RomdexOptions options)
+    {
+        if (await db.Settings.FindAsync(DefaultsSetting) is not null)
+            return;
+        db.Settings.Add(new Setting { Key = DefaultsSetting, ValueJson = "true" });
+        if (!string.IsNullOrWhiteSpace(options.EmulatorUrl) && !await db.PluginInstances.AnyAsync(p => p.Type == PluginType.Player)
+            && catalog.Find(EmulatorJsFactory.PluginId) is { Factory: not null } found)
+        {
+            var settings = SettingsSchema.Defaults(found.Manifest.SettingsSchema);
+            settings[EmulatorJsFactory.UrlSetting] = options.EmulatorUrl.Trim();
+            db.PluginInstances.Add(new PluginInstance
+            {
+                PluginId = found.Manifest.Id,
+                Type = PluginType.Player,
+                Name = found.Manifest.Name,
+                ContractVersion = found.Manifest.ContractVersion,
+                SettingsJson = settings.ToJsonString(),
+            });
+        }
+        await db.SaveChangesAsync();
+    }
+}
+
+/// <summary>Each player's health, asked at most once a minute, and again when its settings change.</summary>
+public sealed class PlayerHealth
+{
+    private static readonly TimeSpan Every = TimeSpan.FromMinutes(1);
+
+    private readonly ConcurrentDictionary<Guid, (DateTime At, string Settings, HealthReport Report)> _last = new();
+
+    public async Task<HealthReport> CheckAsync(PluginInstance instance, IPlayer player, CancellationToken ct)
+    {
+        if (_last.TryGetValue(instance.Id, out var last) && last.Settings == instance.SettingsJson && DateTime.UtcNow - last.At < Every)
+            return last.Report;
+        HealthReport report;
+        try
+        {
+            report = await player.CheckHealthAsync(ct);
+        }
+        catch (Exception e) when (!ct.IsCancellationRequested)
+        {
+            report = new HealthReport(HealthStatus.Unhealthy, e.Message);
+        }
+        _last[instance.Id] = (DateTime.UtcNow, instance.SettingsJson, report);
+        return report;
     }
 }

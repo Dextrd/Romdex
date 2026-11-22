@@ -158,10 +158,11 @@ when one stops.
   "bios": "scph5501.bin", "app": "RomM" }
 ```
 
-- `playerUrl` opens the game in EmulatorJS, in the browser, relative to the server. It needs no key, and stops
-  working after 12 hours: get a fresh one rather than keeping it. Open it in a window or frame of its own.
-- `unplayable` comes instead when it can't play in the browser, saying why: the system isn't one the emulator plays,
-  the library doesn't have all of it, or it needs a BIOS the library lacks.
+- `playerUrl` opens the game in the browser, in the first player plugin that plays its system (EmulatorJS, built
+  in), relative to the server. It needs no key, and stops working after 12 hours: get a fresh one rather than keeping
+  it. Open it in a window or frame of its own.
+- `unplayable` comes instead when it can't play in the browser, saying why: no player plays the system, or none is set
+  up or working, the library doesn't have all of it, or it needs a BIOS the library lacks.
 - `bios` names the BIOS the player is given, when the system uses one.
 - `app` names the connected app, such as RomM, when there is one.
 

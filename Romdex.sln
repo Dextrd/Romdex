@@ -33,6 +33,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Romdex.Plugins.TheGamesDb",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Romdex.Plugins.ScreenScraper", "src\Romdex.Plugins.ScreenScraper\Romdex.Plugins.ScreenScraper.csproj", "{4E0F3F03-A5E1-46C0-8218-D4AC54209B25}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Romdex.Plugins.EmulatorJs", "src\Romdex.Plugins.EmulatorJs\Romdex.Plugins.EmulatorJs.csproj", "{C28C366D-BDA6-4631-A020-A31E158BCC3C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -199,6 +201,18 @@ Global
 		{4E0F3F03-A5E1-46C0-8218-D4AC54209B25}.Release|x64.Build.0 = Release|Any CPU
 		{4E0F3F03-A5E1-46C0-8218-D4AC54209B25}.Release|x86.ActiveCfg = Release|Any CPU
 		{4E0F3F03-A5E1-46C0-8218-D4AC54209B25}.Release|x86.Build.0 = Release|Any CPU
+		{C28C366D-BDA6-4631-A020-A31E158BCC3C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C28C366D-BDA6-4631-A020-A31E158BCC3C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C28C366D-BDA6-4631-A020-A31E158BCC3C}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{C28C366D-BDA6-4631-A020-A31E158BCC3C}.Debug|x64.Build.0 = Debug|Any CPU
+		{C28C366D-BDA6-4631-A020-A31E158BCC3C}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{C28C366D-BDA6-4631-A020-A31E158BCC3C}.Debug|x86.Build.0 = Debug|Any CPU
+		{C28C366D-BDA6-4631-A020-A31E158BCC3C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C28C366D-BDA6-4631-A020-A31E158BCC3C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C28C366D-BDA6-4631-A020-A31E158BCC3C}.Release|x64.ActiveCfg = Release|Any CPU
+		{C28C366D-BDA6-4631-A020-A31E158BCC3C}.Release|x64.Build.0 = Release|Any CPU
+		{C28C366D-BDA6-4631-A020-A31E158BCC3C}.Release|x86.ActiveCfg = Release|Any CPU
+		{C28C366D-BDA6-4631-A020-A31E158BCC3C}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -217,5 +231,6 @@ Global
 		{D007DA25-CE48-44AA-BBF9-282F5D961589} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{CFE7B4E6-E3BF-4F0E-9F92-679533B2EFBE} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{4E0F3F03-A5E1-46C0-8218-D4AC54209B25} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{C28C366D-BDA6-4631-A020-A31E158BCC3C} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal

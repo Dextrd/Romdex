@@ -110,8 +110,10 @@ public sealed class DumpNamesTests
     [Fact]
     public void Systems_play_and_keep_their_games_as_suits_them()
     {
-        Assert.Equal("psx", Romdex.Core.Play.Emulators.For("Sony - PlayStation")!.Core);
-        Assert.Null(Romdex.Core.Play.Emulators.For("Sony - PlayStation 2"));
+        // EmulatorJS goes by Romdex's short names, whichever DAT a system came from.
+        Assert.Equal("psx", Romdex.Plugins.EmulatorJs.Cores.For(Romdex.Core.Play.PlayService.SystemOf("Sony - PlayStation"))!.Name);
+        Assert.Equal("segaMD", Romdex.Plugins.EmulatorJs.Cores.For(Romdex.Core.Play.PlayService.SystemOf("Sega - Mega Drive - Genesis (Headered)"))!.Name);
+        Assert.Null(Romdex.Plugins.EmulatorJs.Cores.For(Romdex.Core.Play.PlayService.SystemOf("Sony - PlayStation 2")));
         Assert.Equal([Romdex.Client.StorageFormat.Keep], KnownSystems.Find("Microsoft - Xbox One")!.Formats);
         Assert.Null(KnownSystems.Find("Sony - PlayStation 2")!.Formats);
         Assert.True(SystemNames.IsPlatform("PS5"));

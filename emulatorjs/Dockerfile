@@ -1,5 +1,6 @@
 # EmulatorJS, self-hosted: the player Romdex's web app loads games into. It's GPL-3.0, so it's a container of its own,
-# and only ever loaded by the browser, never linked into the core. The core passes its files on at /emulator/.
+# and only ever loaded by the browser, never linked into the core. The EmulatorJS player plugin says which core plays
+# what, and the core passes its files on at /players/{id}/.
 FROM alpine:3.22 AS fetch
 ARG EMULATORJS_VERSION=4.2.3
 ARG EMULATORJS_SHA256=07d451bc06fa3ad04ab30d9b94eb63ac34ad0babee52d60357b002bde8f3850b

@@ -24,6 +24,9 @@ public enum PluginType
 
     /// <summary>Tells an app that uses the library, such as RomM, about new games, and opens games there.</summary>
     Connector,
+
+    /// <summary>Plays games the library has, in the browser, such as with EmulatorJS.</summary>
+    Player,
 }
 
 /// <summary>

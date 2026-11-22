@@ -31,6 +31,9 @@ else
         @Section(PluginType.Connector, "Connected apps",
             "Apps that show your games, such as RomM, told to scan when something is filed. The first one that's on is used.",
             "No connected apps. Games are still filed, but nothing is told about it.")
+        @Section(PluginType.Player, "Players",
+            "Play the games you have in the browser, such as with EmulatorJS. A game plays in the first that plays its system and is working.",
+            "No players. Games don't play in the browser, but still open in a connected app.")
     </div>
 
     @if (_choosing is { } type)
@@ -208,10 +211,11 @@ else
         PluginType.Index => "Add to the catalogue",
         PluginType.Metadata => "Add a source of titles and covers",
         PluginType.Retrieval => "Add a retriever",
+        PluginType.Player => "Add a player",
         _ => "Connect an app",
     };
 
-    private static bool Ordered(PluginType type) => type is PluginType.Retrieval or PluginType.Index or PluginType.Metadata;
+    private static bool Ordered(PluginType type) => type is PluginType.Retrieval or PluginType.Index or PluginType.Metadata or PluginType.Player;
 
     private RenderFragment Section(PluginType type, string title, string about, string empty) => __builder =>
     {

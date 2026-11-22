@@ -2,13 +2,15 @@
 
 ## Playing in the browser
 
-**Play**, on a dump you have in a game's page, opens it in EmulatorJS, in the browser. Romdex hands the emulator the
+**Play**, on a dump you have in a game's page, opens it in the browser, in a [player](plugins.md#players): EmulatorJS
+unless you've added another. Romdex hands the emulator the
 library's own file, so a dump plays only once it's verified. Someone needs the Play permission. The link is good for
 12 hours, and needs no sign-in, so it can be opened on a TV's browser or a phone.
 
-EmulatorJS is GPL, so it's a container of its own, `emulatorjs` in the compose file. Romdex shows it at `/emulator/`,
-so the games and the emulator come from the same place and nothing else needs opening. Without it, games say that the
-emulator isn't installed.
+EmulatorJS is GPL, so it's a container of its own, `emulatorjs` in the compose file, and a plugin under **Settings →
+Plugins → Players**, set up for you the first time Romdex starts. Romdex passes its files on, so the games and the
+emulator come from the same place and nothing else needs opening. Without a player, games say that none is set up;
+with the container stopped, that EmulatorJS isn't working, and why.
 
 It plays the Game Boy, Game Boy Color and Advance, NES and Famicom Disk System, SNES, N64, Virtual Boy, DS, the Sega
 consoles up to the 32X and Mega-CD, PlayStation, PSP, PC Engine, Atari, WonderSwan, Neo Geo Pocket and ColecoVision.

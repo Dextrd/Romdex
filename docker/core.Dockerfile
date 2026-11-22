@@ -13,6 +13,7 @@ COPY src/Romdex.Plugins.Libretro/Romdex.Plugins.Libretro.csproj src/Romdex.Plugi
 COPY src/Romdex.Plugins.TheGamesDb/Romdex.Plugins.TheGamesDb.csproj src/Romdex.Plugins.TheGamesDb/
 COPY src/Romdex.Plugins.ScreenScraper/Romdex.Plugins.ScreenScraper.csproj src/Romdex.Plugins.ScreenScraper/
 COPY src/Romdex.Plugins.Romm/Romdex.Plugins.Romm.csproj src/Romdex.Plugins.Romm/
+COPY src/Romdex.Plugins.EmulatorJs/Romdex.Plugins.EmulatorJs.csproj src/Romdex.Plugins.EmulatorJs/
 COPY src/Romdex.Core/Romdex.Core.csproj src/Romdex.Core/
 RUN dotnet restore src/Romdex.Core/Romdex.Core.csproj
 COPY src/ src/

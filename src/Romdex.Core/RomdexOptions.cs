@@ -42,8 +42,9 @@ public class RomdexOptions
     public int DownloadCheckMinutes { get; set; } = 5;
 
     /// <summary>
-    /// The emulatorjs container's address, such as <c>http://emulatorjs:8080</c>. The core passes its files on at
-    /// <c>/emulator/</c>, so the player loads them from Romdex itself. Empty, games don't play in the browser.
+    /// The emulatorjs container's address, such as <c>http://emulatorjs:8080</c>, which sets up the EmulatorJS player
+    /// plugin with it on first run. After that it's the plugin's own setting, under Settings → Plugins. Empty, no player
+    /// is set up, and one can be added there.
     /// </summary>
     public string EmulatorUrl { get; set; } = "";
 

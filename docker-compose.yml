@@ -51,8 +51,9 @@ services:
       - staging:/staging
 
   # EmulatorJS, which plays games in the browser. It's GPL and about 700 MB, almost all of it emulators, so it's a
-  # container of its own; the core passes its files on, so it needs no port. To go without, leave this out and
-  # Romdex__EmulatorUrl above, and games open only in RomM, if it's connected.
+  # container of its own; the core passes its files on, so it needs no port. Romdex__EmulatorUrl above sets up the
+  # EmulatorJS player plugin with it on first run. To go without, leave this and that out, and games open only in
+  # RomM, if it's connected.
   emulatorjs:
     image: ghcr.io/dextrd/romdex-emulatorjs:${ROMDEX_VERSION:-latest}
     container_name: romdex-emulatorjs

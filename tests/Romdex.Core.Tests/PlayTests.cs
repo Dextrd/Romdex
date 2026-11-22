@@ -14,6 +14,7 @@ using Romdex.Core.Catalogue;
 using Romdex.Core.Plugins;
 using Romdex.Core.Play;
 using Romdex.Core.Tests.Support;
+using Romdex.Plugins.EmulatorJs;
 
 namespace Romdex.Core.Tests;
 
@@ -50,7 +51,7 @@ public sealed class PlayTests : IDisposable
                     o.PrimaryHandler = () => _services;
                     o.RateLimit = false;
                 });
-                services.AddHttpClient(PlayEndpoints.EmulatorClient).ConfigurePrimaryHttpMessageHandler(() => _services);
+                services.AddHttpClient(PlayEndpoints.PlayerFilesClient).ConfigurePrimaryHttpMessageHandler(() => _services);
                 services.AddHttpClient(CoverCache.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => _services);
             }));
         _api = new RomdexClient(_factory.CreateSignedInClient());
@@ -72,7 +73,7 @@ public sealed class PlayTests : IDisposable
         var lights = _dats.Dump(TestDisc, "Harbor Lights (USA)", [".cue", ".bin", ".bin"]);
         // In a DAT of BIOS files of its own, as Redump's are, which doesn't mark it as one.
         var testBios = _dats.Dump(TestDisc + " - BIOS Images", "Test Disc (USA) (v1.0)", [".bin"]);
-        Emulators.Register(TestDisc, new Emulator("psx", new EmulatorBios(false, new Dictionary<string, string> { [Md5(testBios[0].Data)] = "scph5501.bin" })));
+        Cores.Register(TestDisc, new EmulatorCore("psx", new CoreBios(false, new Dictionary<string, string> { [Md5(testBios[0].Data)] = "scph5501.bin" })));
         var garden = _dats.Dump(GameCube, "Glass Garden (USA)", [".iso"]);
         _dats.Dump(GameBoy, "Moss Maze (Japan)", [".gb"]);
         _dats.WriteDats();
@@ -86,6 +87,10 @@ public sealed class PlayTests : IDisposable
         _dats.Put("ngc/Glass Garden (USA).iso", garden[0].Data);
         await SetUpAsync();
 
+        // EmulatorJS is the player, set up from the emulatorjs container's address Romdex was given.
+        var player = Assert.Single(await _api.ListPluginsAsync(), p => p.Type == PluginType.Player);
+        Assert.Equal(EmulatorJsFactory.PluginId, player.PluginId);
+
         // A cartridge goes as its file, through a link that needs no sign-in, only its signature.
         var pondPlay = await PlayAsync("Pixel Pond");
         Assert.NotNull(pondPlay.PlayerUrl);
@@ -95,7 +100,8 @@ public sealed class PlayTests : IDisposable
         var page = await anyone.GetStringAsync(pondPlay.PlayerUrl);
         Assert.Contains("EJS_core = \"gb\"", page);
         Assert.Contains("EJS_disableDatabases = true", page);
-        Assert.Contains("EJS_pathtodata = \"../../../../emulator/data/\"", page);
+        Assert.Contains($"EJS_pathtodata = \"../../../../players/{player.Id}/data/\"", page);
+        Assert.Contains($"href=\"../../../../titles/{pondPlay.TitleId}\"", page);
         Assert.Contains("\"loader.js\"", page);
         var gameUrl = Between(page, "EJS_gameUrl = \"", "\"");
         Assert.Equal(pond[0].Data, await anyone.GetByteArrayAsync(Under(pondPlay.PlayerUrl!, gameUrl)));
@@ -127,11 +133,16 @@ public sealed class PlayTests : IDisposable
         Assert.Equal(testBios[0].Data, await anyone.GetByteArrayAsync(Under(lightsPlay.PlayerUrl!, Between(page, "EJS_biosUrl = \"", "\""))));
 
         // The GameCube isn't the browser's to play, and nothing plays what the library hasn't got.
-        Assert.Equal($"The browser's emulator doesn't play {GameCube} games.", (await PlayAsync("Glass Garden")).Unplayable);
+        Assert.Equal($"No player plays {GameCube} games.", (await PlayAsync("Glass Garden")).Unplayable);
         Assert.Equal("The library doesn't have all of it.", (await PlayAsync("Moss Maze")).Unplayable);
 
         // EmulatorJS's own files come from its container, through the core.
-        Assert.Equal("// loader", await anyone.GetStringAsync("emulator/data/loader.js"));
+        Assert.Equal("// loader", await anyone.GetStringAsync($"players/{player.Id}/data/loader.js"));
+
+        // Turned off, there's no player, and nothing plays.
+        await _api.UpdatePluginAsync(player.Id, new UpdatePlugin(Enabled: false));
+        Assert.Equal("No player is set up: add one, such as EmulatorJS, under Settings → Plugins.", (await PlayAsync("Pixel Pond")).Unplayable);
+        Assert.Equal(HttpStatusCode.NotFound, (await anyone.GetAsync($"players/{player.Id}/data/loader.js")).StatusCode);
     }
 
     [Fact]

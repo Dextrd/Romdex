@@ -3,7 +3,7 @@
 Everything Romdex knows about games, and everywhere games come from or go to, is a plugin. Set them up under
 **Settings → Plugins**. **Test** on each says whether it's working.
 
-There are four kinds, and each does one job:
+There are five kinds, and each does one job:
 
 | Kind | Its job | Without one |
 | --- | --- | --- |
@@ -11,6 +11,7 @@ There are four kinds, and each does one job:
 | [Titles and covers](#titles-and-covers) | Names, covers and what each game is: when it came out, who made it, its reviews | Games show by their DAT names, without covers or details |
 | [Retrievers](#retrievers) | Bring new dumps in | Nothing new comes in through Romdex |
 | [Connected apps](#connected-apps) | Tell another app, such as RomM, when the library changes | Nothing else is told |
+| [Players](#players) | Play the games you have, in the browser | Games don't play in the browser |
 
 Only the catalogue decides what you have, what's missing and what's bad. The others never change that.
 
@@ -101,5 +102,16 @@ Connectors tell another app, such as RomM, when the library changes. They're opt
 
 - **RomM** (built in) asks RomM to scan what's filed, and adds **Open in RomM** to a game's page. See
   [Opening games in another app](playing-and-apps.md#opening-games-in-another-app).
+
+## Players
+
+Players play the games you have in the browser. A game plays in the first one, in your order, that plays its system and
+is working. Romdex hands a player only verified files from your library, through signed links, and picks the BIOS a
+game needs by its checksum.
+
+- **EmulatorJS** (built in) plays games with EmulatorJS's libretro cores, from the `emulatorjs` container: the NES to
+  the PlayStation and the PSP. Its **Address** is where Romdex reaches the container, `http://emulatorjs:8080` in the
+  compose file; the browser never goes there, as Romdex passes its files on. It's set up for you the first time
+  Romdex starts, from `Romdex__EmulatorUrl`. See [Playing in the browser](playing-and-apps.md#playing-in-the-browser).
 
 Next: [Downloads and filing](downloads-and-filing.md).

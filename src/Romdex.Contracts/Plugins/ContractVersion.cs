@@ -37,6 +37,9 @@ public static class ContractVersions
     /// <summary>Connectors: where games are used.</summary>
     public static readonly ContractVersion Connector = new(1, 0);
 
+    /// <summary>Players: where games play, in the browser.</summary>
+    public static readonly ContractVersion Player = new(1, 0);
+
     /// <summary>The version the core supports for a given plugin type.</summary>
     public static ContractVersion For(PluginType type) => type switch
     {
@@ -44,6 +47,7 @@ public static class ContractVersions
         PluginType.Metadata => Metadata,
         PluginType.Retrieval => Retrieval,
         PluginType.Connector => Connector,
+        PluginType.Player => Player,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, null),
     };
 }

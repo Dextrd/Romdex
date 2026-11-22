@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Romdex.Plugins.EmulatorJs</RootNamespace>
+    <Description>Romdex player that plays games in the browser with EmulatorJS, from the emulatorjs container.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Romdex.Contracts\Romdex.Contracts.csproj" />
+    <InternalsVisibleTo Include="Romdex.Core.Tests" />
+  </ItemGroup>
+
+</Project>

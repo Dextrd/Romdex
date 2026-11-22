@@ -8,7 +8,9 @@ using Romdex.Core.Access;
 using Romdex.Core.Apps;
 using Romdex.Core.Data;
 using Romdex.Core.Library;
+using Romdex.Contracts.Plugins.Players;
 using Romdex.Core.Play;
+using Romdex.Core.Plugins;
 using SharpCompress.Archives.SevenZip;
 
 namespace Romdex.Core.Api;
@@ -16,7 +18,8 @@ namespace Romdex.Core.Api;
 /// <summary>Playing games the library has in the browser, and opening them in the connected app.</summary>
 public static class PlayEndpoints
 {
-    public const string EmulatorClient = "emulator";
+    /// <summary>The client players' own files are fetched with, to pass on to their pages.</summary>
+    public const string PlayerFilesClient = "player-files";
 
     public static RouteGroupBuilder MapPlayEndpoints(this RouteGroupBuilder api)
     {
@@ -51,14 +54,21 @@ public static class PlayEndpoints
                     return Results.StatusCode(StatusCodes.Status403Forbidden);
                 if (await PlanAsync(id, db, service, ct) is not { } plan)
                     return Results.NotFound();
-                // Threaded cores need the page cross-origin isolated; every file it loads is Romdex's own, so it can be.
-                if (plan.Emulator.Threads)
+                // A threaded emulator needs the page cross-origin isolated; every file it loads is Romdex's own, so it can be.
+                if (plan.Support.Isolated)
                 {
                     http.Response.Headers["Cross-Origin-Opener-Policy"] = "same-origin";
                     http.Response.Headers["Cross-Origin-Embedder-Policy"] = "require-corp";
                 }
                 http.Response.Headers.CacheControl = "no-store";
-                return Results.Content(PlayerPage.Write(plan, service.Query(id)), "text/html; charset=utf-8");
+                // Links are relative to the page, at api/v1/play/{id}/player, so Romdex works under a path of its own too.
+                var query = service.Query(id);
+                const string root = "../../../../";
+                var page = plan.Player.WritePage(new PlayerGame(plan.Dump.Name, plan.System,
+                    $"game/{Uri.EscapeDataString(plan.Game.Name)}?{query}", plan.Game.Name,
+                    plan.Bios is { } bios ? $"bios/{Uri.EscapeDataString(bios.Name)}?{query}" : null, plan.Bios?.Name,
+                    $"{root}players/{plan.Instance.Id}/", $"{root}titles/{plan.Dump.TitleId}"));
+                return Results.Content(page, "text/html; charset=utf-8");
             })
             .AllowAnyone().ExcludeFromDescription();
 
@@ -116,27 +126,29 @@ public static class PlayEndpoints
     }
 
     /// <summary>
-    /// EmulatorJS's own files, from the emulatorjs container, at <c>/emulator/</c>: the player loads them from Romdex, so
-    /// they're on the same origin as the game. They're public, as they are anywhere EmulatorJS is hosted.
+    /// Each player's own files, such as EmulatorJS's from the emulatorjs container, at <c>/players/{instance}/</c>: its
+    /// page loads them from Romdex, so they're on the same origin as the game. They're public, as they are anywhere an
+    /// emulator is hosted.
     /// </summary>
-    public static IEndpointRouteBuilder MapEmulator(this IEndpointRouteBuilder app)
+    public static IEndpointRouteBuilder MapPlayerFiles(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/emulator/{**path}", async (string? path, HttpContext http, IHttpClientFactory clients, IOptions<RomdexOptions> options) =>
+        app.MapGet("/players/{instance:guid}/{**path}", async (Guid instance, string? path, HttpContext http, IHttpClientFactory clients,
+            PlayerPlugins players) =>
         {
-            var root = options.Value.EmulatorUrl.TrimEnd('/');
-            if (root.Length == 0 || path is null || path.Split('/').Contains(".."))
+            var files = (await players.GetAllAsync(http.RequestAborted)).FirstOrDefault(p => p.Instance.Id == instance).Player?.FilesUrl;
+            if (files is null || path is null || path.Split('/').Contains(".."))
             {
                 http.Response.StatusCode = StatusCodes.Status404NotFound;
                 return;
             }
-            using var request = new HttpRequestMessage(HttpMethod.Get, $"{root}/{path}{http.Request.QueryString}");
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"{files.AbsoluteUri.TrimEnd('/')}/{path}{http.Request.QueryString}");
             foreach (var header in new[] { "If-None-Match", "If-Modified-Since", "Range" })
                 if (http.Request.Headers.TryGetValue(header, out var value))
                     request.Headers.TryAddWithoutValidation(header, value.ToArray());
             HttpResponseMessage response;
             try
             {
-                response = await clients.CreateClient(EmulatorClient).SendAsync(request, HttpCompletionOption.ResponseHeadersRead, http.RequestAborted);
+                response = await clients.CreateClient(PlayerFilesClient).SendAsync(request, HttpCompletionOption.ResponseHeadersRead, http.RequestAborted);
             }
             catch (HttpRequestException)
             {
@@ -187,66 +199,5 @@ public static class PlayEndpoints
         await using (var stream = seven.OpenEntryStream())
             await stream.CopyToAsync(memory, ct);
         return memory.ToArray();
-    }
-}
-
-/// <summary>The player page: EmulatorJS set up for one game, filling the window.</summary>
-public static class PlayerPage
-{
-    public static string Write(PlayPlan plan, string query)
-    {
-        static string Js(string? value) => JsonSerializer.Serialize(value);
-        var name = WebUtility.HtmlEncode(plan.Dump.Name);
-        // Links are relative to the page, at api/v1/play/{id}/player, so Romdex works under a path of its own too.
-        var game = $"game/{Uri.EscapeDataString(plan.Game.Name)}?{query}";
-        var bios = plan.Bios is { } b ? $"bios/{Uri.EscapeDataString(b.Name)}?{query}" : "";
-        const string data = "../../../../emulator/data/";
-        return $$"""
-            <!doctype html>
-            <html lang="en">
-            <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            <title>{{name}} · Romdex</title>
-            <style>
-              html, body { margin: 0; height: 100%; background: #000; color: #ddd; font: 14px system-ui, sans-serif; }
-              body { display: flex; flex-direction: column; }
-              header { display: flex; gap: 12px; align-items: center; padding: 8px 16px; background: #15171c; }
-              header a { color: #8ab4ff; text-decoration: none; }
-              header span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-              main { flex: 1; min-height: 0; }
-              #game { width: 100%; height: 100%; }
-              .unplayable { max-width: 36em; margin: 15vh auto; padding: 0 16px; line-height: 1.5; }
-            </style>
-            </head>
-            <body>
-            <header><a href="../../../../titles/{{plan.Dump.TitleId}}">← Back</a><span>{{name}}</span></header>
-            <main><div id="game"></div></main>
-            <script>
-              EJS_player = "#game";
-              EJS_core = {{Js(plan.Emulator.Core)}};
-              EJS_gameName = {{Js(plan.Dump.Name)}};
-              EJS_gameUrl = {{Js(game)}};
-              EJS_biosUrl = {{Js(bios)}};
-              EJS_pathtodata = {{Js(data)}};
-              EJS_startOnLoaded = true;
-              // Its own cache of games is keyed by link, and each link here is signed afresh, so it would never be used:
-              // it would only keep another copy of each game, in memory while it's stored, and on disk after.
-              EJS_disableDatabases = true;
-              EJS_threads = {{(plan.Emulator.Threads ? "true" : "false")}};
-              // The emulator draws with WebGL: without it, it only says it failed to start, so say why instead.
-              const canvas = document.createElement("canvas");
-              if (canvas.getContext("webgl2") || canvas.getContext("webgl")) {
-                const loader = document.createElement("script");
-                loader.src = EJS_pathtodata + "loader.js";
-                document.body.append(loader);
-              } else {
-                document.getElementById("game").outerHTML = '<p class="unplayable">This browser can\'t play games: the emulator draws with WebGL, '
-                  + "which it doesn't have, or has turned off. Most browsers have it; check that hardware acceleration is on.</p>";
-              }
-            </script>
-            </body>
-            </html>
-            """;
     }
 }
