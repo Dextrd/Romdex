@@ -191,6 +191,9 @@ namespace Romdex.Core.Data.Migrations
                     b.Property<Guid?>("PluginInstanceId")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Replaces")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Source")
                         .IsRequired()
                         .HasColumnType("TEXT");

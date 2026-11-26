@@ -55,6 +55,12 @@ public class Download
     /// <summary>The title it was fetched for, when someone asked for it; null for what arrived by itself.</summary>
     public Guid? TitleId { get; set; }
 
+    /// <summary>
+    /// Library files it replaces, '|'-separated IDs, when it was fetched from Review to replace them, such as a bad dump:
+    /// they're deleted once it's filed and verifies.
+    /// </summary>
+    public string? Replaces { get; set; }
+
     /// <summary>The one dump asked for, when someone picked one.</summary>
     public Guid? WantedDumpId { get; set; }
 

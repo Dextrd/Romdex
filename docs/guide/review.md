@@ -33,14 +33,14 @@ Files named as a dump's file is, whose hashes differ: most likely a bad or modif
 under its name.
 
 - **Approve** counts it as the dump all the same.
-- **Replace** fetches a good copy. Once it's in, delete this one.
+- **Replace** fetches a good copy. Once it's filed and verifies, this one is deleted.
 
 ## Outdated
 
 Files that matched a dump until a new version of the DAT changed it, such as after a redump. Romdex remembers what
 each file matched, and in which version of the DAT, so these aren't mixed up with files that never matched.
 
-- **Upgrade** fetches the dump as the DAT has it now.
+- **Upgrade** fetches the dump as the DAT has it now. Once it's filed and verifies, the old file is deleted.
 - **Keep** counts the file as that dump all the same.
 
 A dump that has left the DAT altogether can only be searched for, as under Matching.
@@ -49,7 +49,8 @@ A dump that has left the DAT altogether can only be searched for, as under Match
 
 Dumps the library has some files of but not all, such as a disc missing a track. Each says which files are missing.
 
-- **Get** fetches the whole dump.
+- **Get** fetches the whole dump. Once it's filed and verifies, the part you had is deleted, unless the new one was
+  filed over it.
 - **Keep as it is** if the missing files are meant to be, such as audio tracks left out to save room. It counts as
   whole while only those are missing; if others go too, it's back here.
 - **Delete** takes out what the library has of it, if those files hold nothing else.
@@ -59,7 +60,9 @@ A game missing a disc isn't here: each disc is a dump of its own, so the game sh
 ## Corrupted
 
 Files that couldn't be read: damaged, or not what their extension says. Where the file's name is a dump's, **Replace**
-fetches it. Each scan tries every one again.
+fetches it, and the damaged file is deleted once it's filed and verifies. Each scan tries every one again.
+
+What's fetched to replace a file never deletes one that holds another game too, such as an archive of several.
 
 A file that only needs a tool to be read, such as `chdman` for a CHD or `dolphin-tool` for an RVZ, isn't listed: it's
 probably fine. A note above the list says how many wait for a tool, and they're read once it's there.

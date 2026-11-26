@@ -79,7 +79,8 @@ public sealed record DownloadsPage(IReadOnlyList<DownloadInfo> Items, int Total,
 
 /// <summary>Body of <c>POST /titles/{id}/search</c>.</summary>
 /// <param name="DumpId">The one dump wanted; null for any dump of the title.</param>
-public sealed record SearchDownloads(Guid? DumpId = null);
+/// <param name="Replaces">For <c>POST /titles/{id}/fetch</c>: library files what's fetched replaces, such as a bad dump, deleted once it's filed and verifies.</param>
+public sealed record SearchDownloads(Guid? DumpId = null, IReadOnlyList<Guid>? Replaces = null);
 
 /// <summary>What a plugin offered for a title.</summary>
 /// <param name="PluginId">The plugin instance that offered it, for <c>POST /downloads/fetch</c>.</param>

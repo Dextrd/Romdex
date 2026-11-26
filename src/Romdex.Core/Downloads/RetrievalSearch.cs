@@ -48,7 +48,8 @@ public sealed class RetrievalSearch(RomdexDbContext db, RetrievalPlugins plugins
     /// Gets a title, or one of its dumps: fetches the best offer that wasn't turned away before. Null for no such title;
     /// a result with nothing started says why.
     /// </summary>
-    public async Task<FetchResult?> FetchBestAsync(Guid titleId, Guid? dumpId, CancellationToken ct)
+    /// <param name="replaces">Library files what's fetched replaces, such as a bad dump: deleted once it's filed and verifies.</param>
+    public async Task<FetchResult?> FetchBestAsync(Guid titleId, Guid? dumpId, CancellationToken ct, IReadOnlyList<Guid>? replaces = null)
     {
         if (await SearchAsync(titleId, dumpId, ct) is not { } found)
             return null;
@@ -61,7 +62,7 @@ public sealed class RetrievalSearch(RomdexDbContext db, RetrievalPlugins plugins
         }
         var instance = (await db.PluginInstances.FindAsync([best.PluginId], ct))!;
         var target = await targets.ForAsync(titleId, dumpId, ct);
-        var item = await downloads.FetchAsync(instance, best.Candidate, target, titleId, dumpId, ct);
+        var item = await downloads.FetchAsync(instance, best.Candidate, target, titleId, dumpId, ct, replaces);
         return new FetchResult(item, best, problems);
     }
 

@@ -29,6 +29,7 @@ public sealed class DownloadPipeline(
     ConnectorPlugins connectors,
     AppSync appSync,
     TaskQueue tasks,
+    DownloadService downloads,
     IOptions<RomdexOptions> options,
     ILogger<DownloadPipeline> logger)
 {
@@ -153,12 +154,44 @@ public sealed class DownloadPipeline(
 
         DeleteStaging(directory);
         notes.Insert(0, $"Filed {Names(toFile.Select(f => f.Dump.Name))}");
+        if (await ReplaceAsync(item, filed, toFile.Select(f => f.Dump.Id).ToHashSet(), ct) is { } replaced)
+            notes.Add(replaced);
         await SetAsync(item, DownloadState.Filed, Sentence(notes), ct);
 
         // The connected app, if any, scans for it and gives its ID; a metadata plugin, if any, finds its cover.
         if (await connectors.GetActiveAsync(ct) is not null)
             appSync.Add(filed);
         await ArtLookupTask.QueueIfUsefulAsync(db, tasks, ct);
+    }
+
+    /// <summary>
+    /// Deletes the library files a download fetched from Review replaces, such as a bad dump, now that what replaces
+    /// them is filed and verifies. A file it was filed over stays, and so does one that holds another game too.
+    /// Returns a note for the item's message, if any went.
+    /// </summary>
+    private async Task<string?> ReplaceAsync(Download item, List<string> filed, HashSet<Guid> dumpIds, CancellationToken ct)
+    {
+        if (item.Replaces is null)
+            return null;
+        var gone = new List<string>();
+        foreach (var id in item.Replaces.Split('|').Select(Guid.Parse))
+        {
+            if (await db.LibraryFiles.AsNoTracking().FirstOrDefaultAsync(f => f.Id == id, ct) is not { } file || filed.Contains(file.Path))
+                continue;
+            if (await db.LibraryMatches.AnyAsync(m => m.Content!.LibraryFileId == id && m.ManualMatchId == null && !dumpIds.Contains(m.DumpFile!.DumpId), ct))
+            {
+                logger.LogInformation("[{Item}] Kept {Path}, which it replaces, as it holds another game too", item.Name, file.Path);
+                continue;
+            }
+            await downloads.DeleteFromLibraryAsync(file, ct, $"Replaced by {item.Name}, and deleted.");
+            gone.Add(file.Path);
+        }
+        // Deleting lets go of everything the context tracked, the item included.
+        db.Update(item);
+        if (gone.Count == 0)
+            return null;
+        await matcher.MatchAsync(ct);
+        return $"replacing {Names(gone)}, now deleted";
     }
 
     /// <summary>

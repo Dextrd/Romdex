@@ -325,6 +325,29 @@ public sealed class DownloadTests : IDisposable
     }
 
     [Fact]
+    public async Task Replacing_a_bad_dump_deletes_it_once_the_good_copy_is_filed()
+    {
+        var pond = _dats.Dump(Handheld, "Pixel Pond (USA)", [".gb"]);
+        _dats.WriteDats();
+        _dats.Put("gb/Pixel Pond (USA).gb", [.. pond[0].Data[..^1], 0]);
+        await SetUpAsync();
+
+        var bad = Assert.Single((await _api.ListBadDumpsAsync()).Items);
+        _plugin.Drop("good pond", ("p.gb", pond[0].Data));
+        var fetch = await _api.FetchTitleAsync(bad.LooksLike!.TitleId!.Value, bad.LooksLike.Id, [bad.FileId]);
+        var item = await WaitAsync(fetch.Download!.Id);
+        Assert.Equal(DownloadState.Filed, item.State);
+        Assert.Contains("replacing gb/Pixel Pond (USA).gb, now deleted", item.Message);
+
+        Assert.NotEqual("gb/Pixel Pond (USA).gb", Assert.Single(item.Dumps[0].Filed));
+        Assert.False(File.Exists(Path.Combine(_dats.Roms, "gb", "Pixel Pond (USA).gb")));
+        Assert.Empty((await _api.ListBadDumpsAsync()).Items);
+        Assert.Equal(TitleStatus.Owned, (await _api.GetTitleAsync(bad.LooksLike.TitleId.Value))!.Status);
+        // The bad copy is noted on Downloads as replaced.
+        Assert.Contains((await _api.ListDownloadsAsync()).Items, d => d.State == DownloadState.Rejected && d.Message == "Replaced by good pond, and deleted.");
+    }
+
+    [Fact]
     public void Offers_are_ranked_by_the_dump_wanted_then_verified_then_how_sure_the_plugin_is()
     {
         var target = new RetrievalTarget(Handheld, "Tide Bell",

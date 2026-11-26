@@ -100,7 +100,7 @@ public static class DownloadEndpoints
             .WithSummary("Asks every retriever that searches for dumps of a title, and ranks what they offer. Fetch one with POST /downloads/fetch.");
 
         api.MapPost("/titles/{id:guid}/fetch", async (Guid id, SearchDownloads? body, RetrievalSearch search, RomdexDbContext db, CancellationToken ct) =>
-                await search.FetchBestAsync(id, body?.DumpId, ct) is { } result ? Results.Ok(await FetchInfoAsync(db, result, ct)) : Results.NotFound())
+                await search.FetchBestAsync(id, body?.DumpId, ct, body?.Replaces) is { } result ? Results.Ok(await FetchInfoAsync(db, result, ct)) : Results.NotFound())
             .RequireScope(Scopes.Download).WithTags("Downloads").WithName("FetchTitle")
             .WithSummary("Gets a title, or one of its dumps: asks every retriever, and fetches the best offer that wasn't turned away before.");
 
@@ -115,7 +115,9 @@ public static class DownloadEndpoints
                     return await service.RetryAsync(item, ct)
                         ? Results.Ok(new TitleFetch((await InfoAsync(db, [item], ct))[0], []))
                         : Results.Problem(item.Message ?? "It couldn't be tried again.", statusCode: StatusCodes.Status409Conflict);
-                var result = (await search.FetchBestAsync(titleId, item.WantedDumpId, ct))!;
+                // What it was to replace, the next one replaces.
+                var replaces = item.Replaces?.Split('|').Select(Guid.Parse).ToList();
+                var result = (await search.FetchBestAsync(titleId, item.WantedDumpId, ct, replaces))!;
                 // What it was is thrown away once something else is on its way, so it's no longer listed.
                 if (result.Item is not null)
                     await service.RejectAsync(await db.Downloads.FirstAsync(i => i.Id == id, ct), ct);

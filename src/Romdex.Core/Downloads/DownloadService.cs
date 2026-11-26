@@ -27,7 +27,9 @@ public sealed class DownloadService(
 {
     /// <summary>Asks a plugin to stage a candidate, and adds it as an item that's fetching.</summary>
     /// <param name="titleId">The title it's for, when someone asked for one.</param>
-    public async Task<Download> FetchAsync(PluginInstance instance, Candidate candidate, RetrievalTarget? target, Guid? titleId, Guid? dumpId, CancellationToken ct)
+    /// <param name="replaces">Library files it replaces, deleted once it's filed and verifies.</param>
+    public async Task<Download> FetchAsync(PluginInstance instance, Candidate candidate, RetrievalTarget? target, Guid? titleId, Guid? dumpId, CancellationToken ct,
+        IReadOnlyList<Guid>? replaces = null)
     {
         var item = new Download
         {
@@ -38,6 +40,7 @@ public sealed class DownloadService(
             CandidateJson = JsonSerializer.Serialize(candidate, RetrievalJson.Options),
             TitleId = titleId,
             WantedDumpId = dumpId,
+            Replaces = replaces is { Count: > 0 } ? string.Join('|', replaces) : null,
             State = DownloadState.Fetching,
             StagingDirectory = "",
         };
@@ -73,9 +76,9 @@ public sealed class DownloadService(
     /// Deletes a file from the library, such as a bad dump or a damaged archive, from Review. The worker takes it out
     /// and it's thrown away; it's left on the Downloads page as rejected, so there's a record of it.
     /// </summary>
-    public async Task<Download> DeleteFromLibraryAsync(LibraryFile file, CancellationToken ct)
+    public async Task<Download> DeleteFromLibraryAsync(LibraryFile file, CancellationToken ct, string why = "Deleted from the library under Review; its files are gone.")
     {
-        var item = await TakeOutAsync(file, DownloadState.Rejected, "Deleted from the library under Review; its files are gone.", ct);
+        var item = await TakeOutAsync(file, DownloadState.Rejected, why, ct);
         DownloadPipeline.DeleteStaging(StagingPath(item));
         return item;
     }

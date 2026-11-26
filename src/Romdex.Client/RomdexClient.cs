@@ -243,8 +243,9 @@ public sealed class RomdexClient(HttpClient http)
         PostForAsync<DownloadSearchResult>($"{Api}/titles/{titleId}/search", new SearchDownloads(dumpId), ct);
 
     /// <summary>Gets a title, or one of its dumps: fetches the best offer that wasn't turned away before.</summary>
-    public Task<TitleFetch> FetchTitleAsync(Guid titleId, Guid? dumpId = null, CancellationToken ct = default) =>
-        PostForAsync<TitleFetch>($"{Api}/titles/{titleId}/fetch", new SearchDownloads(dumpId), ct);
+    /// <param name="replaces">Library files it replaces, such as a bad dump: deleted once what's fetched is filed and verifies.</param>
+    public Task<TitleFetch> FetchTitleAsync(Guid titleId, Guid? dumpId = null, IReadOnlyList<Guid>? replaces = null, CancellationToken ct = default) =>
+        PostForAsync<TitleFetch>($"{Api}/titles/{titleId}/fetch", new SearchDownloads(dumpId, replaces), ct);
 
     /// <summary>Looks again for what an arrival was fetched for, passing over what was turned away; one that arrived by itself is retried.</summary>
     public Task<TitleFetch> TryDownloadAgainAsync(Guid id, CancellationToken ct = default) => PostForAsync<TitleFetch>($"{Api}/downloads/{id}/try-again", null, ct);
