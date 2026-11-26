@@ -122,8 +122,8 @@ the game there, with the review scores given for that system. Scores given witho
 show on every system's page.
 
 The Library's games, a system's and Search can each be a **Grid** of covers or a **List**, as you choose beside them;
-the choice is kept for every list in this browser. In the grid, a game's tile is green when you have it and red when
-you don't.
+the choice is kept for every list in this browser. In the grid, a game you have is in full colour, with its region dot
+beside its name; one you don't is faded and grey until you point at it.
 
 **Review** lists what the DATs don't explain: files that match nothing, bad and outdated dumps, incomplete dumps,
 files that couldn't be read, and fetches that didn't bring what they were for. See [Review](review.md).

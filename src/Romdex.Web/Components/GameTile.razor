@@ -1,11 +1,11 @@
 @*
-    A game in a grid: its cover, name and systems, on a tile coloured for where it stands, green when it's in the
-    library and red when it isn't. Anything given, such as a button to get it, sits in its corner.
+    A game in a grid: its cover, name and systems. One you have is in full colour, with its region dot beside its name;
+    one you don't is faded and grey, until pointed at. Anything given, such as a button to get it, sits in its corner.
 *@
 <div class="tile-wrap">
     <a class="tile game-tile @Format.Badge(Status)" href="@Href" title="@($"{Name} · {Format.OwnershipLabel(Status)}")">
         <Cover Url="@Cover" />
-        <div class="tile-name">@Name</div>
+        <div class="tile-name"><span class="tile-name-text">@Name</span><RegionDot Fit="Fit" WantedMissing="WantedMissing" /></div>
         <div class="small tile-sub"><span class="tile-status">@Format.OwnershipLabel(Status)</span>@(Systems is { Length: > 0 } ? $" · {Systems}" : "")</div>
     </a>
     @if (ChildContent is not null)
@@ -24,4 +24,12 @@
     [Parameter] public string? Systems { get; set; }
 
     [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>How well what you have of it fits your region tiers; null for none.</summary>
+    [Parameter] public RegionFit? Fit { get; set; }
+
+    [Parameter] public IReadOnlyList<string>? WantedMissing { get; set; }
+
+    /// <summary>The best fit among a game's titles on each system, for a tile of the game rather than one title.</summary>
+    public static TitleSummary? BestFit(IEnumerable<TitleSummary> titles) => titles.Where(t => t.Fit is not null).MinBy(t => t.Fit);
 }

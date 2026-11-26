@@ -285,6 +285,7 @@ else
                         @foreach (var game in series.Games)
                         {
                             <GameTile @key="game.Id" Href="@($"titles/{game.Id}")" Name="@game.Name" Cover="@game.Cover" Status="game.Status"
+                                      Fit="GameTile.BestFit(game.Titles)?.Fit" WantedMissing="GameTile.BestFit(game.Titles)?.WantedMissing"
                                       Systems="@string.Join(" · ", game.Titles.Select(t => _short.GetValueOrDefault(t.SystemId)).OfType<string>().Distinct())" />
                         }
                 </Carousel>

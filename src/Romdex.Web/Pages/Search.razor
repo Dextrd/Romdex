@@ -54,7 +54,8 @@ else
     {
         @* Only the rows near the screen are drawn, and fetched as they're scrolled to. *@
         <TileGrid @key="_games" Items="_games" Class="game-tiles" Context="game">
-                <GameTile @key="game.Id" Href="@($"titles/{game.Id}")" Name="@game.Name" Cover="@game.Cover" Status="game.Status" Systems="@Systems(game)">
+                <GameTile @key="game.Id" Href="@($"titles/{game.Id}")" Name="@game.Name" Cover="@game.Cover" Status="game.Status" Systems="@Systems(game)"
+                          Fit="GameTile.BestFit(game.Titles)?.Fit" WantedMissing="GameTile.BestFit(game.Titles)?.WantedMissing">
                     @if (CanGet && game.Status != TitleStatus.Owned)
                     {
                         <IconButton Icon="get" Title="@($"Get {game.Name}")" Class="small" OnClick="() => _getting = game" />

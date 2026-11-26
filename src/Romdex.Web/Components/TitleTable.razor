@@ -9,7 +9,7 @@
         @foreach (var title in Titles)
         {
             <GameTile @key="title.Id" Href="@($"titles/{title.Id}")" Name="@title.Name" Cover="@title.Cover" Status="title.Status"
-                      Systems="@Systems?.GetValueOrDefault(title.SystemId)" />
+                      Systems="@Systems?.GetValueOrDefault(title.SystemId)" Fit="title.Fit" WantedMissing="title.WantedMissing" />
         }
     </div>
 }

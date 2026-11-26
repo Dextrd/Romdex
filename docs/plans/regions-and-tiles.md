@@ -1,6 +1,6 @@
 # Plan: region tiers, region dots and tiles
 
-Agreed while designing Review. Built: region tiers, region dots and requests; tiles are next.
+Agreed while designing Review, and built: region tiers, region dots, tiles and requests.
 
 ## Region tiers
 
