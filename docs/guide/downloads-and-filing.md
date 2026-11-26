@@ -25,13 +25,14 @@ Each arrival goes through the same steps, shown on the Downloads page and on the
 5. **Filed.** The igir worker moves it into the library, named as the DAT names it, and Romdex checks it's there and
    verified.
 
-## What waits on the Downloads page
+## What waits for you
 
-An arrival waits for you when:
+An arrival waits for you, under [Review](review.md), when:
 
 - **it matches nothing in the catalogue.** It may be a bad dump, a hack, or from a system you have no DAT for. Reject
   it, or add the DAT, update the catalogue and **Retry**;
 - **it's incomplete**, such as a disc missing a track. The message says which files are missing;
+- **none of its files could be read**;
 - **it isn't what you asked for.** You got it for one game, and it's another. **Accept** files it as what it is;
   **Try again** fetches the next best offer, passing over what was turned away, and throws this one away.
 
@@ -98,8 +99,8 @@ Only games that are whole and match the DATs move. Files that match nothing stay
 whose new place is taken, or whose archive holds other games too: the preview says why. Converting what you have to
 another storage format isn't part of formatting.
 
-Under **Review**, **Send to Downloads** takes a file that matches nothing, or can't be read, out of the library and
-through Downloads again. There it can be identified afresh, such as after you add a DAT, or rejected.
+Under [Review](review.md), **Send to Downloads** takes a file that matches nothing, or can't be read, out of the
+library and through Downloads again. There it can be identified afresh, such as after you add a DAT, or rejected.
 
 ## The igir worker
 
@@ -107,4 +108,4 @@ The igir worker is the only part of Romdex that writes the library; the core onl
 [igir](https://igir.io) to file each dump, with a DAT of just that dump, and chdman and DolphinTool to make and read
 CHDs and RVZs. These are GPL programs, so they run in a container of their own, beside the core.
 
-Next: [Playing, covers and apps](playing-and-apps.md).
+Next: [Review](review.md).

@@ -52,3 +52,19 @@ it means (such as "Wanted: Europe, USA; you have Europe"):
 - No more red and green tiles. An owned game's cover is in full colour; a missing game's is faded and desaturated.
 - No banners on tiles.
 - The region dot sits under the tile, beside the title, not on the cover.
+
+## Requests: trying offers in turn, as Melodex does
+
+Not yet at parity with Melodex. Today, Get (and Review's Replace, Upgrade, Get and Couldn't fetch → Try again) makes
+**one attempt**: it fetches the best offer not turned away before. If that offer turns out to be another game, or fails,
+it waits under Review → Couldn't fetch, and each Try again moves on to the next offer.
+
+Melodex instead keeps going by itself: a request tries its candidates one after another, in ranked order, until one is
+kept, and only lands in Couldn't fetch once every one has failed, listing why each was turned away
+(`RequestPipeline.RunAsync` and `CandidateRanking` in Melodex).
+
+To match it, Romdex needs a request: what was asked for (a title, or one dump), with its attempts, each a download.
+Couldn't fetch then lists requests rather than downloads, with each attempt's reason, and Try again searches afresh.
+The region tiers above need the same thing (one request per wanted region, each reported on its own), so build it there.
+The ranking (`RetrievalSearch.Rank`) and the record of what was turned away (`RetrievalSearch.TurnedAwayAsync`) carry
+over as they are.

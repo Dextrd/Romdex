@@ -1,0 +1,149 @@
+@inject RomdexClient Api
+
+@*
+    Says what a file is, for one the DATs match to nothing: found by searching the catalogue, then either one of the
+    game's dumps, which the file then counts as, or a version of the game no DAT lists, such as a translation, which
+    shows on its page but never makes it owned.
+*@
+<Dialog Title="@($"What is {FileName}?")" OnClose="OnClose" Class="link-dialog">
+    @if (_title is null)
+    {
+        <input type="search" placeholder="Search for the game" aria-label="Search for the game" @bind="_query" @bind:event="oninput" @bind:after="SearchAsync" @ref="_box" />
+        @if (_games is { Count: 0 } && _query.Trim().Length > 0)
+        {
+            <p class="muted small">Nothing in the catalogue is called that.</p>
+        }
+        else if (_games is not null)
+        {
+            <div class="link-results">
+                @foreach (var game in _games)
+                {
+                    @foreach (var title in game.Titles)
+                    {
+                        <button class="link-result" @onclick="() => PickAsync(title.Id)">
+                            <span class="dump-name">@title.Name</span>
+                            <span class="muted small">@Systems.GetValueOrDefault(title.SystemId, "")</span>
+                        </button>
+                    }
+                }
+            </div>
+        }
+    }
+    else
+    {
+        <p class="small"><a href="" @onclick="Back" @onclick:preventDefault>← Another game</a></p>
+        <h3 class="link-title">@_title.Name <span class="muted small">@_title.SystemName</span></h3>
+        <p class="muted small">Pick the dump it is: it then counts as that dump while no DAT matches it. Or keep it as a version no DAT lists.</p>
+        <div class="link-results">
+            @foreach (var dump in _title.Dumps)
+            {
+                <button class="link-result" disabled="@_busy" @onclick="() => LinkAsync(new LinkFile(FileId, Entry, DumpId: dump.Id))">
+                    <span class="dump-name">@dump.Name</span>
+                    @if (dump.Files.Count > 1) { <span class="muted small">@Format.Count(dump.Files.Count, "file", "files")</span> }
+                </button>
+            }
+        </div>
+        <div class="link-version">
+            <label class="small" for="link-version-name">A version no DAT lists, such as a translation or a hack</label>
+            <div class="toolbar">
+                <input id="link-version-name" type="text" placeholder="@($"{_title.Name} (Translation)")" @bind="_versionName" @bind:event="oninput" />
+                <button disabled="@(_busy || _versionName.Trim().Length == 0)" @onclick="() => LinkAsync(new LinkFile(FileId, Entry, TitleId: _title.Id, Name: _versionName.Trim()))">Keep as a version</button>
+            </div>
+        </div>
+    }
+    @if (_error is not null)
+    {
+        <div class="notice error small">@_error</div>
+    }
+    <div class="toolbar dialog-buttons">
+        <button @onclick="OnClose">Cancel</button>
+    </div>
+</Dialog>
+
+@code {
+    [Parameter, EditorRequired] public Guid FileId { get; set; }
+
+    /// <summary>The file inside an archive, when it's one.</summary>
+    [Parameter] public string? Entry { get; set; }
+
+    [Parameter, EditorRequired] public string FileName { get; set; } = "";
+
+    /// <summary>What to search for first, such as the file's name.</summary>
+    [Parameter] public string? Query { get; set; }
+
+    /// <summary>Systems' short names by ID, to tell a game's systems apart.</summary>
+    [Parameter] public IReadOnlyDictionary<Guid, string> Systems { get; set; } = new Dictionary<Guid, string>();
+
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>Called once the file is linked.</summary>
+    [Parameter] public EventCallback<ManualMatchInfo> OnLinked { get; set; }
+
+    private string _query = "";
+    private string _versionName = "";
+    private IReadOnlyList<GameSummary>? _games;
+    private TitleDetail? _title;
+    private bool _busy;
+    private string? _error;
+    private ElementReference _box;
+    private int _search;
+
+    protected override Task OnInitializedAsync()
+    {
+        _query = Query ?? "";
+        return SearchAsync();
+    }
+
+    private async Task SearchAsync()
+    {
+        var mine = ++_search;
+        var query = _query.Trim();
+        if (query.Length == 0)
+        {
+            _games = null;
+            return;
+        }
+        try
+        {
+            var page = await Api.SearchCatalogueAsync(query, take: 20);
+            // A later search may have started meanwhile.
+            if (mine == _search)
+                _games = page.Items;
+        }
+        catch (Exception e) when (e is RomdexApiException or HttpRequestException)
+        {
+            _error = $"Couldn't search: {e.Message}";
+        }
+    }
+
+    private async Task PickAsync(Guid titleId)
+    {
+        _error = null;
+        _title = await Api.GetTitleAsync(titleId);
+        _versionName = "";
+    }
+
+    private void Back()
+    {
+        _title = null;
+        _error = null;
+    }
+
+    private async Task LinkAsync(LinkFile link)
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            await OnLinked.InvokeAsync(await Api.LinkFileAsync(link));
+        }
+        catch (Exception e) when (e is RomdexApiException or HttpRequestException)
+        {
+            _error = e.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

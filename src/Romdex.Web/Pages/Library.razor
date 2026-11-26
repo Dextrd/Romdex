@@ -18,9 +18,9 @@
     {
         <span class="muted small">
             @Format.Count(_status.Files, "file", "files"), @Format.Size(_status.Bytes)@(_status.ScannedAt is { } at ? $", scanned {Format.Ago(at)}" : ", not scanned yet")
-            @if (_status.Unknown + _status.Unreadable > 0)
+            @if (_status.ToReview > 0)
             {
-                <span> · <a href="review">@Format.Count(_status.Unknown + _status.Unreadable, "file", "files") to review</a></span>
+                <span> · <a href="review">@_status.ToReview.ToString("N0") to review</a></span>
             }
         </span>
     }

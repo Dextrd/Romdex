@@ -123,6 +123,9 @@ else
         (null, "All", "Everything that's arrived, newest first"),
     ];
 
+    /// <summary>An arrival to open, from Review's Details.</summary>
+    [SupplyParameterFromQuery(Name = "open")] public Guid? OpenParameter { get; set; }
+
     private DownloadsPage? _page;
     private List<DownloadInfo> _items = [];
     private DownloadState? _state;
@@ -133,9 +136,17 @@ else
     protected override async Task OnInitializedAsync()
     {
         Events.Received += OnEvent;
-        // With something to review, that's what's shown first.
-        var waiting = await Api.ListDownloadsAsync(DownloadState.NeedsReview, take: PageSize);
-        _state = waiting.Total > 0 ? DownloadState.NeedsReview : null;
+        // One asked for by Review opens among everything; otherwise, with something to review, that's what's shown first.
+        if (OpenParameter is { } open)
+        {
+            _open.Add(open);
+            _state = null;
+        }
+        else
+        {
+            var waiting = await Api.ListDownloadsAsync(DownloadState.NeedsReview, take: PageSize);
+            _state = waiting.Total > 0 ? DownloadState.NeedsReview : null;
+        }
         await LoadAsync(PageSize);
     }
 

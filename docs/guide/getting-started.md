@@ -98,9 +98,10 @@ The Library's games, a system's and Search can each be a **Grid** of covers or a
 the choice is kept for every list in this browser. In the grid, a game's tile is green when you have it and red when
 you don't.
 
-**Review** lists the files that match nothing, and any that couldn't be read.
+**Review** lists what the DATs don't explain: files that match nothing, bad and outdated dumps, incomplete dumps,
+files that couldn't be read, and fetches that didn't bring what they were for. See [Review](review.md).
 
-Reading inside a CHD needs `chdman`, and inside an RVZ needs `dolphin-tool`. Until they're part of Romdex's
-containers, such files are listed under Review as unreadable.
+Reading inside a CHD needs `chdman`, and inside an RVZ needs `dolphin-tool`. Until they're there, such files wait to be
+read, and Review says how many.
 
 Next: [Users and permissions](users-and-permissions.md).

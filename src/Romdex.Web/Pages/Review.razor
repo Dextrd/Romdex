@@ -1,124 +1,719 @@
 @page "/review"
+@page "/review/bad-dumps"
+@page "/review/outdated"
+@page "/review/incomplete"
+@page "/review/corrupted"
+@page "/review/couldnt-fetch"
+@implements IDisposable
 @inject RomdexClient Api
 @inject AuthState Auth
+@inject NavigationManager Nav
+@using Microsoft.JSInterop
+@inject IJSRuntime JS
 
 <PageTitle>Review · Romdex</PageTitle>
 
 <h1>Review</h1>
+@* What the DATs don't explain, a tab for each thing that can be done about it. Hashes decide what a file is, so nothing
+   here is a guess at a match: these are the exceptions. *@
+<nav class="page-tabs review-tabs" aria-label="Review">
+    @foreach (var (tab, label, count) in Tabs)
+    {
+        <a href="@(tab == Matching ? "review" : $"review/{tab}")" class="@(Tab == tab ? "active" : null)" aria-current="@(Tab == tab ? "page" : null)">
+            @label@if (count > 0) { <span class="tab-count">@count.ToString("N0")</span> }
+        </a>
+    }
+</nav>
+
 <p class="muted">
-    Files in the library that match nothing in the catalogue, and files that couldn't be read. One with a dump's name but other hashes is
-    likely a bad or modified dump of it. Sending one to Downloads takes it out of the library, to be identified again or rejected.
+    @switch (Tab)
+    {
+        case Matching:
+            <span>
+                Files that match nothing in the catalogue, and aren't named as anything in it is. <strong>Search</strong> for what one is:
+                pick the dump it is, and it counts as that dump while no DAT matches it, or keep it as a version of a game no DAT lists, such
+                as a translation. <strong>Defer</strong> takes it off this list; each scan still matches it, so a DAT that adds it later
+                finds it. <strong>Hide</strong> takes it out of Romdex altogether. Every file stays in your library folder until you delete it.
+            </span>
+            break;
+        case BadDumps:
+            <span>
+                Files named as a dump's file is, but with other hashes: most likely bad or modified copies of it, or a hack under its name.
+                <strong>Approve</strong> counts one as the dump anyway. <strong>Replace</strong> fetches a good copy; once it's in, delete
+                this one.
+            </span>
+            break;
+        case Outdated:
+            <span>
+                Files that matched a dump until a new DAT changed it, such as after a redump. <strong>Upgrade</strong> fetches the dump as
+                the DAT has it now. <strong>Keep</strong> counts the file as that dump all the same.
+            </span>
+            break;
+        case Incomplete:
+            <span>
+                Dumps the library has some files of, but not all, such as a disc missing a track. <strong>Get</strong> fetches the whole
+                dump. <strong>Keep as it is</strong> if the missing files are meant to be, such as audio tracks left out to save room: it
+                counts as whole while only those are missing.
+            </span>
+            break;
+        case Corrupted:
+            <span>
+                Files that couldn't be read: damaged, or not what their extension says. <strong>Replace</strong> fetches the dump the file's
+                name suggests. Each scan tries every one again.
+            </span>
+            break;
+        default:
+            <span>
+                Fetches that didn't bring the game asked for, and ones that failed. <strong>Accept</strong> files what arrived as what it
+                is. <strong>Try again</strong> fetches the next best offer, passing over what was turned away, and throws this one away.
+                <strong>Dismiss</strong> throws it away.
+            </span>
+            break;
+    }
 </p>
 
-@if (_waiting > 0)
+@if (_summary?.NoTool is { } noTool && Tab is Corrupted or Matching)
 {
-    <div class="notice">@Format.Count(_waiting, "arrival waits", "arrivals wait") for review on the <a href="downloads">Downloads page</a>.</div>
+    <div class="notice">
+        @Format.Count(noTool.Files, "file waits", "files wait") for a tool to read it, so @(noTool.Files == 1 ? "it isn't" : "they aren't") listed here: @noTool.Message
+    </div>
 }
-@if (_error is not null)
+@if (_notice is not null)
 {
-    <div class="notice error">@_error</div>
+    <div class="notice @(_noticeIsError ? "error" : null)" role="status">@_notice</div>
 }
 
-@if (_page is null)
+@if (!Loaded)
 {
     <Loading />
 }
-else if (_page.Total == 0)
+else if (Total == 0)
 {
-    <div class="empty card">Nothing to review. Every file in the library is one the catalogue knows.</div>
+    <div class="empty card">@(Tab switch
+    {
+        Matching => "Nothing to match: every file is one the catalogue knows, or is set aside below.",
+        BadDumps => "No bad dumps: no file is named as a dump but differs from it.",
+        Outdated => "Nothing outdated: every file that matched a dump still does.",
+        Incomplete => "No incomplete dumps.",
+        Corrupted => "Every file could be read.",
+        _ => "Nothing waits: every fetch brought what it was for.",
+    })</div>
 }
 else
 {
-    <div class="card">
-        <table class="table">
-            <thead>
-                <tr>
-                    <th>File</th>
-                    <th class="num hide-narrow">Size</th>
-                    <th>What's wrong</th>
-                    @if (CanReclaim) { <th></th> }
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var file in _files)
-                {
-                    <tr>
-                        <td>
-                            <div>@file.Path</div>
-                            @if (file.Entry is not null) { <div class="muted small">→ @file.Entry</div> }
-                        </td>
-                        <td class="num hide-narrow">@Format.Size(file.Size)</td>
-                        <td class="small">
-                            @if (file.Error is not null) { <span class="error">@file.Error</span> }
-                            else if (file.LooksLike is not null) { <span>Named like <strong>@file.LooksLike.Name</strong>, but its hashes differ</span> }
-                            else { <span class="muted">Matches nothing</span> }
-                            @if (file.Crc32 is not null) { <div class="hashes"><code title="CRC32">@file.Crc32</code><code title="SHA-1">@file.Sha1</code></div> }
-                        </td>
-                        @if (CanReclaim)
-                        {
-                            <td class="actions">
-                                @if (file.Entry is null || _files.First(f => f.FileId == file.FileId) == file)
-                                {
-                                    <button disabled="@_busy.Contains(file.FileId)" @onclick="() => ReclaimAsync(file)"
-                                            title="Take the file out of the library and through Downloads again, where it can be identified afresh or rejected">Send to Downloads</button>
-                                }
-                            </td>
-                        }
-                    </tr>
-                }
-            </tbody>
-        </table>
+    var some = _filter.Trim().Length > 0;
+    var these = some ? "these" : "all";
+    <div class="library-bar review-bar">
+        <div class="toolbar one-line">
+            <input class="filter" type="search" placeholder="Filter by name or path" aria-label="Filter by name or path" @bind="_filter" @bind:event="oninput" />
+            @* Where there's no room for the box, a button opens it below. *@
+            <button class="icon-button filter-toggle @(_filterOpen || some ? "on" : "")" type="button" title="Filter by name or path" aria-label="Filter by name or path"
+                    aria-expanded="@(_filterOpen ? "true" : "false")" @onclick="() => _filterOpen = !_filterOpen">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6" /><path d="M20 20l-4.5-4.5" /></svg>
+            </button>
+            <span class="spacer"></span>
+            @switch (Tab)
+            {
+                case Matching when MayReview && VisibleFiles.Any():
+                    <IconButton Icon="defer" Label="@($"Defer {these}")" Disabled="_busy" Title="@($"Defer every file {(some ? "the filter shows" : "here")}")" OnClick="@(() => _confirm = "defer")" />
+                    <IconButton Icon="hide" Label="@($"Hide {these}")" Disabled="_busy" Title="@($"Hide every file {(some ? "the filter shows" : "here")}")" OnClick="@(() => _confirm = "hide")" />
+                    break;
+                case BadDumps when MayReview && VisibleFiles.Any():
+                    <IconButton Icon="approve" Primary="true" Label="@($"Approve {these}")" Disabled="_busy" Title="@($"Count every file {(some ? "the filter shows" : "here")} as the dump it's named as")"
+                                OnClick="@(() => _confirm = "approve")" />
+                    break;
+                case Outdated when MayReview && VisibleFiles.Any(f => f.Was?.Now is not null):
+                    <IconButton Icon="approve" Label="@($"Keep {these}")" Disabled="_busy" Title="@($"Keep every file {(some ? "the filter shows" : "here")} as the dump it was")"
+                                OnClick="@(() => _confirm = "keep-outdated")" />
+                    break;
+                case Incomplete when MayReview && VisibleDumps.Any():
+                    <IconButton Icon="approve" Label="@($"Keep {these} as they are")" Disabled="_busy" Title="@($"Keep every dump {(some ? "the filter shows" : "here")} without the files it's missing")"
+                                OnClick="@(() => _confirm = "keep-incomplete")" />
+                    break;
+                case CouldntFetch when MayDownload && VisibleArrivals.Any():
+                    <IconButton Icon="retry" Primary="true" Label="@($"Try again for {these}")" Disabled="_busy" Title="@($"Fetch the next best offer for every one {(some ? "the filter shows" : "here")}")"
+                                OnClick="TryAgainShownAsync" />
+                    <IconButton Icon="cancel" Label="@($"Dismiss {these}")" Disabled="_busy" Title="@($"Throw away every one {(some ? "the filter shows" : "here")}")" OnClick="@(() => _confirm = "dismiss")" />
+                    break;
+            }
+        </div>
+        @if (_filterOpen)
+        {
+            <div class="filter-drop">
+                <input type="search" placeholder="Filter by name or path" aria-label="Filter by name or path" @bind="_filter" @bind:event="oninput" />
+            </div>
+        }
     </div>
-    @if (_files.Count < _page.Total)
+
+    @if (_confirm is { } confirm)
+    {
+        var (title, text, button, danger) = Confirmation(confirm);
+        <Dialog Title="@title" OnClose="() => _confirm = null" Alert="true">
+            <p>@text</p>
+            <div class="toolbar dialog-buttons">
+                <button @onclick="() => _confirm = null">Cancel</button>
+                <button class="@(danger ? "danger" : "primary")" disabled="@_busy" @onclick="() => ConfirmAsync(confirm)">@if (_busy) { <span class="spinner"></span> }@button</button>
+            </div>
+        </Dialog>
+    }
+
+    @if (Shown == 0)
+    {
+        <div class="empty card">Nothing matches that filter.</div>
+    }
+
+    @foreach (var arrival in Tab == CouldntFetch ? [] : VisibleArrivals)
+    {
+        <div class="card review-item" @key="arrival.Id">
+            <div>
+                <div class="label">Arrived</div>
+                <div class="dump-name">@arrival.Name</div>
+                <div class="muted small">@arrival.Source · @Format.Ago(arrival.UpdatedAt)</div>
+            </div>
+            <div>
+                <div class="label">What's wrong</div>
+                <div class="small">@arrival.Message</div>
+            </div>
+            <div class="review-actions">
+                <IconButton Icon="retry" Requires="@UserPermissions.Download" Title="Retry: identify it again, such as after a catalogue update" Disabled="_busy" OnClick="() => RetryAsync(arrival)" />
+                <IconButton Icon="discard" Requires="@UserPermissions.Download" Title="Reject: throw its files away" Disabled="_busy" OnClick="() => RejectAsync(arrival)" />
+                <IconButton Icon="open" Title="Details: its files, their hashes and what each matched" OnClick="@(() => Nav.NavigateTo($"downloads?open={arrival.Id}"))" />
+            </div>
+        </div>
+    }
+
+    @switch (Tab)
+    {
+        case Incomplete:
+            @foreach (var dump in VisibleDumps)
+            {
+                <div class="card review-item" @key="dump.Dump.Id">
+                    <div>
+                        <div class="label">Dump</div>
+                        <a class="dump-name" href="titles/@dump.TitleId">@dump.Dump.Name</a>
+                        <div class="muted small">@dump.System</div>
+                        @foreach (var place in dump.Have)
+                        {
+                            <div class="muted small path">@place.Path@(place.Entry is null ? "" : $" → {place.Entry}")</div>
+                        }
+                    </div>
+                    <div>
+                        <div class="label">Missing</div>
+                        @foreach (var name in dump.Missing)
+                        {
+                            <div class="small path">@name</div>
+                        }
+                    </div>
+                    <div class="review-actions">
+                        <IconButton Icon="get" Primary="true" Requires="@UserPermissions.Download" Title="Get: fetch the whole dump" Disabled="@(_busy || _fetching.Contains(dump.Dump.Id))"
+                                    OnClick="() => FetchAsync(dump.Dump.Id, dump.TitleId, dump.Dump.Id)" />
+                        <IconButton Icon="approve" Requires="@UserPermissions.Review" Title="Keep as it is: count it as whole while only these files are missing" Disabled="_busy" OnClick="() => KeepIncompleteAsync(dump)" />
+                        <IconButton Icon="discard" Requires="@UserPermissions.Review" Title="Delete: take what the library has of it out, if those files hold nothing else" Disabled="_busy"
+                                    OnClick="() => DeleteIncompleteAsync(dump)" />
+                    </div>
+                </div>
+            }
+            break;
+        case CouldntFetch:
+            @foreach (var arrival in VisibleArrivals)
+            {
+                <div class="card review-item" @key="arrival.Id">
+                    <div>
+                        <div class="label">Asked for</div>
+                        @if (arrival.Title is { } asked) { <a class="dump-name" href="titles/@asked.Id">@asked.Name</a> }
+                        else { <div class="dump-name">@arrival.Name</div> }
+                        <div class="muted small">@arrival.Source · @arrival.Name · @Format.Ago(arrival.UpdatedAt)</div>
+                    </div>
+                    <div>
+                        <div class="label">What went wrong</div>
+                        <div class="small">@arrival.Message</div>
+                    </div>
+                    <div class="review-actions">
+                        @if (MayDownload && arrival.CanAccept)
+                        {
+                            <IconButton Icon="approve" Title="Accept: file what arrived as what it is" Disabled="_busy" OnClick="() => AcceptAsync(arrival)" />
+                        }
+                        <IconButton Icon="retry" Primary="true" Requires="@UserPermissions.Download" Title="Try again: fetch the next best offer, and throw this one away" Disabled="_busy" OnClick="() => TryAgainAsync(arrival)" />
+                        <IconButton Icon="cancel" Requires="@UserPermissions.Download" Title="Dismiss: throw it away" Disabled="_busy" OnClick="() => RejectAsync(arrival)" />
+                        <IconButton Icon="open" Title="Details: its files, their hashes and what each matched" OnClick="@(() => Nav.NavigateTo($"downloads?open={arrival.Id}"))" />
+                    </div>
+                </div>
+            }
+            break;
+        default:
+            @foreach (var file in VisibleFiles)
+            {
+                <div class="card review-item" @key="(file.FileId, file.Entry)">
+                    <div>
+                        <div class="label">File</div>
+                        <div class="dump-name path">@System.IO.Path.GetFileName(file.Entry ?? file.Path)</div>
+                        <div class="muted small path">@file.Path@(file.Entry is null ? "" : $" → {file.Entry}") · @Format.Size(file.Size)</div>
+                        @if (file.Sha1 is not null) { <div class="hashes"><code title="CRC32">@file.Crc32</code><code title="SHA-1">@file.Sha1</code></div> }
+                    </div>
+                    <div>
+                        @switch (Tab)
+                        {
+                            case BadDumps:
+                                <div class="label">Named as</div>
+                                <a class="dump-name" href="titles/@file.LooksLike!.TitleId">@file.LooksLike.Name</a>
+                                <div class="muted small">Its hashes differ from the DAT's.</div>
+                                break;
+                            case Outdated:
+                                var was = file.Was!;
+                                <div class="label">Was</div>
+                                @if (was.Now is { } now) { <a class="dump-name" href="titles/@now.TitleId">@was.Dump</a> }
+                                else { <div class="dump-name">@was.Dump</div> }
+                                <div class="muted small">
+                                    Matched in the @was.System DAT, version @was.DatVersion.
+                                    @(was.Now is null ? "The dump has left the DAT." : "The DAT has new hashes for it.")
+                                </div>
+                                break;
+                            case Corrupted:
+                                <div class="label">What's wrong</div>
+                                <div class="small error full">@file.Error</div>
+                                @if (file.LooksLike is { } looks) { <div class="muted small">Its name says it was <a href="titles/@looks.TitleId">@looks.Name</a>.</div> }
+                                break;
+                            default:
+                                <div class="label">Matches</div>
+                                <div class="muted">Nothing in the catalogue</div>
+                                break;
+                        }
+                    </div>
+                    <div class="review-actions">
+                        @switch (Tab)
+                        {
+                            case BadDumps:
+                                <IconButton Icon="approve" Primary="true" Requires="@UserPermissions.Review" Title="Approve: count it as the dump it's named as" Disabled="_busy"
+                                            OnClick="() => LinkAsync(new LinkFile(file.FileId, file.Entry, DumpId: file.LooksLike!.Id))" />
+                                <IconButton Icon="get" Requires="@UserPermissions.Download" Title="Replace: fetch a good copy of the dump" Disabled="@(_busy || _fetching.Contains(file.LooksLike!.Id))"
+                                            OnClick="() => FetchAsync(file.LooksLike!.Id, file.LooksLike.TitleId!.Value, file.LooksLike.Id)" />
+                                break;
+                            case Outdated when file.Was?.Now is { } now:
+                                <IconButton Icon="get" Primary="true" Requires="@UserPermissions.Download" Title="Upgrade: fetch the dump as the DAT has it now" Disabled="@(_busy || _fetching.Contains(now.Id))"
+                                            OnClick="() => FetchAsync(now.Id, now.TitleId!.Value, now.Id)" />
+                                <IconButton Icon="approve" Requires="@UserPermissions.Review" Title="Keep: count it as the dump it was" Disabled="_busy"
+                                            OnClick="() => LinkAsync(new LinkFile(file.FileId, file.Entry, DumpId: now.Id))" />
+                                break;
+                            case Outdated:
+                                <IconButton Icon="search" Primary="true" Requires="@UserPermissions.Review" Title="Search for what it is now" OnClick="() => _linking = file" />
+                                break;
+                            case Corrupted when file.LooksLike is { } looks:
+                                <IconButton Icon="get" Primary="true" Requires="@UserPermissions.Download" Title="Replace: fetch the dump its name says it was" Disabled="@(_busy || _fetching.Contains(looks.Id))"
+                                            OnClick="() => FetchAsync(looks.Id, looks.TitleId!.Value, looks.Id)" />
+                                break;
+                            case Matching:
+                                <IconButton Icon="search" Primary="true" Requires="@UserPermissions.Review" Title="Search for what it is" OnClick="() => _linking = file" />
+                                <IconButton Icon="defer" Requires="@UserPermissions.Review" Title="Defer: take it off this list; each scan still matches it" Disabled="_busy" OnClick="() => SetAsideAsync(file, hide: false)" />
+                                <IconButton Icon="hide" Requires="@UserPermissions.Review" Title="Hide: Romdex never matches or lists it again, until you put it back" Disabled="_busy" OnClick="() => SetAsideAsync(file, hide: true)" />
+                                break;
+                        }
+                        @if (Tab is not Matching || file.Entry is null)
+                        {
+                            <IconButton Icon="retry" Requires="@UserPermissions.Review" Title="Send to Downloads: take it out of the library to be identified again, such as after adding a DAT" Disabled="_busy"
+                                        OnClick="() => ReclaimAsync(file)" />
+                        }
+                        <IconButton Icon="discard" Requires="@UserPermissions.Review"
+                                    Title="@(file.Entry is null ? "Delete: take it out of the library and throw it away" : "Delete: take the whole archive out of the library and throw it away")"
+                                    Disabled="_busy" OnClick="() => _deleting = file" />
+                    </div>
+                </div>
+            }
+            break;
+    }
+
+    @if (Loaded && Total > LoadedCount)
     {
         <div class="toolbar">
             <button @onclick="MoreAsync">Show more</button>
-            <span class="muted small">@_files.Count.ToString("N0") of @_page.Total.ToString("N0")</span>
+            <span class="muted small">@LoadedCount.ToString("N0") of @Total.ToString("N0")</span>
         </div>
     }
 }
 
-@code {
-    private UnknownPage? _page;
-    private List<UnknownFile> _files = [];
-    private int _waiting;
-    private string? _error;
-    private readonly HashSet<Guid> _busy = [];
-
-    private bool CanReclaim => Auth.May(UserPermissions.Review);
-
-    protected override async Task OnInitializedAsync()
+@if (Tab == Matching && (_deferred is { Total: > 0 } || _hidden is { Total: > 0 }))
+{
+    @foreach (var (list, title, hint) in new[] { (_deferred, "Deferred", "Off the list for now; each scan still matches them."), (_hidden, "Hidden", "Never matched or listed, until put back.") })
     {
-        _page = await Api.ListUnknownAsync();
-        _files = [.. _page.Items];
-        _waiting = (await Api.ListDownloadsAsync(DownloadState.NeedsReview, take: 1)).Waiting;
+        @if (list is { Total: > 0 })
+        {
+            <h2 class="section">@title <span class="muted small">@list.Total.ToString("N0") · @hint</span></h2>
+            <div class="card">
+                <table class="table">
+                    <tbody>
+                        @foreach (var file in list.Items)
+                        {
+                            <tr @key="file.FileId">
+                                <td class="path">@file.Path</td>
+                                <td class="num hide-narrow">@Format.Size(file.Size)</td>
+                                <td class="actions">
+                                    <IconButton Icon="putback" Requires="@UserPermissions.Review" Title="Put back: match it again, and list it here if it still matches nothing" Disabled="_busy" OnClick="() => PutBackAsync(file)" />
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
     }
+}
 
-    // The whole file goes, archive and all, so each archive gets one button.
-    private async Task ReclaimAsync(UnknownFile file)
+@if (_linking is { } linking)
+{
+    <LinkDialog FileId="linking.FileId" Entry="@linking.Entry" FileName="@System.IO.Path.GetFileName(linking.Entry ?? linking.Path)"
+                Query="@SearchHint(linking)" Systems="_systems" OnClose="() => _linking = null" OnLinked="LinkedAsync" />
+}
+@if (_deleting is { } deleting)
+{
+    <Dialog Title="@($"Delete {System.IO.Path.GetFileName(deleting.Path)}?")" OnClose="() => _deleting = null" Alert="true">
+        <p>
+            It's taken out of the library and thrown away; it can't be put back. @(deleting.Entry is null ? "" : "It's an archive: everything in it goes.")
+            Downloads keeps a note of it.
+        </p>
+        <div class="toolbar dialog-buttons">
+            <button @onclick="() => _deleting = null">Cancel</button>
+            <button class="danger" disabled="@_busy" @onclick="() => DeleteAsync(deleting)">@if (_busy) { <span class="spinner"></span> }Delete</button>
+        </div>
+    </Dialog>
+}
+
+@code {
+    private const string Matching = "matching";
+    private const string BadDumps = "bad-dumps";
+    private const string Outdated = "outdated";
+    private const string Incomplete = "incomplete";
+    private const string Corrupted = "corrupted";
+    private const string CouldntFetch = "couldnt-fetch";
+
+    private ReviewSummary? _summary;
+    private ReviewFilePage? _files;
+    private ReviewDumpPage? _dumps;
+    private DownloadsPage? _couldntFetch;
+    private ReviewFilePage? _deferred;
+    private ReviewFilePage? _hidden;
+    private string? _loadedTab;
+    private string _filter = "";
+    private bool _filterOpen;
+    private string? _confirm;
+    private ReviewFile? _linking;
+    private ReviewFile? _deleting;
+    private bool _busy;
+    private string? _notice;
+    private bool _noticeIsError;
+    private readonly HashSet<Guid> _fetching = [];
+    private IReadOnlyDictionary<Guid, string> _systems = new Dictionary<Guid, string>();
+
+    private string Tab => new Uri(Nav.Uri).AbsolutePath.TrimEnd('/').Split('/').Last() switch
     {
-        _error = null;
-        _busy.Add(file.FileId);
+        BadDumps => BadDumps,
+        Outdated => Outdated,
+        Incomplete => Incomplete,
+        Corrupted => Corrupted,
+        CouldntFetch => CouldntFetch,
+        _ => Matching,
+    };
+
+    private IEnumerable<(string Tab, string Label, int Count)> Tabs =>
+    [
+        (Matching, "Matching", _summary?.Matching ?? 0),
+        (BadDumps, "Bad dumps", _summary?.BadDumps ?? 0),
+        (Outdated, "Outdated", _summary?.Outdated ?? 0),
+        (Incomplete, "Incomplete", _summary?.Incomplete ?? 0),
+        (Corrupted, "Corrupted", _summary?.Corrupted ?? 0),
+        (CouldntFetch, "Couldn't fetch", _summary?.CouldntFetch ?? 0),
+    ];
+
+    private bool MayReview => Auth.May(UserPermissions.Review);
+    private bool MayDownload => Auth.May(UserPermissions.Download);
+
+    private bool Loaded => _loadedTab == Tab && Tab switch
+    {
+        Incomplete => _dumps is not null,
+        CouldntFetch => _couldntFetch is not null,
+        _ => _files is not null,
+    };
+
+    private IReadOnlyList<DownloadInfo> Arrivals => Tab switch
+    {
+        Incomplete => _dumps?.Arrivals ?? [],
+        CouldntFetch => _couldntFetch?.Items ?? [],
+        _ => _files?.Arrivals ?? [],
+    };
+
+    private int Total => Tab switch
+    {
+        Incomplete => (_dumps?.Total ?? 0) + Arrivals.Count,
+        CouldntFetch => _couldntFetch?.Total ?? 0,
+        _ => (_files?.Total ?? 0) + Arrivals.Count,
+    };
+
+    private int LoadedCount => Tab switch
+    {
+        Incomplete => (_dumps?.Items.Count ?? 0) + Arrivals.Count,
+        CouldntFetch => _couldntFetch?.Items.Count ?? 0,
+        _ => (_files?.Items.Count ?? 0) + Arrivals.Count,
+    };
+
+    private int Shown => Tab switch
+    {
+        Incomplete => VisibleDumps.Count() + VisibleArrivals.Count(),
+        CouldntFetch => VisibleArrivals.Count(),
+        _ => VisibleFiles.Count() + VisibleArrivals.Count(),
+    };
+
+    private bool Matches(params string?[] texts) =>
+        _filter.Trim() is not { Length: > 0 } filter || texts.Any(t => t?.Contains(filter, StringComparison.OrdinalIgnoreCase) == true);
+
+    private IEnumerable<ReviewFile> VisibleFiles => (_files?.Items ?? []).Where(f => Matches(f.Path, f.Entry, f.LooksLike?.Name, f.Was?.Dump));
+    private IEnumerable<ReviewDump> VisibleDumps => (_dumps?.Items ?? []).Where(d => Matches(d.Dump.Name, d.System));
+    private IEnumerable<DownloadInfo> VisibleArrivals => Arrivals.Where(a => Matches(a.Name, a.Title?.Name, a.Message));
+
+    protected override void OnInitialized() => Nav.LocationChanged += OnLocationChanged;
+
+    public void Dispose() => Nav.LocationChanged -= OnLocationChanged;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private string? _revealed;
+
+    // On a phone the tabs scroll sideways: the one open is brought into view whenever it changes.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_revealed == Tab)
+            return;
+        _revealed = Tab;
         try
         {
-            await Api.ReclaimLibraryFileAsync(file.FileId);
-            _files.RemoveAll(f => f.FileId == file.FileId);
-            _page = await Api.ListUnknownAsync(take: Math.Max(_files.Count, 100));
-            _files = [.. _page.Items];
+            await JS.InvokeVoidAsync("romdexTabs.reveal", ".review-tabs");
+        }
+        catch (Microsoft.JSInterop.JSException)
+        {
+        }
+    }
+
+    private async void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        if (_loadedTab == Tab)
+            return;
+        _filter = "";
+        _confirm = null;
+        _notice = null;
+        await LoadAsync();
+        StateHasChanged();
+    }
+
+    private async Task LoadAsync()
+    {
+        var tab = Tab;
+        try
+        {
+            var summary = Api.GetReviewSummaryAsync();
+            switch (tab)
+            {
+                case Incomplete:
+                    _dumps = await Api.ListIncompleteAsync();
+                    break;
+                case CouldntFetch:
+                    _couldntFetch = await Api.ListCouldntFetchAsync();
+                    break;
+                default:
+                    _files = await FilesAsync(tab, 0);
+                    break;
+            }
+            if (tab == Matching)
+            {
+                _deferred = await Api.ListSetAsideAsync();
+                _hidden = await Api.ListSetAsideAsync(hidden: true);
+            }
+            _summary = await summary;
+            _loadedTab = tab;
         }
         catch (Exception e) when (e is RomdexApiException or HttpRequestException)
         {
-            _error = $"{file.Path}: {e.Message}";
-        }
-        finally
-        {
-            _busy.Remove(file.FileId);
+            Say($"Couldn't load Review: {e.Message}", error: true);
         }
     }
 
+    private Task<ReviewFilePage> FilesAsync(string tab, int skip) => tab switch
+    {
+        BadDumps => Api.ListBadDumpsAsync(skip),
+        Outdated => Api.ListOutdatedAsync(skip),
+        Corrupted => Api.ListCorruptedAsync(skip),
+        _ => Api.ListUnmatchedAsync(skip),
+    };
+
     private async Task MoreAsync()
     {
-        _page = await Api.ListUnknownAsync(_files.Count);
-        _files.AddRange(_page.Items);
+        switch (Tab)
+        {
+            case Incomplete when _dumps is not null:
+                var dumps = await Api.ListIncompleteAsync(_dumps.Items.Count);
+                _dumps = _dumps with { Items = [.. _dumps.Items, .. dumps.Items], Total = dumps.Total };
+                break;
+            case CouldntFetch when _couldntFetch is not null:
+                var more = await Api.ListCouldntFetchAsync(_couldntFetch.Items.Count);
+                _couldntFetch = _couldntFetch with { Items = [.. _couldntFetch.Items, .. more.Items], Total = more.Total };
+                break;
+            default:
+                if (_files is null)
+                    return;
+                var files = await FilesAsync(Tab, _files.Items.Count);
+                _files = _files with { Items = [.. _files.Items, .. files.Items], Total = files.Total };
+                break;
+        }
+    }
+
+    // Each action reloads the tab and the counts afterwards: one decision can move a file to another tab.
+    private async Task DoAsync(Func<Task> action, string? done = null)
+    {
+        _busy = true;
+        _notice = null;
+        try
+        {
+            await action();
+            if (done is not null)
+                Say(done);
+        }
+        catch (Exception e) when (e is RomdexApiException or HttpRequestException)
+        {
+            Say(e.Message, error: true);
+        }
+        finally
+        {
+            _busy = false;
+        }
+        await LoadAsync();
+    }
+
+    private void Say(string message, bool error = false)
+    {
+        _notice = message;
+        _noticeIsError = error;
+    }
+
+    private Task SetAsideAsync(ReviewFile file, bool hide) =>
+        DoAsync(() => hide ? Api.HideFileAsync(file.FileId) : Api.DeferFileAsync(file.FileId));
+
+    private Task PutBackAsync(ReviewFile file) => DoAsync(() => Api.PutBackFileAsync(file.FileId));
+
+    private Task LinkAsync(LinkFile link) => DoAsync(() => Api.LinkFileAsync(link));
+
+    private async Task LinkedAsync(ManualMatchInfo link)
+    {
+        _linking = null;
+        Say(link.Dump is { } dump ? $"It counts as {dump.Name} now." : $"It's kept as {link.Name}, a version no DAT lists.");
+        await LoadAsync();
+    }
+
+    private Task ReclaimAsync(ReviewFile file) =>
+        DoAsync(() => Api.ReclaimLibraryFileAsync(file.FileId), $"{System.IO.Path.GetFileName(file.Path)} is on its way through Downloads.");
+
+    private async Task DeleteAsync(ReviewFile file)
+    {
+        await DoAsync(() => Api.DeleteLibraryFileAsync(file.FileId), $"{System.IO.Path.GetFileName(file.Path)} was deleted.");
+        _deleting = null;
+    }
+
+    private Task KeepIncompleteAsync(ReviewDump dump) => DoAsync(() => Api.KeepIncompleteAsync(dump.Dump.Id), $"{dump.Dump.Name} is kept as it is.");
+
+    private Task DeleteIncompleteAsync(ReviewDump dump) =>
+        DoAsync(() => Api.DeleteIncompleteAsync(dump.Dump.Id), $"What the library had of {dump.Dump.Name} was deleted.");
+
+    private async Task FetchAsync(Guid key, Guid titleId, Guid dumpId)
+    {
+        _fetching.Add(key);
+        _notice = null;
+        try
+        {
+            var fetch = await Api.FetchTitleAsync(titleId, dumpId);
+            if (fetch.Download is { } started)
+                Say($"{started.Source} is fetching {started.Name}. It's checked against the DAT and filed once it arrives.");
+            else
+                Say($"Nothing could be fetched: {string.Join(" ", fetch.Problems)}", error: true);
+        }
+        catch (Exception e) when (e is RomdexApiException or HttpRequestException)
+        {
+            Say(e.Message, error: true);
+            _fetching.Remove(key);
+        }
+    }
+
+    private Task RetryAsync(DownloadInfo arrival) => DoAsync(() => Api.RetryDownloadAsync(arrival.Id), $"{arrival.Name} is being identified again.");
+
+    private Task RejectAsync(DownloadInfo arrival) => DoAsync(() => Api.RejectDownloadAsync(arrival.Id));
+
+    private Task AcceptAsync(DownloadInfo arrival) => DoAsync(() => Api.AcceptDownloadAsync(arrival.Id), $"{arrival.Name} is being filed as what it is.");
+
+    private Task TryAgainAsync(DownloadInfo arrival) => DoAsync(async () =>
+    {
+        var fetch = await Api.TryDownloadAgainAsync(arrival.Id);
+        Say(fetch.Download is { } started ? $"{started.Source} is fetching {started.Name}." : $"Nothing else to fetch: {string.Join(" ", fetch.Problems)}",
+            error: fetch.Download is null);
+    });
+
+    private Task TryAgainShownAsync() => DoAsync(async () =>
+    {
+        var started = 0;
+        foreach (var arrival in VisibleArrivals.ToList())
+            if ((await Api.TryDownloadAgainAsync(arrival.Id)).Download is not null)
+                started++;
+        Say($"{Format.Count(started, "fetch", "fetches")} started.");
+    });
+
+    private (string Title, string Text, string Button, bool Danger) Confirmation(string confirm)
+    {
+        var files = Format.Count(VisibleFiles.Count(), "file", "files");
+        return confirm switch
+        {
+            "defer" => ($"Defer {files}?", "Each leaves this list. Each scan still matches it, so a DAT that adds it later finds it. You can put any back from the list below.", "Defer", false),
+            "hide" => ($"Hide {files}?", "Romdex never matches or lists them again, though they stay in your library folder. You can put any back from the list below.", "Hide", true),
+            "approve" => ($"Approve {files}?", "Each counts as the dump it's named as, while no DAT matches it.", "Approve", false),
+            "keep-outdated" => ($"Keep {Format.Count(VisibleFiles.Count(f => f.Was?.Now is not null), "file", "files")}?", "Each counts as the dump it was, while no DAT matches it.", "Keep", false),
+            "keep-incomplete" => ($"Keep {Format.Count(VisibleDumps.Count(), "dump", "dumps")} as they are?", "Each counts as whole while only the files it's missing now are.", "Keep", false),
+            _ => ($"Dismiss {Format.Count(VisibleArrivals.Count(), "fetch", "fetches")}?", "Each is thrown away, with its files.", "Dismiss", true),
+        };
+    }
+
+    private Task ConfirmAsync(string confirm) => DoAsync(async () =>
+    {
+        switch (confirm)
+        {
+            case "defer" or "hide":
+                foreach (var fileId in VisibleFiles.Select(f => f.FileId).Distinct().ToList())
+                    await (confirm == "hide" ? Api.HideFileAsync(fileId) : Api.DeferFileAsync(fileId));
+                break;
+            case "approve":
+                foreach (var file in VisibleFiles.ToList())
+                    await Api.LinkFileAsync(new LinkFile(file.FileId, file.Entry, DumpId: file.LooksLike!.Id));
+                break;
+            case "keep-outdated":
+                foreach (var file in VisibleFiles.Where(f => f.Was?.Now is not null).ToList())
+                    await Api.LinkFileAsync(new LinkFile(file.FileId, file.Entry, DumpId: file.Was!.Now!.Id));
+                break;
+            case "keep-incomplete":
+                foreach (var dump in VisibleDumps.ToList())
+                    await Api.KeepIncompleteAsync(dump.Dump.Id);
+                break;
+            case "dismiss":
+                foreach (var arrival in VisibleArrivals.ToList())
+                    await Api.RejectDownloadAsync(arrival.Id);
+                break;
+        }
+        _confirm = null;
+    });
+
+    // What to search the catalogue for first: the file's name, without its extension or the brackets a dump name has.
+    private string SearchHint(ReviewFile file)
+    {
+        if (_systems.Count == 0)
+            _ = LoadSystemsAsync();
+        var name = System.IO.Path.GetFileNameWithoutExtension(file.Entry ?? file.Path);
+        var cut = name.IndexOfAny(['(', '[']);
+        return (cut > 0 ? name[..cut] : name).Replace('_', ' ').Trim();
+    }
+
+    private async Task LoadSystemsAsync()
+    {
+        _systems = (await Api.ListSystemsAsync()).ToDictionary(s => s.Id, s => s.ShortName ?? s.Name);
+        StateHasChanged();
     }
 }

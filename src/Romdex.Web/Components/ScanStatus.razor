@@ -42,7 +42,7 @@
                 {
                     <hr />
                     <a role="menuitem" href="review" @onclick="() => _menu = false">
-                        Review files<span class="muted small">@Format.Count(ToReview, "file matches", "files match") nothing, or can't be read</span>
+                        Review<span class="muted small">@Format.Count(ToReview, "thing waits", "things wait") for you</span>
                     </a>
                 }
             </div>
@@ -60,7 +60,7 @@
     // Only the tasks this button starts; downloads and conversions show on their own pages.
     private TaskInfo? Running => _active.FirstOrDefault(t => t.Kind is "library-scan" or "catalogue-refresh");
 
-    private int ToReview => _status is null ? 0 : _status.Unknown + _status.Unreadable;
+    private int ToReview => _status?.ToReview ?? 0;
 
     protected override async Task OnInitializedAsync()
     {

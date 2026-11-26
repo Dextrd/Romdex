@@ -107,7 +107,8 @@ public sealed record TitleSummary(Guid Id, Guid SystemId, string Name, TitleStat
     string? Cover = null);
 
 /// <summary>A dump, named.</summary>
-public sealed record DumpRef(Guid Id, string Name, IReadOnlyList<string> Regions);
+/// <param name="TitleId">Its title, where the answer gives it, such as under Review, to get the dump by.</param>
+public sealed record DumpRef(Guid Id, string Name, IReadOnlyList<string> Regions, Guid? TitleId = null);
 
 /// <summary>A page of a system's titles.</summary>
 public sealed record TitlePage(IReadOnlyList<TitleSummary> Items, int Total);
@@ -263,4 +264,5 @@ public sealed record ChoosePreferred(Guid? DumpId);
 /// <summary>What the library holds, in total.</summary>
 /// <param name="Unknown">Files, and files inside archives, that match nothing.</param>
 /// <param name="Unreadable">Files that couldn't be read, such as damaged archives.</param>
-public sealed record LibraryStatus(int Files, long Bytes, int Unknown, int Unreadable, DateTime? ScannedAt, DateTime? CatalogueUpdatedAt);
+/// <param name="ToReview">Everything waiting under Review's tabs: files, dumps and arrivals, not counting those set aside.</param>
+public sealed record LibraryStatus(int Files, long Bytes, int Unknown, int Unreadable, DateTime? ScannedAt, DateTime? CatalogueUpdatedAt, int ToReview = 0);

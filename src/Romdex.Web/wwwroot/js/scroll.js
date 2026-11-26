@@ -146,3 +146,8 @@ function scrollBox(element) {
     }
     return window.romdexScroll.scroller();
 }
+
+// A row of page tabs too wide for a phone scrolls sideways: the one picked is brought into view.
+window.romdexTabs = {
+    reveal: selector => document.querySelector(selector + ' a.active')?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'instant' }),
+};

@@ -235,6 +235,31 @@ else
             @foreach (var dump in held) { @Dump(dump) }
         </div>
     }
+    @if (_links is { Count: > 0 } linkedFiles)
+    {
+        @* Files someone said are this game, which no DAT verifies: kept apart from the DAT's own dumps. *@
+        <h2 class="section">Linked by you <span class="muted small">Not verified by the DATs</span></h2>
+        <div class="card linked">
+            @foreach (var link in linkedFiles)
+            {
+                <div class="linked-row" @key="link.Id">
+                    <div>
+                        <div class="dump-name">@link.Name</div>
+                        <div class="muted small">
+                            @(link.Dump is null ? "A version no DAT lists" : link.Reason switch
+                            {
+                                ManualMatchReason.Approved => "Counted as this dump, though its hashes differ",
+                                ManualMatchReason.KeptOutdated => "Kept as this dump after the DAT changed it",
+                                _ => "Counted as this dump: no DAT matches it",
+                            }) · @Format.Ago(link.CreatedAt)
+                        </div>
+                        <div class="hashes"><code title="SHA-1">@link.Sha1</code></div>
+                    </div>
+                    <IconButton Icon="cancel" Requires="@UserPermissions.Review" Title="Unlink: it's back under Review, as a file no DAT matches" OnClick="() => UnlinkAsync(link)" />
+                </div>
+            }
+        </div>
+    }
     @if (others.Count > 0)
     {
         <h2 class="section">@(held.Count == 0 ? $"ROMs ({others.Count})" : $"Other ROMs ({others.Count})")</h2>
@@ -273,6 +298,7 @@ else
     [Parameter] public Guid Id { get; set; }
 
     private TitleDetail? _title;
+    private IReadOnlyList<ManualMatchInfo>? _links;
     private GameInfo? _info;
     private bool _notFound;
     private Guid? _picked;
@@ -296,6 +322,13 @@ else
     // The browser's language, for whose age ratings to show by default; the same for the whole visit.
     private static string? _language;
 
+    private async Task UnlinkAsync(ManualMatchInfo link)
+    {
+        await Api.UnlinkFileAsync(link.Id);
+        _title = await Api.GetTitleAsync(Id);
+        _links = await Api.ListLinksAsync(Id);
+    }
+
     protected override async Task OnParametersSetAsync()
     {
         // The same game on another system is mostly the same page: what's known of it stays until this version's is in,
@@ -309,6 +342,7 @@ else
         if (title is not null && title.Id != Id)
             return;
         _title = title;
+        _links = title is null ? null : await Api.ListLinksAsync(title.Id);
         _picked = null;
         _notFound = _title is null;
         _infoBefore = sameGame && fetched is null && _info is not null;

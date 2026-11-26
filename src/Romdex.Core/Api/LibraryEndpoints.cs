@@ -15,7 +15,7 @@ public static class LibraryEndpoints
     {
         var library = api.MapGroup("/library").WithTags("Library");
 
-        library.MapGet("", async (RomdexDbContext db, CancellationToken ct) =>
+        library.MapGet("", async (RomdexDbContext db, ReviewService review, CancellationToken ct) =>
             {
                 var files = await db.LibraryFiles.CountAsync(ct);
                 var bytes = files == 0 ? 0 : await db.LibraryFiles.SumAsync(f => f.Size, ct);
@@ -24,7 +24,9 @@ public static class LibraryEndpoints
                 var scanned = await db.BackgroundTasks.Where(t => t.Kind == LibraryScanTask.TaskKind && t.Status == BackgroundTaskStatus.Succeeded)
                     .MaxAsync(t => t.FinishedAt, ct);
                 var updated = await db.Systems.MaxAsync(s => (DateTime?)s.ImportedAt, ct);
-                return new LibraryStatus(files, bytes, unknown, unreadable, scanned, updated);
+                var waiting = await review.SummarizeAsync(ct);
+                var toReview = waiting.BadDumps + waiting.Matching + waiting.Outdated + waiting.Corrupted + waiting.Incomplete + waiting.CouldntFetch;
+                return new LibraryStatus(files, bytes, unknown, unreadable, scanned, updated, toReview);
             })
             .WithName("GetLibraryStatus").WithSummary("What the library holds, and when it was last scanned and the catalogue last updated.");
 

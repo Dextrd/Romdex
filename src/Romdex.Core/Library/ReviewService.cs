@@ -137,8 +137,8 @@ public sealed class ReviewService(RomdexDbContext db, LibraryMatcher matcher, Li
         if (names.Count == 0)
             return [];
         var dumps = await db.Dumps.AsNoTracking().Where(d => names.Contains(d.Name))
-            .Select(d => new { d.Id, d.Name, d.Regions, System = db.Systems.First(s => s.Id == d.SystemId).Name }).ToListAsync(ct);
-        return dumps.GroupBy(d => (d.System, d.Name)).ToDictionary(g => g.Key, g => Ref(g.First().Id, g.First().Name, g.First().Regions));
+            .Select(d => new { d.Id, d.Name, d.Regions, d.TitleId, System = db.Systems.First(s => s.Id == d.SystemId).Name }).ToListAsync(ct);
+        return dumps.GroupBy(d => (d.System, d.Name)).ToDictionary(g => g.Key, g => Ref(g.First().Id, g.First().Name, g.First().Regions, g.First().TitleId));
     }
 
     // Dumps with a file of each name, which a file of that name but other hashes likely is a bad copy of.
@@ -148,9 +148,9 @@ public sealed class ReviewService(RomdexDbContext db, LibraryMatcher matcher, Li
         if (names.Count == 0)
             return new(StringComparer.OrdinalIgnoreCase);
         return (await db.DumpFiles.AsNoTracking().Where(f => names.Contains(f.Name))
-                .Select(f => new { f.Name, f.Dump!.Id, DumpName = f.Dump.Name, f.Dump.Regions }).ToListAsync(ct))
+                .Select(f => new { f.Name, f.Dump!.Id, DumpName = f.Dump.Name, f.Dump.Regions, f.Dump.TitleId }).ToListAsync(ct))
             .GroupBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => Ref(g.First().Id, g.First().DumpName, g.First().Regions), StringComparer.OrdinalIgnoreCase);
+            .ToDictionary(g => g.Key, g => Ref(g.First().Id, g.First().DumpName, g.First().Regions, g.First().TitleId), StringComparer.OrdinalIgnoreCase);
     }
 
     // Files that couldn't be read: those that are broken or can't be got at, and those waiting for a tool.
@@ -160,8 +160,8 @@ public sealed class ReviewService(RomdexDbContext db, LibraryMatcher matcher, Li
             .OrderBy(f => f.Path).ToListAsync(ct);
         // What a damaged file's name suggests it was, as a dump's name or one of its files' names.
         var stems = files.Select(f => Path.GetFileNameWithoutExtension(f.Path)).Distinct().ToList();
-        var byDumpName = (await db.Dumps.AsNoTracking().Where(d => stems.Contains(d.Name)).Select(d => new { d.Id, d.Name, d.Regions }).ToListAsync(ct))
-            .GroupBy(d => d.Name, StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => Ref(g.First().Id, g.First().Name, g.First().Regions), StringComparer.OrdinalIgnoreCase);
+        var byDumpName = (await db.Dumps.AsNoTracking().Where(d => stems.Contains(d.Name)).Select(d => new { d.Id, d.Name, d.Regions, d.TitleId }).ToListAsync(ct))
+            .GroupBy(d => d.Name, StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => Ref(g.First().Id, g.First().Name, g.First().Regions, g.First().TitleId), StringComparer.OrdinalIgnoreCase);
         var byFileName = await LookalikesAsync(files.Select(f => Path.GetFileName(f.Path)), ct);
 
         var corrupted = new List<ReviewFile>();
@@ -197,7 +197,7 @@ public sealed class ReviewService(RomdexDbContext db, LibraryMatcher matcher, Li
             var fromChd = own.Any(f => placesByFile[f.Id].Any(p => p.Container == Container.Chd));
             var missing = own.Where(f => !placesByFile[f.Id].Any() && !(fromChd && LibraryViewBuilder.IsSheet(f.Name))).Select(f => f.Name).ToList();
             var have = own.SelectMany(f => placesByFile[f.Id]).Select(p => new LibraryPlace(p.LibraryFileId, p.Path, p.Entry)).Distinct().ToList();
-            return new ReviewDump(x.Dump.Ref, x.Dump.TitleId, titles.GetValueOrDefault(x.Dump.TitleId, x.Dump.Name), x.System.Summary.Id, x.System.Summary.Name, missing, have);
+            return new ReviewDump(x.Dump.Ref with { TitleId = x.Dump.TitleId }, x.Dump.TitleId, titles.GetValueOrDefault(x.Dump.TitleId, x.Dump.Name), x.System.Summary.Id, x.System.Summary.Name, missing, have);
         }).OrderBy(d => d.System, StringComparer.Ordinal).ThenBy(d => d.Dump.Name, StringComparer.Ordinal).ToList();
     }
 
@@ -360,7 +360,7 @@ public sealed class ReviewService(RomdexDbContext db, LibraryMatcher matcher, Li
     }
 
     private static ManualMatchInfo Info(ManualMatch link, Dump? dump) =>
-        new(link.Id, link.Sha1, link.Name, link.Reason, dump is null ? null : Ref(dump.Id, dump.Name, dump.Regions), link.TitleId, link.CreatedAt);
+        new(link.Id, link.Sha1, link.Name, link.Reason, dump is null ? null : Ref(dump.Id, dump.Name, dump.Regions, dump.TitleId), link.TitleId, link.CreatedAt);
 
-    private static DumpRef Ref(Guid id, string name, string regions) => new(id, name, regions.Length == 0 ? [] : regions.Split(','));
+    private static DumpRef Ref(Guid id, string name, string regions, Guid titleId) => new(id, name, regions.Length == 0 ? [] : regions.Split(','), titleId);
 }
