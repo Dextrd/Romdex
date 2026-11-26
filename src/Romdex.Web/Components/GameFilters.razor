@@ -6,5 +6,12 @@
         ("Bad", "Bad", "Files of it that don't verify"),
     ];
 
+    /// <summary>Filters by region dot, for the games you have.</summary>
+    public static readonly IReadOnlyList<(string Value, string Label)> Fits =
+    [
+        ("", "Any regions"), (nameof(RegionFit.Best), "Gold: every region you want"), (nameof(RegionFit.Some), "Green: some regions you want"),
+        (nameof(RegionFit.Fallback), "Amber: only a fallback"), (nameof(RegionFit.Never), "Red: only regions you never want"),
+    ];
+
     public static TitleStatus? StatusOf(string filter) => Enum.TryParse<TitleStatus>(filter, out var s) ? s : null;
 }

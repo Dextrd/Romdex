@@ -27,15 +27,15 @@ public static class CatalogueEndpoints
             .Produces<SystemSummary>().Produces(StatusCodes.Status404NotFound);
 
         systems.MapGet("/{id:guid}/titles", async (Guid id, LibraryViewBuilder views, TitleStatus? status, string? q, bool? ignored, bool? hidden,
-                bool? have, int? skip, int? take, CancellationToken ct) =>
+                bool? have, RegionFit? fit, int? skip, int? take, CancellationToken ct) =>
             {
                 if (await views.GetAsync(id, ct) is not { } view)
                     return Results.NotFound();
-                var titles = Filter(view.Titles, status, q, have == true ? null : ignored ?? false, hidden ?? false, have ?? false);
+                var titles = Filter(view.Titles, status, q, have == true ? null : ignored ?? false, hidden ?? false, have ?? false, fit);
                 return Results.Ok(Page(titles.Select(t => Summary(id, t)), skip, take));
             })
             .WithName("ListTitles")
-            .WithSummary("A system's titles, by name. By default the ones its preferences list and nobody ignored; ignored=true lists the ignored ones, hidden=true adds those the preferences leave out, and have=true lists only what the library has some of.")
+            .WithSummary("A system's titles, by name. By default the ones its preferences list and nobody ignored; ignored=true lists the ignored ones, hidden=true adds those the preferences leave out, have=true lists only what the library has some of, and fit lists only those whose region dot is that.")
             .Produces<TitlePage>().Produces(StatusCodes.Status404NotFound);
 
         systems.MapGet("/{id:guid}/bios", async (Guid id, LibraryViewBuilder views, RomdexDbContext db, PlayService play, CancellationToken ct) =>
@@ -98,12 +98,12 @@ public static class CatalogueEndpoints
 
         var titles = api.MapGroup("/titles").WithTags("Catalogue");
 
-        titles.MapGet("", async (LibraryViewBuilder views, TitleStatus? status, string? q, bool? ignored, bool? hidden, bool? have, int? skip, int? take,
+        titles.MapGet("", async (LibraryViewBuilder views, TitleStatus? status, string? q, bool? ignored, bool? hidden, bool? have, RegionFit? fit, int? skip, int? take,
                 CancellationToken ct) =>
             {
                 var found = new List<TitleSummary>();
                 foreach (var view in await views.GetAllAsync(ct))
-                    found.AddRange(Filter(view.Titles, status, q, have == true ? null : ignored ?? false, hidden ?? false, have ?? false)
+                    found.AddRange(Filter(view.Titles, status, q, have == true ? null : ignored ?? false, hidden ?? false, have ?? false, fit)
                         .Select(t => Summary(view.Summary.Id, t)));
                 return Page(found.OrderBy(t => DumpNames.SortKey(t.Name), StringComparer.OrdinalIgnoreCase), skip, take);
             })
@@ -250,8 +250,10 @@ public static class CatalogueEndpoints
     private static readonly System.Text.RegularExpressions.Regex CoverUrl =
         new(@"titles/([0-9a-fA-F-]{36})/cover", System.Text.RegularExpressions.RegexOptions.Compiled);
 
-    private static IEnumerable<TitleView> Filter(IEnumerable<TitleView> titles, TitleStatus? status, string? q, bool? ignored, bool hidden, bool have = false) =>
+    private static IEnumerable<TitleView> Filter(IEnumerable<TitleView> titles, TitleStatus? status, string? q, bool? ignored, bool hidden, bool have = false,
+        RegionFit? fit = null) =>
         titles.Where(t => (hidden || t.Shown)
+                          && (fit is null || t.Fit == fit)
                           && (!have || t.Status != TitleStatus.Missing)
                           && (ignored is null || t.Ignored == ignored)
                           && (status is null || t.Status == status)
@@ -272,7 +274,7 @@ public static class CatalogueEndpoints
     }
 
     public static TitleSummary Summary(Guid systemId, TitleView t) =>
-        new(t.Id, systemId, t.Name, t.Status, t.Preferred.Ref, t.Have?.Ref, t.Ignored, t.Dumps.Count, CoverPath(t.Id));
+        new(t.Id, systemId, t.Name, t.Status, t.Preferred.Ref, t.Have?.Ref, t.Ignored, t.Dumps.Count, CoverPath(t.Id), t.Fit, t.WantedMissing);
 
     // A game, named and pictured as its best title, the one the library has if any.
     public static GameSummary Game(IReadOnlyList<GameTitle> titles) =>
@@ -313,7 +315,7 @@ public static class CatalogueEndpoints
         var versions = games is null || !(await games.GetAsync(ct)).TryGetValue(id, out var game) ? null
             : game.Select(t => new TitleVersion(t.Title.Id, t.System.Summary.Id, t.System.Summary.ShortName ?? t.System.Summary.Name, t.Title.Name, t.Title.Status)).ToList();
         return new TitleDetail(title.Id, title.SystemId, title.System!.Name, title.Name, titleView.Status, titleView.Ignored, title.PreferredDumpId, dumps,
-            CoverPath(id), knownAs, versions);
+            CoverPath(id), knownAs, versions, titleView.Fit, titleView.WantedMissing);
     }
 
     /// <summary>Dumps with their files, hashes and library places, in the order given.</summary>
@@ -332,7 +334,7 @@ public static class CatalogueEndpoints
         return list.Select(d => new DumpInfo(d.Id, d.Name, serials.GetValueOrDefault(d.Id), d.Regions, d.Languages, DumpKindNames.FromFlags(d.Kinds), d.Disc, d.Status,
                 preferred?.Contains(d.Id) ?? false, d.Hidden,
                 byDump[d.Id].OrderBy(f => f.Name, StringComparer.Ordinal)
-                    .Select(f => new DumpFileInfo(f.Name, f.Size, f.Crc32, f.Md5, f.Sha1, places[f.Id].ToList())).ToList()))
+                    .Select(f => new DumpFileInfo(f.Name, f.Size, f.Crc32, f.Md5, f.Sha1, places[f.Id].ToList())).ToList(), d.Tier))
             .ToList();
     }
 }

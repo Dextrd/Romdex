@@ -92,6 +92,17 @@ A World dump counts for every region. Within a region, the latest revision comes
 system follows these tiers unless it has its own, set under **Regions** on its page; **Follow everyone's** goes back.
 Which dump of a game is preferred, and what Romdex asks retrievers for and in what order, both follow them.
 
+A dot beside each game you have says how well it fits them, as Melodex's quality dots do; point at it to see why:
+
+- **Gold**: the best your tiers allow. Every wanted region the game came out in; or, where it came out in none, the
+  best fallback there is.
+- **Green**: at least one wanted region, but not every one it came out in.
+- **Amber**: only a fallback region, while a better copy exists.
+- **Red**: only regions you never want, such as from a library you had before, or after you changed your mind.
+
+On a game's page, each dump says whether its region is wanted, a fallback or never. The Library's games and a system's
+can be filtered by dot, to find what to get again.
+
 A game's page shows what it is, when the Hasheous and Wikipedia plugins are on: what it's about, when it came out,
 who made it, what reviewers gave it, its age rating, and links to it on IGDB and other sites; with the libretro
 thumbnails plugin, its title screen and a screenshot. Whose age ratings it shows is yours to choose under

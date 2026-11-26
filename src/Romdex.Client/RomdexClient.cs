@@ -87,13 +87,16 @@ public sealed class RomdexClient(HttpClient http)
     public Task<SystemSummary?> GetSystemAsync(Guid id, CancellationToken ct = default) => GetOrNullAsync<SystemSummary>($"{Api}/systems/{id}", ct);
 
     /// <summary>Titles by name; with <c>have</c>, only those the library has some of: owned, partial or bad, ignored or not.</summary>
+    /// <param name="fit">Only titles whose region dot is this.</param>
     public async Task<TitlePage> ListTitlesAsync(Guid systemId, TitleStatus? status = null, string? q = null, bool ignored = false, bool hidden = false,
-        int skip = 0, int take = 100, bool have = false, CancellationToken ct = default) =>
-        (await http.GetFromJsonAsync<TitlePage>($"{Api}/systems/{systemId}/titles?{TitleQuery(status, q, ignored, hidden, have, skip, take)}", RomdexJson.Options, ct))!;
+        int skip = 0, int take = 100, bool have = false, RegionFit? fit = null, CancellationToken ct = default) =>
+        (await http.GetFromJsonAsync<TitlePage>($"{Api}/systems/{systemId}/titles?{TitleQuery(status, q, ignored, hidden, have, skip, take, fit)}", RomdexJson.Options, ct))!;
 
-    private static string TitleQuery(TitleStatus? status, string? q, bool ignored, bool hidden, bool have, int skip, int take)
+    private static string TitleQuery(TitleStatus? status, string? q, bool ignored, bool hidden, bool have, int skip, int take, RegionFit? fit = null)
     {
         var query = new List<string> { $"skip={skip}", $"take={take}" };
+        if (fit is { } f)
+            query.Add($"fit={f}");
         if (status is { } s)
             query.Add($"status={s}");
         if (!string.IsNullOrWhiteSpace(q))
@@ -109,8 +112,8 @@ public sealed class RomdexClient(HttpClient http)
 
     /// <summary>Titles by name; with <c>have</c>, only those the library has some of: owned, partial or bad, ignored or not.</summary>
     public async Task<TitlePage> ListAllTitlesAsync(TitleStatus? status = null, string? q = null, bool ignored = false, int skip = 0, int take = 100,
-        bool have = false, CancellationToken ct = default) =>
-        (await http.GetFromJsonAsync<TitlePage>($"{Api}/titles?{TitleQuery(status, q, ignored, false, have, skip, take)}", RomdexJson.Options, ct))!;
+        bool have = false, RegionFit? fit = null, CancellationToken ct = default) =>
+        (await http.GetFromJsonAsync<TitlePage>($"{Api}/titles?{TitleQuery(status, q, ignored, false, have, skip, take, fit)}", RomdexJson.Options, ct))!;
 
     public async Task<BiosList> ListBiosAsync(Guid systemId, CancellationToken ct = default) =>
         (await http.GetFromJsonAsync<BiosList>($"{Api}/systems/{systemId}/bios", RomdexJson.Options, ct))!;

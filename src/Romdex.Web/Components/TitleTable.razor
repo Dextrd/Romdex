@@ -30,7 +30,7 @@ else
                 {
                     <tr @key="title.Id">
                         <td>
-                            <a class="game-name" href="titles/@title.Id"><Cover Url="@title.Cover" />@title.Name</a>
+                            <a class="game-name" href="titles/@title.Id"><Cover Url="@title.Cover" /><span>@title.Name<RegionDot Fit="title.Fit" WantedMissing="title.WantedMissing" /></span></a>
                         </td>
                         @if (Systems is not null)
                         {

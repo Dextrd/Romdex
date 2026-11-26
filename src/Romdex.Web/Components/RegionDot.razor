@@ -1,0 +1,45 @@
+@*
+    How well what you have of a game fits your region tiers, as a dot that says it when pointed at, as Melodex's
+    quality dots do: gold for the best your tiers allow, green for some wanted region, amber for only a fallback while
+    there's better, red for only regions you never want. Nothing for a game you don't have.
+*@
+@if (Fit is { } fit)
+{
+    var text = Describe(fit, WantedMissing ?? []);
+    <span class="region-dot @Class(fit)" title="@text" role="img" aria-label="@text"></span>
+}
+
+@code {
+    [Parameter] public RegionFit? Fit { get; set; }
+
+    /// <summary>Wanted regions it came out in that you don't have.</summary>
+    [Parameter] public IReadOnlyList<string>? WantedMissing { get; set; }
+
+    public static string Class(RegionFit fit) => fit switch
+    {
+        RegionFit.Best => "best",
+        RegionFit.Some => "some",
+        RegionFit.Fallback => "fallback",
+        _ => "never",
+    };
+
+    public static string Label(RegionFit fit) => fit switch
+    {
+        RegionFit.Best => "Every region you want",
+        RegionFit.Some => "Some regions you want",
+        RegionFit.Fallback => "Only a fallback",
+        _ => "Only a region you never want",
+    };
+
+    public static string Describe(RegionFit fit, IReadOnlyList<string> missing)
+    {
+        var also = missing.Count > 0 ? $"; wanted in {string.Join(", ", missing)} too" : "";
+        return fit switch
+        {
+            RegionFit.Best => "Regions: the best your tiers allow",
+            RegionFit.Some => $"Regions: some you want{also}",
+            RegionFit.Fallback => missing.Count > 0 ? $"Regions: only a fallback{also}" : "Regions: only a fallback, while a better one exists",
+            _ => $"Regions: only one you never want{also}",
+        };
+    }
+}

@@ -41,6 +41,12 @@ else if (_view == "games")
 {
     <div class="toolbar">
         <Segmented T="string" Value="_filter" Options="GameFilters.Options" OnChange="FilterAsync" Label="Show" />
+        <select class="fit-filter" aria-label="Regions" title="Only games whose region dot is this" @onchange="e => FitAsync((string)e.Value!)">
+            @foreach (var (value, label) in GameFilters.Fits)
+            {
+                <option value="@value" selected="@(value == (_fit?.ToString() ?? ""))">@label</option>
+            }
+        </select>
         <input type="search" placeholder="Search games" value="@_query" @oninput="SearchAsync" />
         <LayoutToggle Value="@_layout" OnChange="l => _layout = l" />
     </div>
@@ -166,12 +172,20 @@ else
 
     private async Task LoadGamesAsync(int take, int skip = 0)
     {
-        var page = await Api.ListAllTitlesAsync(GameFilters.StatusOf(_filter), _query, skip: skip, take: take, have: true);
+        var page = await Api.ListAllTitlesAsync(GameFilters.StatusOf(_filter), _query, skip: skip, take: take, have: true, fit: _fit);
         _games = page;
         _titles = skip == 0 ? [.. page.Items] : [.. _titles, .. page.Items];
     }
 
     private void Show(string view) => Nav.NavigateTo(view == "games" ? "?view=games" : "", replace: true);
+
+    private RegionFit? _fit;
+
+    private async Task FitAsync(string value)
+    {
+        _fit = Enum.TryParse<RegionFit>(value, out var fit) ? fit : null;
+        await LoadGamesAsync(PageSize);
+    }
 
     private async Task FilterAsync(string value)
     {

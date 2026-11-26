@@ -78,6 +78,10 @@ else
                             @if (info.Genres.Count > 0) { <span class="muted">@Capitalised(info.Genres[0])</span> }
                         }
                         <span class="badge @Format.Badge(_title.Status)">@Format.OwnershipLabel(_title.Status)</span>
+                        @if (_title.Fit is { } fit)
+                        {
+                            <span class="region-fit small" title="@RegionDot.Describe(fit, _title.WantedMissing ?? [])"><RegionDot Fit="fit" WantedMissing="_title.WantedMissing" /> @RegionDot.Label(fit)</span>
+                        }
                         @if (_title.Ignored) { <span class="badge ignored" title="Never listed as missing">Ignored</span> }
                     </div>
                     @if (_title.Versions is { Count: > 1 } versions)
@@ -612,6 +616,15 @@ else
                     <span class="badge @Format.Badge(dump.Status)">@(dump.Status == DumpStatus.Good ? "Verified" : dump.Status.ToString())</span>
                 }
                 @if (dump.Preferred) { <span class="badge neutral" title="The one 1G1R prefers, or you chose">Preferred</span> }
+                @if (dump.Tier is { } tier)
+                {
+                    <span class="region-tier-tag @tier.ToString().ToLowerInvariant()" title="@(tier switch
+                    {
+                        RegionTier.Wanted => "Of a region you want",
+                        RegionTier.Fallback => "Of a fallback region",
+                        _ => "Of a region you never want: it isn't fetched",
+                    })">@tier</span>
+                }
                 @if (play?.PlayerUrl is not null)
                 {
                     <IconButton Icon="play" Class="small" Title="@(play.Bios is { } bios ? $"Play this dump in the browser, with {bios}" : "Play this dump in the browser")"

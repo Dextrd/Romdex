@@ -394,6 +394,14 @@ public sealed class LibraryTests : IDisposable
         // Only in a region never to be fetched: not missing. Owned, it's still listed.
         Assert.DoesNotContain(titles, t => t.Name == "Paper Lantern");
         Assert.Equal(TitleStatus.Owned, Assert.Single(titles, t => t.Name == "Koi Pond").Status);
+        // Owned only in a never region: a red dot, which the list can be filtered by; each dump says its tier.
+        var koi = Assert.Single(titles, t => t.Name == "Koi Pond");
+        Assert.Equal(RegionFit.Never, koi.Fit);
+        Assert.Equal(koi.Id, Assert.Single((await _api.ListTitlesAsync(system.Id, fit: RegionFit.Never)).Items).Id);
+        Assert.Null(Assert.Single(titles, t => t.Name == "Tide Bell").Fit);
+        var tide = (await _api.GetTitleAsync(Assert.Single(titles, t => t.Name == "Tide Bell").Id))!;
+        Assert.Equal(RegionTier.Wanted, tide.Dumps.Single(d => d.Name == "Tide Bell (USA)").Tier);
+        Assert.Equal(RegionTier.Fallback, tide.Dumps.Single(d => d.Name == "Tide Bell (Europe)").Tier);
 
         await _api.SetSystemPreferencesAsync(system.Id, SystemPreferences.Default with { Wanted = ["Europe"], Fallback = ["USA"], Never = ["World"] });
         Assert.Equal("Tide Bell (Europe)", Assert.Single((await _api.ListTitlesAsync(system.Id)).Items, t => t.Name == "Tide Bell").Preferred.Name);

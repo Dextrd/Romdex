@@ -28,7 +28,10 @@ public sealed record DumpView(
 }
 
 /// <summary>One title, with where it stands and the dump 1G1R prefers. <see cref="Shown"/> is false for a title the preferences leave out.</summary>
-public sealed record TitleView(Guid Id, string Name, TitleStatus Status, DumpView Preferred, DumpView? Have, bool Ignored, bool Shown, IReadOnlyList<DumpView> Dumps);
+/// <param name="Fit">How well what the library has fits the region tiers; null when it has no whole release.</param>
+/// <param name="WantedMissing">Wanted regions the game came out in that the library has no whole release of.</param>
+public sealed record TitleView(Guid Id, string Name, TitleStatus Status, DumpView Preferred, DumpView? Have, bool Ignored, bool Shown, IReadOnlyList<DumpView> Dumps,
+    RegionFit? Fit = null, IReadOnlyList<string>? WantedMissing = null);
 
 /// <summary>A system worked out: its summary, its titles and its BIOS.</summary>
 public sealed record SystemView(SystemSummary Summary, IReadOnlyList<TitleView> Titles, IReadOnlyList<DumpView> Bios)
@@ -164,8 +167,9 @@ public sealed class LibraryViewBuilder(RomdexDbContext db, LibraryViews cache, P
             var chosen = title.PreferredDumpId is { } chosenId ? releases.FirstOrDefault(r => r.Any(d => d.Id == chosenId)) : null;
             var preferred = chosen ?? Rank(visible.Count > 0 ? visible : releases, prefs).First();
             var have = complete.Contains(preferred) ? preferred : complete.Count > 0 ? Rank(complete, prefs).First() : null;
+            var (fit, wantedMissing) = FitOf(games.Where(d => (d.Kinds & hidden) == 0).ToList(), complete.SelectMany(r => r).ToList(), prefs);
             titleViews.Add(new TitleView(title.Id, title.Name, status, preferred[0], have?[0], title.IgnoredAt is not null,
-                visible.Count > 0 || status != TitleStatus.Missing, own));
+                visible.Count > 0 || status != TitleStatus.Missing, own, fit, wantedMissing));
         }
         titleViews.Sort((a, b) => string.Compare(DumpNames.SortKey(a.Name), DumpNames.SortKey(b.Name), StringComparison.OrdinalIgnoreCase));
 
@@ -198,6 +202,34 @@ public sealed class LibraryViewBuilder(RomdexDbContext db, LibraryViews cache, P
             .ThenByDescending(r => r[0].Revision, StringComparer.Ordinal)
             .ThenBy(r => System.Numerics.BitOperations.PopCount((uint)r[0].Kinds))
             .ThenBy(r => r[0].Name, StringComparer.Ordinal);
+
+    /// <summary>
+    /// How well whole releases the library has fit the region tiers. A dump covers the wanted regions it names, and a
+    /// World dump every one. Gold is every wanted region the game came out in, or, out in none, a fallback as good as
+    /// any there is; green is some wanted region; amber a fallback while there's better; red only never regions.
+    /// </summary>
+    /// <param name="released">The game's dumps, other than kinds the preferences leave out, such as demos.</param>
+    /// <param name="owned">The dumps of releases the library has whole.</param>
+    public static (RegionFit? Fit, IReadOnlyList<string> WantedMissing) FitOf(IReadOnlyList<DumpView> released, IReadOnlyList<DumpView> owned, SystemPreferences prefs)
+    {
+        IEnumerable<string> Wanted(DumpView d) =>
+            d.Regions.Any(r => r.Equals(SystemPreferences.World, StringComparison.OrdinalIgnoreCase)) && prefs.TierOf(SystemPreferences.World) != RegionTier.Never
+                ? prefs.Wanted
+                : prefs.Wanted.Where(w => d.Regions.Contains(w, StringComparer.OrdinalIgnoreCase));
+        var available = released.Concat(owned).SelectMany(Wanted).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var have = owned.SelectMany(Wanted).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var missing = available.Where(r => !have.Contains(r, StringComparer.OrdinalIgnoreCase)).ToList();
+        if (owned.Count == 0)
+            return (null, missing);
+        var usable = owned.Where(d => d.Tier != RegionTier.Never).ToList();
+        if (available.Count > 0)
+            return (missing.Count == 0 ? RegionFit.Best : have.Count > 0 ? RegionFit.Some : usable.Count > 0 ? RegionFit.Fallback : RegionFit.Never, missing);
+        // Out in no wanted region: the best fallback there is will do.
+        if (usable.Count == 0)
+            return (RegionFit.Never, missing);
+        var best = released.Concat(owned).Where(d => d.Tier != RegionTier.Never).Min(d => prefs.RankOf(d.Regions));
+        return (usable.Min(d => prefs.RankOf(d.Regions)) <= best ? RegionFit.Best : RegionFit.Fallback, missing);
+    }
 
     private static int RankIn(IReadOnlyList<string> values, IReadOnlyList<string> order)
     {

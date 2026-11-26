@@ -48,6 +48,24 @@ public enum DumpKind
     Dlc,
 }
 
+/// <summary>
+/// How well what you have of a game fits your region tiers, shown as a dot beside it: gold, green, amber or red.
+/// </summary>
+public enum RegionFit
+{
+    /// <summary>Gold: the best your tiers allow. Every wanted region it came out in; or, out in none, the best fallback there is.</summary>
+    Best,
+
+    /// <summary>Green: at least one wanted region, but not every one it came out in.</summary>
+    Some,
+
+    /// <summary>Amber: only fallback regions, while a better copy exists.</summary>
+    Fallback,
+
+    /// <summary>Red: only regions never to be fetched, such as from a library made before, or a change of mind.</summary>
+    Never,
+}
+
 /// <summary>Where a region stands in someone's preferences.</summary>
 public enum RegionTier
 {
@@ -173,8 +191,10 @@ public sealed record SystemSummary(
 /// <param name="Preferred">The dump 1G1R picks, or the one someone chose instead.</param>
 /// <param name="Have">The dump owned, when one is; the preferred one when that's owned.</param>
 /// <param name="Cover">Where its cover is, relative to the app's base: 404 there when no metadata plugin has one, 503 while it's being looked up.</param>
+/// <param name="Fit">How well what the library has fits the region tiers, the dot beside it; null when it has no whole release.</param>
+/// <param name="WantedMissing">Wanted regions it came out in that the library has no whole release of.</param>
 public sealed record TitleSummary(Guid Id, Guid SystemId, string Name, TitleStatus Status, DumpRef Preferred, DumpRef? Have, bool Ignored, int Dumps,
-    string? Cover = null);
+    string? Cover = null, RegionFit? Fit = null, IReadOnlyList<string>? WantedMissing = null);
 
 /// <summary>A dump, named.</summary>
 /// <param name="TitleId">Its title, where the answer gives it, such as under Review, to get the dump by.</param>
@@ -214,7 +234,9 @@ public sealed record TitleDetail(
     IReadOnlyList<DumpInfo> Dumps,
     string? Cover = null,
     string? KnownAs = null,
-    IReadOnlyList<TitleVersion>? Versions = null);
+    IReadOnlyList<TitleVersion>? Versions = null,
+    RegionFit? Fit = null,
+    IReadOnlyList<string>? WantedMissing = null);
 
 /// <summary>
 /// What a game is, from the metadata plugins, such as Hasheous and Wikipedia: what it's about, when it came out, who
@@ -285,6 +307,7 @@ public sealed record GameLink(string Site, string Url);
 
 /// <summary>One dump of a title, as the DAT lists it, and whether the library has it.</summary>
 /// <param name="Preferred">The one 1G1R picks, or someone chose.</param>
+/// <param name="Tier">Its regions' tier in the system's preferences: wanted, fallback or never.</param>
 /// <param name="Hidden">Left out by the system's preferences, such as a demo.</param>
 public sealed record DumpInfo(
     Guid Id,
@@ -297,7 +320,8 @@ public sealed record DumpInfo(
     DumpStatus Status,
     bool Preferred,
     bool Hidden,
-    IReadOnlyList<DumpFileInfo> Files);
+    IReadOnlyList<DumpFileInfo> Files,
+    RegionTier? Tier = null);
 
 /// <summary>One file of a dump, with its hashes, and where the library has it.</summary>
 /// <param name="Library">The library files that verify as it.</param>

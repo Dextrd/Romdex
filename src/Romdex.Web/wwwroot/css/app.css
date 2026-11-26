@@ -1032,6 +1032,23 @@ svg.flip { transform: scaleY(-1); }
 .region-own { margin-top: 0; }
 @media (max-width: 860px) { .region-tiers { grid-template-columns: 1fr; } }
 
+/* Region dots, as Melodex's quality dots: gold the best your tiers allow, green some wanted region, amber a fallback, red never. */
+.region-dot { display: inline-block; width: .45rem; height: .45rem; border-radius: 50%; margin: 0 0 0 .4rem; vertical-align: middle;
+    flex: none; cursor: help; background: var(--muted); }
+.region-dot.some { background: var(--owned-fill); }
+.region-dot.fallback { background: var(--partial-fill); }
+.region-dot.never { background: var(--missing); }
+.region-dot.best { width: .5rem; height: .5rem;
+    background: radial-gradient(circle at 32% 30%, #fffbe0 0%, #f7d65a 30%, #c9961a 70%, #8a6408 100%);
+    box-shadow: 0 0 0 .5px rgba(122, 82, 0, .6), 0 0 3px rgba(242, 201, 76, .7); }
+.toolbar select.fit-filter { width: auto; flex: none; max-width: 16rem; }
+.region-fit { display: inline-flex; align-items: center; gap: .1rem; color: var(--muted); cursor: help; }
+.region-fit .region-dot { margin: 0 .25rem 0 .25rem; }
+/* A dump's tier on a game's page: wanted plain, fallback muted, never struck through. */
+.region-tier-tag { font-size: .72rem; font-weight: 600; padding: .05rem .4rem; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); cursor: help; }
+.region-tier-tag.wanted { color: var(--owned); border-color: var(--owned-fill); }
+.region-tier-tag.never { color: var(--missing); border-color: var(--missing); text-decoration: line-through; }
+
 /* Sorting: a button that opens the ways to sort, and one that reverses the order. */
 .sort-menu { position: relative; display: inline-flex; gap: .3rem; flex: none; }
 .sort-menu svg.flip { transform: scaleY(-1); }
