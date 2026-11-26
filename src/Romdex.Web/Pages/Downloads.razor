@@ -8,12 +8,11 @@
 
 <h1>Downloads</h1>
 <p class="muted">
-    Dumps arriving through the retrievers. Each is identified by its checksums and filed in the library as its system says. Anything that
-    can't be verified, or that the system wants a person to look at, waits here.
+    Dumps arriving through the retrievers, newest first. Each is identified by its checksums and filed in the library as its system says.
+    Anything that can't be verified, or that failed, waits for you under <a href="review">Review</a>.
 </p>
 
 <div class="toolbar">
-    <Segmented T="DownloadState?" Value="_state" Options="Tabs" OnChange="ShowAsync" Label="Show" />
     @if (Auth.May(UserPermissions.Download))
     {
         <button @onclick="CheckAsync" disabled="@_checking" title="Ask the plugins that hand over what arrives, such as the inbox folder, for anything new">Check now</button>
@@ -32,8 +31,7 @@
 else if (_items.Count == 0)
 {
     <div class="empty card">
-        @if (_state == DownloadState.NeedsReview) { <span>Nothing needs review.</span> }
-        else { <span>Nothing has arrived yet. Add a retriever in Settings, such as the inbox folder, or find a game with Search and get it.</span> }
+        Nothing has arrived yet. Add a retriever in Settings, such as the inbox folder, or find a game with Search and get it.
     </div>
 }
 else
@@ -51,11 +49,14 @@ else
                     <span class="request-state"><span class="badge @Format.Badge(item.State)">@Format.Label(item.State)</span></span>
                     <span class="muted small request-time hide-narrow" title="@item.UpdatedAt.ToLocalTime()">@Format.Ago(item.UpdatedAt)</span>
                     <span class="request-actions">
-                        @if (Auth.May(UserPermissions.Download))
+                        @* What waits for a decision is decided under Review; here, only what's still on its way can be stopped. *@
+                        @if (ReviewTab(item) is { } tab)
                         {
-                            @if (item.CanAccept) { <button class="primary" @onclick="() => ActAsync(item, Api.AcceptDownloadAsync)" title="File it anyway">Accept</button> }
-                            @if (item.CanRetry) { <button @onclick="() => ActAsync(item, Api.RetryDownloadAsync)" title="Identify it again, or fetch it again if its files are gone">Retry</button> }
-                            @if (item.CanReject) { <button @onclick="() => ActAsync(item, Api.RejectDownloadAsync)" title="Throw its files away">Reject</button> }
+                            <a class="button" href="@tab" title="It waits for you under Review">In Review</a>
+                        }
+                        else if (Auth.May(UserPermissions.Download) && item.CanReject)
+                        {
+                            <button @onclick="() => ActAsync(item, Api.RejectDownloadAsync)" title="Stop it and throw its files away">Cancel</button>
                         }
                     </span>
                 </div>
@@ -117,18 +118,25 @@ else
 @code {
     private const int PageSize = 50;
 
-    private IReadOnlyList<(DownloadState? Value, string Label, string? Hint)> Tabs =>
-    [
-        (DownloadState.NeedsReview, _page is { Waiting: > 0 } page ? $"Waiting ({page.Waiting:N0})" : "Waiting", "Held for someone to look at"),
-        (null, "All", "Everything that's arrived, newest first"),
-    ];
+    // Where under Review an arrival waits, if it does.
+    private static string? ReviewTab(DownloadInfo item) => item.State switch
+    {
+        DownloadState.Failed => "review/couldnt-fetch",
+        DownloadState.NeedsReview => item.HeldFor switch
+        {
+            HoldReason.Unmatched => "review",
+            HoldReason.Incomplete => "review/incomplete",
+            HoldReason.Unreadable => "review/corrupted",
+            _ => "review/couldnt-fetch",
+        },
+        _ => null,
+    };
 
     /// <summary>An arrival to open, from Review's Details.</summary>
     [SupplyParameterFromQuery(Name = "open")] public Guid? OpenParameter { get; set; }
 
     private DownloadsPage? _page;
     private List<DownloadInfo> _items = [];
-    private DownloadState? _state;
     private readonly HashSet<Guid> _open = [];
     private bool _checking;
     private string? _error;
@@ -136,17 +144,9 @@ else
     protected override async Task OnInitializedAsync()
     {
         Events.Received += OnEvent;
-        // One asked for by Review opens among everything; otherwise, with something to review, that's what's shown first.
+        // One Review asked for opens.
         if (OpenParameter is { } open)
-        {
             _open.Add(open);
-            _state = null;
-        }
-        else
-        {
-            var waiting = await Api.ListDownloadsAsync(DownloadState.NeedsReview, take: PageSize);
-            _state = waiting.Total > 0 ? DownloadState.NeedsReview : null;
-        }
         await LoadAsync(PageSize);
     }
 
@@ -158,15 +158,9 @@ else
 
     private async Task LoadAsync(int take, int skip = 0)
     {
-        var page = await Api.ListDownloadsAsync(_state, skip, take);
+        var page = await Api.ListDownloadsAsync(null, skip, take);
         _page = page;
         _items = skip == 0 ? [.. page.Items] : [.. _items, .. page.Items];
-    }
-
-    private async Task ShowAsync(DownloadState? state)
-    {
-        _state = state;
-        await LoadAsync(PageSize);
     }
 
     private Task MoreAsync() => LoadAsync(PageSize, _items.Count);
