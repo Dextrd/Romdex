@@ -193,6 +193,9 @@ public sealed class FakeRetriever(string staging) : HttpMessageHandler
     /// <summary>The dump each dropped item says it is, by its name, when it says.</summary>
     public Dictionary<string, string> DumpNames { get; } = [];
 
+    /// <summary>How sure the plugin says it is of each dropped item, by its name, when it says.</summary>
+    public Dictionary<string, double> Scores { get; } = [];
+
     public IReadOnlyList<SearchRequest> Searches => _searches;
 
     private readonly List<SearchRequest> _searches = [];
@@ -223,7 +226,11 @@ public sealed class FakeRetriever(string staging) : HttpMessageHandler
     private HttpResponseMessage Search(SearchRequest search)
     {
         _searches.Add(search);
-        return Json(new SearchResponse(_items.Values.Select(i => DumpNames.TryGetValue(i.Candidate.CandidateId, out var dump) ? i.Candidate with { DumpName = dump } : i.Candidate).ToList()));
+        return Json(new SearchResponse(_items.Values.Select(i => i.Candidate with
+        {
+            DumpName = DumpNames.GetValueOrDefault(i.Candidate.CandidateId),
+            Score = Scores.TryGetValue(i.Candidate.CandidateId, out var score) ? score : null,
+        }).ToList()));
     }
 
     private HttpResponseMessage Fetch(FetchRequest fetch)

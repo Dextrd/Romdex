@@ -64,9 +64,10 @@
             break;
         default:
             <span>
-                Fetches that didn't bring the game asked for, and ones that failed. <strong>Accept</strong> files what arrived as what it
-                is. <strong>Try again</strong> fetches the next best offer, passing over what was turned away, and throws this one away.
-                <strong>Dismiss</strong> throws it away.
+                What you asked for that no retriever could bring: each offer was tried in turn, and each attempt says why it was turned
+                away. <strong>Accept</strong> files another game that came instead, as what it is. <strong>Look again</strong> searches
+                every retriever again, passing over what was turned away. <strong>Dismiss</strong> takes it off this list. Arrivals no one
+                asked for that failed are here too.
             </span>
             break;
     }
@@ -132,7 +133,7 @@ else
                     <IconButton Icon="approve" Label="@($"Keep {these} as they are")" Disabled="_busy" Title="@($"Keep every dump {(some ? "the filter shows" : "here")} without the files it's missing")"
                                 OnClick="@(() => _confirm = "keep-incomplete")" />
                     break;
-                case CouldntFetch when MayDownload && VisibleArrivals.Any():
+                case CouldntFetch when MayDownload && (VisibleArrivals.Any() || VisibleRequests.Any()):
                     <IconButton Icon="retry" Primary="true" Label="@($"Try again for {these}")" Disabled="_busy" Title="@($"Fetch the next best offer for every one {(some ? "the filter shows" : "here")}")"
                                 OnClick="TryAgainShownAsync" />
                     <IconButton Icon="cancel" Label="@($"Dismiss {these}")" Disabled="_busy" Title="@($"Throw away every one {(some ? "the filter shows" : "here")}")" OnClick="@(() => _confirm = "dismiss")" />
@@ -217,6 +218,41 @@ else
             }
             break;
         case CouldntFetch:
+            @foreach (var request in VisibleRequests)
+            {
+                var acceptable = request.Acceptable;
+                <div class="card review-item" @key="request.Id">
+                    <div>
+                        <div class="label">Asked for</div>
+                        <a class="dump-name" href="titles/@request.Title.Id">@(request.Dump?.Name ?? request.Title.Name)</a>
+                        <div class="muted small">
+                            @(request.Regions.Count > 0 ? $"In {string.Join(", ", request.Regions)} · " : "")@Format.Count(request.Attempts.Count, "attempt", "attempts") · @Format.Ago(request.UpdatedAt)
+                        </div>
+                    </div>
+                    <div>
+                        <div class="label">What went wrong</div>
+                        @if (request.Attempts.Count == 0) { <div class="small">@request.Message</div> }
+                        else
+                        {
+                            <ol class="small reasons">
+                                @foreach (var attempt in request.Attempts)
+                                {
+                                    <li>@attempt.Source, @attempt.Name: @attempt.Message</li>
+                                }
+                            </ol>
+                        }
+                    </div>
+                    <div class="review-actions">
+                        @if (MayDownload && acceptable is not null)
+                        {
+                            <IconButton Icon="approve" Title="@($"Accept: file {acceptable.Name} as what it is")" Disabled="_busy" OnClick="() => AcceptAsync(acceptable)" />
+                        }
+                        <IconButton Icon="retry" Primary="true" Requires="@UserPermissions.Download" Title="Look again: search every retriever again, passing over what was turned away" Disabled="_busy"
+                                    OnClick="() => TryRequestAgainAsync(request)" />
+                        <IconButton Icon="cancel" Requires="@UserPermissions.Download" Title="Dismiss: take it off this list, without fetching anything" Disabled="_busy" OnClick="() => DismissAsync(request)" />
+                    </div>
+                </div>
+            }
             @foreach (var arrival in VisibleArrivals)
             {
                 <div class="card review-item" @key="arrival.Id">
@@ -389,7 +425,7 @@ else
     private ReviewSummary? _summary;
     private ReviewFilePage? _files;
     private ReviewDumpPage? _dumps;
-    private DownloadsPage? _couldntFetch;
+    private CouldntFetchPage? _couldntFetch;
     private ReviewFilePage? _deferred;
     private ReviewFilePage? _hidden;
     private string? _loadedTab;
@@ -437,7 +473,7 @@ else
     private IReadOnlyList<DownloadInfo> Arrivals => Tab switch
     {
         Incomplete => _dumps?.Arrivals ?? [],
-        CouldntFetch => _couldntFetch?.Items ?? [],
+        CouldntFetch => _couldntFetch?.Arrivals ?? [],
         _ => _files?.Arrivals ?? [],
     };
 
@@ -451,14 +487,14 @@ else
     private int LoadedCount => Tab switch
     {
         Incomplete => (_dumps?.Items.Count ?? 0) + Arrivals.Count,
-        CouldntFetch => _couldntFetch?.Items.Count ?? 0,
+        CouldntFetch => (_couldntFetch?.Requests.Count ?? 0) + (_couldntFetch?.Arrivals.Count ?? 0),
         _ => (_files?.Items.Count ?? 0) + Arrivals.Count,
     };
 
     private int Shown => Tab switch
     {
         Incomplete => VisibleDumps.Count() + VisibleArrivals.Count(),
-        CouldntFetch => VisibleArrivals.Count(),
+        CouldntFetch => VisibleRequests.Count() + VisibleArrivals.Count(),
         _ => VisibleFiles.Count() + VisibleArrivals.Count(),
     };
 
@@ -467,6 +503,7 @@ else
 
     private IEnumerable<ReviewFile> VisibleFiles => (_files?.Items ?? []).Where(f => Matches(f.Path, f.Entry, f.LooksLike?.Name, f.Was?.Dump));
     private IEnumerable<ReviewDump> VisibleDumps => (_dumps?.Items ?? []).Where(d => Matches(d.Dump.Name, d.System));
+    private IEnumerable<RequestInfo> VisibleRequests => (_couldntFetch?.Requests ?? []).Where(r => Matches(r.Title.Name, r.Dump?.Name, r.Message));
     private IEnumerable<DownloadInfo> VisibleArrivals => Arrivals.Where(a => Matches(a.Name, a.Title?.Name, a.Message));
 
     protected override void OnInitialized() => Nav.LocationChanged += OnLocationChanged;
@@ -553,7 +590,7 @@ else
 
     private Task<ReviewDumpPage> DumpsAsync(int skip) => Api.ListIncompleteAsync(skip, sort: SortOf(Incomplete).Key, descending: SortOf(Incomplete).Descending);
 
-    private Task<DownloadsPage> FetchesAsync(int skip) => Api.ListCouldntFetchAsync(skip, sort: SortOf(CouldntFetch).Key, descending: SortOf(CouldntFetch).Descending);
+    private Task<CouldntFetchPage> FetchesAsync(int skip) => Api.ListCouldntFetchAsync(skip, sort: SortOf(CouldntFetch).Key, descending: SortOf(CouldntFetch).Descending);
 
     // ---- Sorting: each tab's own, kept in this browser ----
 
@@ -622,8 +659,8 @@ else
                 _dumps = _dumps with { Items = [.. _dumps.Items, .. dumps.Items], Total = dumps.Total };
                 break;
             case CouldntFetch when _couldntFetch is not null:
-                var more = await FetchesAsync(_couldntFetch.Items.Count);
-                _couldntFetch = _couldntFetch with { Items = [.. _couldntFetch.Items, .. more.Items], Total = more.Total };
+                var more = await FetchesAsync(_couldntFetch.Requests.Count + _couldntFetch.Arrivals.Count);
+                _couldntFetch = _couldntFetch with { Requests = [.. _couldntFetch.Requests, .. more.Requests], Arrivals = [.. _couldntFetch.Arrivals, .. more.Arrivals], Total = more.Total };
                 break;
             default:
                 if (_files is null)
@@ -726,11 +763,22 @@ else
     private Task TryAgainShownAsync() => DoAsync(async () =>
     {
         var started = 0;
+        foreach (var request in VisibleRequests.ToList())
+            if ((await Api.TryRequestAgainAsync(request.Id)).State == RequestState.Active)
+                started++;
         foreach (var arrival in VisibleArrivals.ToList())
             if ((await Api.TryDownloadAgainAsync(arrival.Id)).Download is not null)
                 started++;
         Say($"{Format.Count(started, "fetch", "fetches")} started.");
     });
+
+    private Task TryRequestAgainAsync(RequestInfo request) => DoAsync(async () =>
+    {
+        var again = await Api.TryRequestAgainAsync(request.Id);
+        Say(again.State == RequestState.Active ? $"{again.Message}." : $"Nothing else to fetch: {again.Message}", error: again.State != RequestState.Active);
+    });
+
+    private Task DismissAsync(RequestInfo request) => DoAsync(() => Api.DismissRequestAsync(request.Id));
 
     private (string Title, string Text, string Button, bool Danger) Confirmation(string confirm)
     {
@@ -742,7 +790,7 @@ else
             "approve" => ($"Approve {files}?", "Each counts as the dump it's named as, while no DAT matches it.", "Approve", false),
             "keep-outdated" => ($"Keep {Format.Count(VisibleFiles.Count(f => f.Was?.Now is not null), "file", "files")}?", "Each counts as the dump it was, while no DAT matches it.", "Keep", false),
             "keep-incomplete" => ($"Keep {Format.Count(VisibleDumps.Count(), "dump", "dumps")} as they are?", "Each counts as whole while only the files it's missing now are.", "Keep", false),
-            _ => ($"Dismiss {Format.Count(VisibleArrivals.Count(), "fetch", "fetches")}?", "Each is thrown away, with its files.", "Dismiss", true),
+            _ => ($"Dismiss {Format.Count(VisibleRequests.Count() + VisibleArrivals.Count(), "fetch", "fetches")}?", "Each leaves this list, and what it fetched is thrown away.", "Dismiss", true),
         };
     }
 
@@ -767,6 +815,8 @@ else
                     await Api.KeepIncompleteAsync(dump.Dump.Id);
                 break;
             case "dismiss":
+                foreach (var request in VisibleRequests.ToList())
+                    await Api.DismissRequestAsync(request.Id);
                 foreach (var arrival in VisibleArrivals.ToList())
                     await Api.RejectDownloadAsync(arrival.Id);
                 break;

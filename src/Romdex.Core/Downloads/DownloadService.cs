@@ -22,14 +22,16 @@ public sealed class DownloadService(
     TaskQueue queue,
     IFilingWorker worker,
     LibraryScanner scanner,
+    DownloadSignal signal,
     IOptions<RomdexOptions> options,
     ILogger<DownloadService> logger)
 {
     /// <summary>Asks a plugin to stage a candidate, and adds it as an item that's fetching.</summary>
     /// <param name="titleId">The title it's for, when someone asked for one.</param>
     /// <param name="replaces">Library files it replaces, deleted once it's filed and verifies.</param>
+    /// <param name="requestId">The request it's an attempt for, if any.</param>
     public async Task<Download> FetchAsync(PluginInstance instance, Candidate candidate, RetrievalTarget? target, Guid? titleId, Guid? dumpId, CancellationToken ct,
-        IReadOnlyList<Guid>? replaces = null)
+        IReadOnlyList<Guid>? replaces = null, Guid? requestId = null)
     {
         var item = new Download
         {
@@ -41,6 +43,7 @@ public sealed class DownloadService(
             TitleId = titleId,
             WantedDumpId = dumpId,
             Replaces = replaces is { Count: > 0 } ? string.Join('|', replaces) : null,
+            RequestId = requestId,
             State = DownloadState.Fetching,
             StagingDirectory = "",
         };
@@ -281,6 +284,9 @@ public sealed class DownloadService(
         item.Message = message;
         item.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
+        // A request it's an attempt for goes on to its next offer.
+        if (item.RequestId is not null)
+            signal.Wake();
         logger.LogWarning("[{Item}] {Message}", item.Name, message);
     }
 
@@ -360,6 +366,8 @@ public sealed class DownloadWatcher(IServiceScopeFactory scopes, DownloadSignal 
                 using var scope = scopes.CreateScope();
                 var downloads = scope.ServiceProvider.GetRequiredService<DownloadService>();
                 await downloads.FollowFetchesAsync(stoppingToken);
+                // Requests whose attempt is over go on to their next offer.
+                await scope.ServiceProvider.GetRequiredService<RequestService>().AdvanceAsync(stoppingToken);
                 var every = options.Value.DownloadCheckMinutes;
                 if (signal.TakeCheck() || every > 0 && DateTime.UtcNow >= nextCheck)
                 {
@@ -403,7 +411,8 @@ public sealed class DownloadSignal
 /// </summary>
 public sealed class RetrievalTargets(RomdexDbContext db, LibraryViewBuilder views, Catalogue.Preferences preferences)
 {
-    public async Task<RetrievalTarget?> ForAsync(Guid titleId, Guid? dumpId, CancellationToken ct)
+    /// <param name="regions">Only dumps of any of these regions, or World; null or empty for every region.</param>
+    public async Task<RetrievalTarget?> ForAsync(Guid titleId, Guid? dumpId, CancellationToken ct, IReadOnlyList<string>? regions = null)
     {
         var title = await db.Titles.AsNoTracking().Include(t => t.System).FirstOrDefaultAsync(t => t.Id == titleId, ct);
         if (title is null)
@@ -420,7 +429,7 @@ public sealed class RetrievalTargets(RomdexDbContext db, LibraryViewBuilder view
         int Place(Dump d) => order.IndexOf(d.Id) is var at and >= 0 ? at : int.MaxValue;
         var wanted = dumpId is { } id ? dumps.FirstOrDefault(d => d.Id == id)?.Name : null;
         var ordered = dumps
-            .Where(d => d.Name == wanted || prefs.TierOf(Split(d.Regions)) != RegionTier.Never)
+            .Where(d => d.Name == wanted || prefs.TierOf(Split(d.Regions)) != RegionTier.Never && Covers(d, regions))
             .OrderBy(Place).ThenBy(d => d.Name, StringComparer.Ordinal);
         return new RetrievalTarget(title.System.Name, title.Name, ordered.Select(d => new TargetDump(
                 d.Name, Split(d.Regions), d.Serial,
@@ -428,13 +437,21 @@ public sealed class RetrievalTargets(RomdexDbContext db, LibraryViewBuilder view
             .ToList(), wanted);
     }
 
-    /// <summary>The names of a title's dumps that are only of regions never to be fetched, other than the dump asked for.</summary>
-    public async Task<IReadOnlySet<string>> NeverAsync(Guid titleId, Guid? dumpId, CancellationToken ct)
+    /// <summary>
+    /// The names of a title's dumps that aren't to be fetched for this: only of regions never to be fetched, or not of
+    /// the regions asked for; the dump asked for always is.
+    /// </summary>
+    public async Task<IReadOnlySet<string>> OutsideAsync(Guid titleId, Guid? dumpId, CancellationToken ct, IReadOnlyList<string>? regions = null)
     {
         var all = await db.Dumps.AsNoTracking().Where(d => d.TitleId == titleId).Select(d => d.Name).ToListAsync(ct);
-        var target = await ForAsync(titleId, dumpId, ct);
+        var target = await ForAsync(titleId, dumpId, ct, regions);
         return all.Except(target?.Dumps.Select(d => d.Name) ?? []).ToHashSet(StringComparer.Ordinal);
     }
 
     private static IReadOnlyList<string> Split(string regions) => regions.Length == 0 ? [] : regions.Split(',');
+
+    // A dump covers a region it names, and a World dump every region.
+    private static bool Covers(Dump dump, IReadOnlyList<string>? regions) =>
+        regions is not { Count: > 0 } || Split(dump.Regions).Any(r => r.Equals(SystemPreferences.World, StringComparison.OrdinalIgnoreCase)
+            || regions.Contains(r, StringComparer.OrdinalIgnoreCase));
 }

@@ -96,9 +96,48 @@ public sealed record DownloadOffer(Guid PluginId, string Plugin, Candidate Candi
 public sealed record DownloadSearchResult(IReadOnlyList<DownloadOffer> Offers, IReadOnlyList<string> Problems);
 
 /// <summary>Answer to <c>POST /titles/{id}/fetch</c> and <c>POST /downloads/{id}/try-again</c>.</summary>
-/// <param name="Download">What was started; null when nothing could be.</param>
+/// <param name="Download">The first attempt started; null when nothing could be.</param>
 /// <param name="Problems">Why nothing was started, and plugins that couldn't search.</param>
-public sealed record TitleFetch(DownloadInfo? Download, IReadOnlyList<string> Problems);
+/// <param name="Requests">What getting a title asked for: one for each wanted region it's missing, or one for the best there is.</param>
+public sealed record TitleFetch(DownloadInfo? Download, IReadOnlyList<string> Problems, IReadOnlyList<RequestInfo>? Requests = null);
+
+/// <summary>Where a request is.</summary>
+public enum RequestState
+{
+    /// <summary>Trying the retrievers' offers, one after another.</summary>
+    Active,
+
+    /// <summary>Something it fetched is in the library.</summary>
+    Done,
+
+    /// <summary>Out of offers: it waits under Review → Couldn't fetch.</summary>
+    Failed,
+
+    /// <summary>Someone dismissed it.</summary>
+    Dismissed,
+}
+
+/// <summary>Something someone asked for, and each attempt at it.</summary>
+/// <param name="Dump">The one dump asked for, when someone picked one.</param>
+/// <param name="Regions">The wanted regions it's for; empty for the best dump there is.</param>
+/// <param name="Attempts">Each download it tried, oldest first.</param>
+public sealed record RequestInfo(
+    Guid Id,
+    DumpRef Title,
+    DumpRef? Dump,
+    IReadOnlyList<string> Regions,
+    RequestState State,
+    string? Message,
+    IReadOnlyList<DownloadInfo> Attempts,
+    DateTime CreatedAt,
+    DateTime UpdatedAt)
+{
+    /// <summary>An attempt that brought another game, which can be filed as what it is.</summary>
+    public DownloadInfo? Acceptable => Attempts.LastOrDefault(a => a.CanAccept);
+}
+
+/// <summary>Answer to <c>GET /review/couldnt-fetch</c>: requests out of offers, and arrivals that failed or aren't what was asked for.</summary>
+public sealed record CouldntFetchPage(IReadOnlyList<RequestInfo> Requests, IReadOnlyList<DownloadInfo> Arrivals, int Total);
 
 /// <summary>Body of <c>POST /downloads/fetch</c>: a candidate from <c>POST /titles/{id}/search</c>, to stage and file.</summary>
 public sealed record StartDownload(Guid TitleId, Guid PluginId, Candidate Candidate, Guid? DumpId = null);

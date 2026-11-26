@@ -1,6 +1,6 @@
 # Plan: region tiers, region dots and tiles
 
-Agreed while designing Review; to be built on its own branch after it. Not yet implemented.
+Agreed while designing Review. Built: region tiers, region dots and requests; tiles are next.
 
 ## Region tiers
 
@@ -55,7 +55,10 @@ it means (such as "Wanted: Europe, USA; you have Europe"):
 
 ## Requests: trying offers in turn, as Melodex does
 
-Not yet at parity with Melodex. Today, Get (and Review's Replace, Upgrade, Get and Couldn't fetch → Try again) makes
+Built: `RequestService`. The notes below were the plan; it's at parity now, except that Romdex has no "Get everything
+missing" for a whole system yet, so filling in wanted regions is per game, with Get.
+
+Was not yet at parity with Melodex. Today, Get (and Review's Replace, Upgrade, Get and Couldn't fetch → Try again) makes
 **one attempt**: it fetches the best offer not turned away before. If that offer turns out to be another game, or fails,
 it waits under Review → Couldn't fetch, and each Try again moves on to the next offer.
 

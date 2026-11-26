@@ -250,6 +250,14 @@ public sealed class RomdexClient(HttpClient http)
     public Task<TitleFetch> FetchTitleAsync(Guid titleId, Guid? dumpId = null, IReadOnlyList<Guid>? replaces = null, CancellationToken ct = default) =>
         PostForAsync<TitleFetch>($"{Api}/titles/{titleId}/fetch", new SearchDownloads(dumpId, replaces), ct);
 
+    public Task<RequestInfo?> GetRequestAsync(Guid id, CancellationToken ct = default) => GetOrNullAsync<RequestInfo>($"{Api}/requests/{id}", ct);
+
+    /// <summary>Looks again for a request that ran out of offers, passing over what was turned away.</summary>
+    public Task<RequestInfo> TryRequestAgainAsync(Guid id, CancellationToken ct = default) => PostForAsync<RequestInfo>($"{Api}/requests/{id}/try-again", null, ct);
+
+    /// <summary>Dismisses a request that ran out of offers.</summary>
+    public Task<RequestInfo> DismissRequestAsync(Guid id, CancellationToken ct = default) => PostForAsync<RequestInfo>($"{Api}/requests/{id}/dismiss", null, ct);
+
     /// <summary>Looks again for what an arrival was fetched for, passing over what was turned away; one that arrived by itself is retried.</summary>
     public Task<TitleFetch> TryDownloadAgainAsync(Guid id, CancellationToken ct = default) => PostForAsync<TitleFetch>($"{Api}/downloads/{id}/try-again", null, ct);
 
@@ -287,8 +295,8 @@ public sealed class RomdexClient(HttpClient http)
     public async Task<ReviewDumpPage> ListIncompleteAsync(int skip = 0, int take = 100, string? sort = null, bool descending = false, CancellationToken ct = default) =>
         (await http.GetFromJsonAsync<ReviewDumpPage>($"{Api}/review/incomplete?skip={skip}&take={take}{Sorted(sort, descending)}", RomdexJson.Options, ct))!;
 
-    public async Task<DownloadsPage> ListCouldntFetchAsync(int skip = 0, int take = 50, string? sort = null, bool? descending = null, CancellationToken ct = default) =>
-        (await http.GetFromJsonAsync<DownloadsPage>($"{Api}/review/couldnt-fetch?skip={skip}&take={take}{(sort is null ? "" : $"&sort={sort}")}{(descending is { } d ? $"&descending={(d ? "true" : "false")}" : "")}",
+    public async Task<CouldntFetchPage> ListCouldntFetchAsync(int skip = 0, int take = 50, string? sort = null, bool? descending = null, CancellationToken ct = default) =>
+        (await http.GetFromJsonAsync<CouldntFetchPage>($"{Api}/review/couldnt-fetch?skip={skip}&take={take}{(sort is null ? "" : $"&sort={sort}")}{(descending is { } d ? $"&descending={(d ? "true" : "false")}" : "")}",
             RomdexJson.Options, ct))!;
 
     private async Task<ReviewFilePage> ReviewFilesAsync(string tab, int skip, int take, string? sort, bool descending, CancellationToken ct) =>

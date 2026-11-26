@@ -81,8 +81,8 @@ A file counts only when its checksums match a dump in the DAT, whatever it's cal
 Under **Settings → Regions**, and when you first set Romdex up, you say which regions you want games in, in three
 tiers:
 
-- **Wanted**: regions you want a copy of, the main one first. Getting a game fetches the best dump of these it came
-  out in.
+- **Wanted**: regions you want a copy of, the main one first. Getting a game gets it in each of these it came out in
+  that you don't have yet, the main one first; a dump of several, such as *(USA, Europe)*, counts for each.
 - **Fallback**: for a game that came out in no wanted region. The first of these that has a dump wins, so the order
   matters: Europe, then USA, then Japan, say. Regions in no tier count as the last fallbacks.
 - **Never**: regions never fetched, even when they're a game's only dump. A game that came out only in these isn't

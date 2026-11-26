@@ -89,6 +89,7 @@ public partial class RomdexDbContext(DbContextOptions<RomdexDbContext> options) 
     public DbSet<KeptIncomplete> KeptIncompletes => Set<KeptIncomplete>();
     public DbSet<Download> Downloads => Set<Download>();
     public DbSet<DownloadDump> DownloadDumps => Set<DownloadDump>();
+    public DbSet<Request> Requests => Set<Request>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -219,6 +220,15 @@ public partial class RomdexDbContext(DbContextOptions<RomdexDbContext> options) 
             e.HasOne<Dump>().WithMany().HasForeignKey(i => i.WantedDumpId).OnDelete(DeleteBehavior.SetNull);
             e.HasIndex(i => new { i.State, i.CreatedAt });
             e.HasIndex(i => new { i.PluginInstanceId, i.CandidateId });
+            e.HasOne<Request>().WithMany(r => r.Attempts).HasForeignKey(i => i.RequestId).OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(i => i.RequestId);
+        });
+
+        modelBuilder.Entity<Request>(e =>
+        {
+            e.HasOne<Title>().WithMany().HasForeignKey(r => r.TitleId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Dump>().WithMany().HasForeignKey(r => r.DumpId).OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(r => new { r.State, r.UpdatedAt });
         });
 
         modelBuilder.Entity<DownloadDump>(e =>

@@ -69,12 +69,13 @@ probably fine. A note above the list says how many wait for a tool, and they're 
 
 ## Couldn't fetch
 
-Fetches that didn't bring the game asked for, and ones that failed.
+Requests that ran out of offers. Getting a game tries each offer in turn until one is filed, as Melodex does; only
+when every one has been turned away does it wait here, with each attempt and why it was turned away.
 
-- **Accept** files what arrived as what it is, when it's a game the DATs know.
-- **Try again** fetches the next best offer, passing over what was turned away, and throws this one away.
-- **Dismiss** throws it away.
+- **Accept** files another game that came instead, as what it is, when it's one the DATs know.
+- **Look again** searches every retriever again, passing over what was turned away.
+- **Dismiss** takes it off this list, throwing away what it kept.
 
-Getting a game makes one attempt: the best offer that wasn't turned away before. **Try again** moves on to the next.
+Arrivals no one asked for that failed are here too, with **Try again**, **Accept** and **Dismiss** of their own.
 
 Next: [Playing, covers and apps](playing-and-apps.md).

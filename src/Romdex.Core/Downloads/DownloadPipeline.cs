@@ -30,6 +30,7 @@ public sealed class DownloadPipeline(
     AppSync appSync,
     TaskQueue tasks,
     DownloadService downloads,
+    DownloadSignal signal,
     IOptions<RomdexOptions> options,
     ILogger<DownloadPipeline> logger)
 {
@@ -383,6 +384,9 @@ public sealed class DownloadPipeline(
         item.Message = message;
         item.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
+        // A request it's an attempt for moves on now, rather than at the watcher's next look.
+        if (item.RequestId is not null && state is DownloadState.Filed or DownloadState.NeedsReview or DownloadState.Discarded or DownloadState.Failed)
+            signal.Wake();
         var log = state is DownloadState.Failed or DownloadState.NeedsReview ? LogLevel.Warning : LogLevel.Information;
         logger.Log(log, "[{Item}] {State}: {Message}", item.Name, state, message);
     }

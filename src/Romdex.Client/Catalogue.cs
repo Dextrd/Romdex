@@ -83,7 +83,7 @@ public enum RegionTier
 /// 1G1R ("one game, one ROM") choices for a system: which regions you want, which will do, and which never to fetch;
 /// then languages, and the kinds of dump left out.
 /// </summary>
-/// <param name="Wanted">Regions you want a copy of, the main one first.</param>
+/// <param name="Wanted">Regions you want a copy of, the main one first. Getting a game asks for each it came out in.</param>
 /// <param name="Fallback">
 /// Regions that will do when a game came out in no wanted region, best first. Regions in no tier come after these.
 /// </param>

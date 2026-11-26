@@ -64,6 +64,9 @@ public class Download
     /// <summary>The one dump asked for, when someone picked one.</summary>
     public Guid? WantedDumpId { get; set; }
 
+    /// <summary>The request it's an attempt for, if it's one.</summary>
+    public Guid? RequestId { get; set; }
+
     public DownloadState State { get; set; }
 
     /// <summary>Why it's held, while it's <see cref="DownloadState.NeedsReview"/>; meaningless in any other state.</summary>
@@ -102,3 +105,34 @@ public class DownloadDump
     /// <summary>Where it went in the library, relative to the library folder, once filed; '|'-separated when it's several files.</summary>
     public string? FiledPaths { get; set; }
 }
+
+/// <summary>
+/// Something someone asked for: a title, in some of its wanted regions or in whichever is best, or one dump of it. It
+/// tries the retrievers' offers one after another, each attempt a download, until one is filed, as Melodex's requests
+/// do; out of offers, it waits under Review → Couldn't fetch.
+/// </summary>
+public class Request
+{
+    public Guid Id { get; set; } = Guid.CreateVersion7();
+    public Guid TitleId { get; set; }
+
+    /// <summary>The one dump asked for, when someone picked one.</summary>
+    public Guid? DumpId { get; set; }
+
+    /// <summary>The wanted regions it's for, comma-separated; empty for the best dump there is, whatever its region.</summary>
+    public string Regions { get; set; } = "";
+
+    /// <summary>Library files what it gets replaces, '|'-separated IDs, as <see cref="Download.Replaces"/>.</summary>
+    public string? Replaces { get; set; }
+
+    public RequestState State { get; set; }
+
+    /// <summary>How it ended, or why it's waiting, for people.</summary>
+    public string? Message { get; set; }
+
+    public List<Download> Attempts { get; set; } = [];
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+}
+

@@ -216,7 +216,9 @@ public sealed class LibraryViewBuilder(RomdexDbContext db, LibraryViews cache, P
             d.Regions.Any(r => r.Equals(SystemPreferences.World, StringComparison.OrdinalIgnoreCase)) && prefs.TierOf(SystemPreferences.World) != RegionTier.Never
                 ? prefs.Wanted
                 : prefs.Wanted.Where(w => d.Regions.Contains(w, StringComparer.OrdinalIgnoreCase));
-        var available = released.Concat(owned).SelectMany(Wanted).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        // In the order they're wanted, the main one first.
+        var covered = released.Concat(owned).SelectMany(Wanted).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var available = prefs.Wanted.Where(covered.Contains).ToList();
         var have = owned.SelectMany(Wanted).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         var missing = available.Where(r => !have.Contains(r, StringComparer.OrdinalIgnoreCase)).ToList();
         if (owned.Count == 0)

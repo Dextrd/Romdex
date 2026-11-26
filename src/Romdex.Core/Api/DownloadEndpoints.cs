@@ -99,10 +99,37 @@ public static class DownloadEndpoints
             .RequireScope(Scopes.Download).WithTags("Downloads").WithName("SearchDownloads")
             .WithSummary("Asks every retriever that searches for dumps of a title, and ranks what they offer. Fetch one with POST /downloads/fetch.");
 
-        api.MapPost("/titles/{id:guid}/fetch", async (Guid id, SearchDownloads? body, RetrievalSearch search, RomdexDbContext db, CancellationToken ct) =>
-                await search.FetchBestAsync(id, body?.DumpId, ct, body?.Replaces) is { } result ? Results.Ok(await FetchInfoAsync(db, result, ct)) : Results.NotFound())
+        api.MapPost("/titles/{id:guid}/fetch", async (Guid id, SearchDownloads? body, RequestService requests, RomdexDbContext db, CancellationToken ct) =>
+            {
+                if (await requests.StartAsync(id, body?.DumpId, body?.Replaces, ct) is not { } started)
+                    return Results.NotFound();
+                var infos = await requests.InfoAsync(started.Requests, ct);
+                var first = infos.SelectMany(r => r.Attempts).FirstOrDefault();
+                var problems = started.Problems.Concat(infos.Where(r => r.State == Client.RequestState.Failed).Select(r => r.Message ?? "")).ToList();
+                return Results.Ok(new TitleFetch(first, problems, infos));
+            })
             .RequireScope(Scopes.Download).WithTags("Downloads").WithName("FetchTitle")
-            .WithSummary("Gets a title, or one of its dumps: asks every retriever, and fetches the best offer that wasn't turned away before.");
+            .WithSummary("Gets a title, or one of its dumps: a request for each wanted region it's missing, or for the best there is, each trying the retrievers' offers in order until one is filed.");
+
+        api.MapPost("/requests/{id:guid}/try-again", async (Guid id, RequestService requests, RomdexDbContext db, CancellationToken ct) =>
+                await requests.TryAgainAsync(id, ct)
+                    ? Results.Ok((await requests.InfoAsync([await db.Requests.AsNoTracking().FirstAsync(r => r.Id == id, ct)], ct))[0])
+                    : Results.Problem("Only a request that ran out of offers can be tried again.", statusCode: StatusCodes.Status409Conflict))
+            .RequireScope(Scopes.Download).WithTags("Downloads").WithName("TryRequestAgain")
+            .WithSummary("Looks again for a request that ran out of offers, passing over what was turned away.");
+
+        api.MapPost("/requests/{id:guid}/dismiss", async (Guid id, RequestService requests, RomdexDbContext db, CancellationToken ct) =>
+                await requests.DismissAsync(id, ct)
+                    ? Results.Ok((await requests.InfoAsync([await db.Requests.AsNoTracking().FirstAsync(r => r.Id == id, ct)], ct))[0])
+                    : Results.Problem("Only a request that ran out of offers can be dismissed.", statusCode: StatusCodes.Status409Conflict))
+            .RequireScope(Scopes.Download).WithTags("Downloads").WithName("DismissRequest")
+            .WithSummary("Dismisses a request that ran out of offers, throwing away the other game it kept, if any.");
+
+        api.MapGet("/requests/{id:guid}", async (Guid id, RequestService requests, RomdexDbContext db, CancellationToken ct) =>
+                await db.Requests.AsNoTracking().FirstOrDefaultAsync(r => r.Id == id, ct) is { } request
+                    ? Results.Ok((await requests.InfoAsync([request], ct))[0])
+                    : Results.NotFound())
+            .WithTags("Downloads").WithName("GetRequest").WithSummary("A request, with each of its attempts.");
 
         downloads.MapPost("/{id:guid}/try-again", async (Guid id, RomdexDbContext db, RetrievalSearch search, DownloadService service, CancellationToken ct) =>
             {

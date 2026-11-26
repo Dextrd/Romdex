@@ -272,7 +272,7 @@ public sealed class DownloadTests : IDisposable
         Assert.Equal("It isn't what was asked for, Lantern Run: it's Quiet Quarry (USA).", item.Message);
         Assert.Equal("Lantern Run", item.Title!.Name);
         Assert.Equal(HoldReason.NotAskedFor, item.HeldFor);
-        Assert.Equal(item.Id, Assert.Single((await _api.ListCouldntFetchAsync()).Items).Id);
+        Assert.Equal(item.Id, Assert.Single((await _api.ListCouldntFetchAsync()).Arrivals).Id);
         Assert.Equal(1, (await _api.GetReviewSummaryAsync()).CouldntFetch);
 
         // Searching again says which offer was turned away before, and why.
@@ -284,7 +284,7 @@ public sealed class DownloadTests : IDisposable
         item = await WaitAsync(item.Id);
         Assert.Equal(DownloadState.Filed, item.State);
         Assert.Equal("Quiet Quarry (USA)", Assert.Single(item.Dumps).Dump.Name);
-        Assert.Empty((await _api.ListCouldntFetchAsync()).Items);
+        Assert.Empty((await _api.ListCouldntFetchAsync()).Arrivals);
 
         _plugin.Drop("it", ("l.gb", lantern[0].Data));
         offer = (await _api.SearchDownloadsAsync(wanted.Id)).Offers.Single(o => o.Candidate.CandidateId == "it");
@@ -294,7 +294,7 @@ public sealed class DownloadTests : IDisposable
     }
 
     [Fact]
-    public async Task Getting_a_game_fetches_the_best_offer_and_trying_again_passes_over_what_was_turned_away()
+    public async Task Getting_a_game_tries_offer_after_offer_until_one_is_filed()
     {
         var lantern = _dats.Dump(Handheld, "Lantern Run (World)", [".gb"]);
         var quarry = _dats.Dump(Handheld, "Quiet Quarry (USA)", [".gb"]);
@@ -302,26 +302,77 @@ public sealed class DownloadTests : IDisposable
         await SetUpAsync();
         var wanted = (await _api.ListAllTitlesAsync()).Items.Single(t => t.Name == "Lantern Run");
 
-        // Straight away, with nothing to choose: the one offer is fetched, and it's the wrong game.
+        // The plugin says the wrong one is surer, so it's tried first; it's another game, so the next is tried.
         _plugin.Drop("not it", ("q.gb", quarry[0].Data));
-        var fetch = await _api.FetchTitleAsync(wanted.Id);
-        Assert.Empty(fetch.Problems);
-        var wrong = await WaitAsync(fetch.Download!.Id);
-        Assert.Equal(HoldReason.NotAskedFor, wrong.HeldFor);
-
-        // Offered again, it's passed over: there's nothing else to fetch.
-        _plugin.Drop("not it", ("q.gb", quarry[0].Data));
-        fetch = await _api.FetchTitleAsync(wanted.Id);
-        Assert.Null(fetch.Download);
-        Assert.Equal("Everything offered was turned away before.", Assert.Single(fetch.Problems));
-
-        // Once something else is offered, trying again fetches it and throws the wrong one away.
         _plugin.Drop("it", ("l.gb", lantern[0].Data));
-        fetch = await _api.TryDownloadAgainAsync(wrong.Id);
-        Assert.Equal("it", fetch.Download!.Name);
-        Assert.Equal(DownloadState.Filed, (await WaitAsync(fetch.Download.Id)).State);
-        Assert.Equal(DownloadState.Rejected, (await _api.GetDownloadAsync(wrong.Id))!.State);
-        Assert.Empty((await _api.ListCouldntFetchAsync()).Items);
+        _plugin.Scores["not it"] = 0.99;
+        var fetch = await _api.FetchTitleAsync(wanted.Id);
+        var request = await SettleAsync(Assert.Single(fetch.Requests!).Id);
+        Assert.Equal(RequestState.Done, request.State);
+        Assert.Equal(["not it", "it"], request.Attempts.Select(a => a.Name));
+        // The other game it kept to accept is thrown away once the right one is in.
+        Assert.Equal(DownloadState.Rejected, request.Attempts[0].State);
+        Assert.Equal(DownloadState.Filed, request.Attempts[1].State);
+        Assert.Equal(TitleStatus.Owned, (await _api.GetTitleAsync(wanted.Id))!.Status);
+
+        // Had, in every region wanted: nothing more to get.
+        fetch = await _api.FetchTitleAsync(wanted.Id);
+        Assert.Empty(fetch.Requests!);
+        Assert.Equal("You have it in every region you want.", Assert.Single(fetch.Problems));
+    }
+
+    [Fact]
+    public async Task A_request_out_of_offers_waits_to_be_accepted_tried_again_or_dismissed()
+    {
+        var lantern = _dats.Dump(Handheld, "Lantern Run (World)", [".gb"]);
+        var quarry = _dats.Dump(Handheld, "Quiet Quarry (USA)", [".gb"]);
+        _dats.WriteDats();
+        await SetUpAsync();
+        var wanted = (await _api.ListAllTitlesAsync()).Items.Single(t => t.Name == "Lantern Run");
+
+        _plugin.Drop("not it", ("q.gb", quarry[0].Data));
+        var request = await SettleAsync(Assert.Single((await _api.FetchTitleAsync(wanted.Id)).Requests!).Id);
+        Assert.Equal(RequestState.Failed, request.State);
+        Assert.Contains("It isn't what was asked for", request.Message);
+        Assert.Equal("not it", request.Acceptable!.Name);
+        var waiting = await _api.ListCouldntFetchAsync();
+        Assert.Equal(request.Id, Assert.Single(waiting.Requests).Id);
+        Assert.Empty(waiting.Arrivals);
+        Assert.Equal(1, (await _api.GetReviewSummaryAsync()).CouldntFetch);
+
+        // Looking again with nothing new fails again; with something new, it's fetched.
+        _plugin.Drop("not it", ("q.gb", quarry[0].Data));
+        Assert.Equal(RequestState.Failed, (await _api.TryRequestAgainAsync(request.Id)).State);
+        _plugin.Drop("it", ("l.gb", lantern[0].Data));
+        await _api.TryRequestAgainAsync(request.Id);
+        request = await SettleAsync(request.Id);
+        Assert.Equal(RequestState.Done, request.State);
+        Assert.Empty((await _api.ListCouldntFetchAsync()).Requests);
+    }
+
+    [Fact]
+    public async Task Getting_a_game_asks_for_each_wanted_region_it_came_out_in()
+    {
+        var europe = _dats.Dump(Handheld, "Tide Bell (Europe)", [".gb"]);
+        var usa = _dats.Dump(Handheld, "Tide Bell (USA)", [".gb"], cloneOf: "Tide Bell (Europe)");
+        _dats.Dump(Handheld, "Tide Bell (Japan)", [".gb"], cloneOf: "Tide Bell (Europe)");
+        _dats.WriteDats();
+        await SetUpAsync();
+        await _api.SetDefaultPreferencesAsync(SystemPreferences.Default with { Wanted = ["Europe", "USA"], Fallback = ["Japan"] });
+        var title = Assert.Single((await _api.ListAllTitlesAsync()).Items);
+
+        _plugin.Drop("eu", ("e.gb", europe[0].Data));
+        _plugin.DumpNames["eu"] = "Tide Bell (Europe)";
+        _plugin.Drop("us", ("u.gb", usa[0].Data));
+        _plugin.DumpNames["us"] = "Tide Bell (USA)";
+        var fetch = await _api.FetchTitleAsync(title.Id);
+        Assert.Equal([["Europe"], ["USA"]], fetch.Requests!.Select(r => r.Regions));
+        foreach (var request in fetch.Requests!)
+            Assert.Equal(RequestState.Done, (await SettleAsync(request.Id)).State);
+        var got = (await _api.GetTitleAsync(title.Id))!;
+        Assert.Equal(RegionFit.Best, got.Fit);
+        Assert.Equal(DumpStatus.Good, got.Dumps.Single(d => d.Name == "Tide Bell (Europe)").Status);
+        Assert.Equal(DumpStatus.Good, got.Dumps.Single(d => d.Name == "Tide Bell (USA)").Status);
     }
 
     [Fact]
@@ -368,7 +419,7 @@ public sealed class DownloadTests : IDisposable
         _plugin.DumpNames["korea"] = "Tide Bell (Korea)";
         var fetch = await _api.FetchTitleAsync(title.Id);
         Assert.Null(fetch.Download);
-        Assert.Contains("Everything offered is of a region never to be fetched.", fetch.Problems);
+        Assert.Contains("Nothing offered is of Japan.", fetch.Problems);
 
         // Asked for by name, it's fetched all the same.
         var korean = (await _api.GetTitleAsync(title.Id))!.Dumps.Single(d => d.Name == "Tide Bell (Korea)");
@@ -548,6 +599,20 @@ public sealed class DownloadTests : IDisposable
                 return item;
             Assert.True(DateTime.UtcNow < deadline, $"{item.Name}: {item.State} {item.Message}");
             await Task.Delay(100);
+        }
+    }
+
+    /// <summary>Waits for a request to be done, or out of offers.</summary>
+    private async Task<RequestInfo> SettleAsync(Guid id)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(45);
+        while (true)
+        {
+            var request = (await _api.GetRequestAsync(id))!;
+            if (request.State != RequestState.Active)
+                return request;
+            Assert.True(DateTime.UtcNow < deadline, $"Request {id}: {request.State} {request.Message}");
+            await Task.Delay(200);
         }
     }
 

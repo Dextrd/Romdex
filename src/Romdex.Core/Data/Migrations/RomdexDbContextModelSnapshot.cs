@@ -194,6 +194,9 @@ namespace Romdex.Core.Data.Migrations
                     b.Property<string>("Replaces")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("RequestId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Source")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -216,6 +219,8 @@ namespace Romdex.Core.Data.Migrations
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("RequestId");
 
                     b.HasIndex("TitleId");
 
@@ -669,6 +674,49 @@ namespace Romdex.Core.Data.Migrations
                     b.ToTable("PluginInstances");
                 });
 
+            modelBuilder.Entity("Romdex.Core.Data.Request", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("DumpId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Message")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Regions")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Replaces")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("TitleId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DumpId");
+
+                    b.HasIndex("TitleId");
+
+                    b.HasIndex("State", "UpdatedAt");
+
+                    b.ToTable("Requests");
+                });
+
             modelBuilder.Entity("Romdex.Core.Data.Setting", b =>
                 {
                     b.Property<string>("Key")
@@ -871,6 +919,11 @@ namespace Romdex.Core.Data.Migrations
                         .HasForeignKey("PluginInstanceId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("Romdex.Core.Data.Request", null)
+                        .WithMany("Attempts")
+                        .HasForeignKey("RequestId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Romdex.Core.Data.Title", null)
                         .WithMany()
                         .HasForeignKey("TitleId")
@@ -1012,6 +1065,20 @@ namespace Romdex.Core.Data.Migrations
                     b.Navigation("Title");
                 });
 
+            modelBuilder.Entity("Romdex.Core.Data.Request", b =>
+                {
+                    b.HasOne("Romdex.Core.Data.Dump", null)
+                        .WithMany()
+                        .HasForeignKey("DumpId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Romdex.Core.Data.Title", null)
+                        .WithMany()
+                        .HasForeignKey("TitleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Romdex.Core.Data.Title", b =>
                 {
                     b.HasOne("Romdex.Core.Data.CatalogueSystem", "System")
@@ -1059,6 +1126,11 @@ namespace Romdex.Core.Data.Migrations
             modelBuilder.Entity("Romdex.Core.Data.LibraryFile", b =>
                 {
                     b.Navigation("Contents");
+                });
+
+            modelBuilder.Entity("Romdex.Core.Data.Request", b =>
+                {
+                    b.Navigation("Attempts");
                 });
 
             modelBuilder.Entity("Romdex.Core.Data.Title", b =>

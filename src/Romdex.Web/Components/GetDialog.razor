@@ -1,9 +1,9 @@
 @inject RomdexClient Api
 
 @*
-    Gets a title through the retrievers that search: the best offer is fetched straight away, as Melodex does, and
-    what it fetched is checked against the DAT before it's filed. A game on more than one system is got for one,
-    picked first.
+    Gets a title through the retrievers that search, as Melodex does: a request for each wanted region it's missing, or
+    for the best there is, each fetching the best offer straight away and the next if that's turned away. A game on
+    more than one system is got for one, picked first.
 *@
 <Dialog Title="@($"Get {Name}")" OnClose="OnClose" Class="get-dialog">
     @if (Versions is { Count: > 1 } && _result is null && !_fetching)
@@ -20,16 +20,27 @@
     }
     else
     {
-        @if (_result.Download is { } started)
+        @if (_result.Requests is { Count: > 0 } requests)
         {
-            <p>@started.Source is fetching <strong>@started.Name</strong>. It's checked against the DAT and filed once it arrives; follow it on the <a href="downloads">Downloads page</a>.</p>
-            <p class="muted small">If it isn't the right game, or it fails, it waits under <a href="review/couldnt-fetch">Review → Couldn't fetch</a>, where you can try again.</p>
+            <ul class="get-requests">
+                @foreach (var request in requests)
+                {
+                    <li>
+                        @if (request.Regions.Count > 0) { <strong>@string.Join(", ", request.Regions)</strong><span>: </span> }
+                        @(request.State == RequestState.Failed ? $"nothing could be fetched. {request.Message}" : request.Message)
+                    </li>
+                }
+            </ul>
+            <p class="muted small">
+                Each is checked against the DAT and filed once it arrives; if it isn't the right game, or it fails, the next offer is tried.
+                Follow them on the <a href="downloads">Downloads page</a>; any that run out of offers wait under <a href="review/couldnt-fetch">Review → Couldn't fetch</a>.
+            </p>
         }
-        else
+        else if (_result.Problems.Count == 0)
         {
             <p>Nothing could be fetched.</p>
         }
-        @foreach (var problem in _result.Problems)
+        @foreach (var problem in _result.Problems.Where(p => _result.Requests?.Any(r => r.Message == p) != true))
         {
             <div class="notice @(_result.Download is null ? "error" : null) small">@problem</div>
         }

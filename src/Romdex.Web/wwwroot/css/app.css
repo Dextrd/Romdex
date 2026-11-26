@@ -472,6 +472,7 @@ a.button:hover { text-decoration: none; border-color: var(--accent); }
 .link-version label { display: block; margin-bottom: .35rem; }
 .link-version input { flex: 1; min-width: 0; }
 .review-item .hashes { margin-top: .25rem; }
+.review-item ol.reasons { margin: 0; padding-left: 1.1rem; }
 .review-item .error.full { max-width: none; white-space: normal; }
 /* A game's files linked by someone, not verified by the DATs. */
 .linked { padding: .25rem 1rem; }

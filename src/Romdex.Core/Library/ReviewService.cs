@@ -17,7 +17,8 @@ public sealed class ReviewException(string message, bool notFound = false) : Exc
 /// library file, or a file inside one, that matches nothing is outdated if a DAT matched its bytes before, a bad dump if
 /// a dump file has its name, and otherwise waits under Matching. Files someone hid or deferred are under none of them.
 /// </summary>
-public sealed class ReviewService(RomdexDbContext db, LibraryMatcher matcher, LibraryViews cache, LibraryViewBuilder views, DownloadService downloads)
+public sealed class ReviewService(RomdexDbContext db, LibraryMatcher matcher, LibraryViews cache, LibraryViewBuilder views, DownloadService downloads,
+    RequestService requests)
 {
     private sealed record Content(Guid Id, Guid FileId, string Path, string? Entry, long Size, string Crc32, string Sha1, string? HeaderlessSha1, DateTime ModifiedAt)
     {
@@ -32,8 +33,9 @@ public sealed class ReviewService(RomdexDbContext db, LibraryMatcher matcher, Li
     {
         var sorted = await SortAsync(ct);
         var (corrupted, noTool) = await UnreadableAsync(ct);
-        var held = await db.Downloads.AsNoTracking().Where(d => d.State == DownloadState.NeedsReview).Select(d => d.HeldFor).ToListAsync(ct);
-        var failed = await db.Downloads.CountAsync(d => d.State == DownloadState.Failed, ct);
+        var held = await db.Downloads.AsNoTracking().Where(d => d.State == DownloadState.NeedsReview && d.RequestId == null).Select(d => d.HeldFor).ToListAsync(ct);
+        var failed = await db.Downloads.CountAsync(d => d.State == DownloadState.Failed && d.RequestId == null, ct)
+            + await db.Requests.CountAsync(r => r.State == RequestState.Failed, ct);
         var incomplete = (await IncompleteAsync(ct)).Count;
         var deferred = await db.LibraryFiles.CountAsync(f => f.DeferredAt != null && f.HiddenAt == null, ct);
         var hidden = await db.LibraryFiles.CountAsync(f => f.HiddenAt != null, ct);
@@ -100,25 +102,40 @@ public sealed class ReviewService(RomdexDbContext db, LibraryMatcher matcher, Li
             await HeldAsync(d => d.HeldFor == HoldReason.Incomplete, ct));
     }
 
-    /// <summary>Arrivals that aren't what was asked for, and fetches that failed, newest first.</summary>
-    public async Task<DownloadsPage> CouldntFetchAsync(int skip, int take, CancellationToken ct, string? sort = null, bool descending = true)
+    /// <summary>
+    /// Requests that ran out of offers, and arrivals no request is for that failed or aren't what was asked for; each
+    /// newest first, or by name.
+    /// </summary>
+    public async Task<CouldntFetchPage> CouldntFetchAsync(int skip, int take, CancellationToken ct, string? sort = null, bool descending = true)
     {
-        var items = db.Downloads.AsNoTracking().Where(d => d.State == DownloadState.Failed || d.State == DownloadState.NeedsReview
-            && (d.HeldFor == HoldReason.NotAskedFor || d.HeldFor == HoldReason.Alternative || d.HeldFor == null));
-        var total = await items.CountAsync(ct);
+        var failed = db.Requests.AsNoTracking().Where(r => r.State == RequestState.Failed);
+        var loose = Loose();
+        var requestCount = await failed.CountAsync(ct);
+        var total = requestCount + await loose.CountAsync(ct);
+        var from = Math.Max(0, skip);
+        var size = Math.Clamp(take, 1, 500);
+        var page = await (descending ? failed.OrderByDescending(r => r.UpdatedAt) : failed.OrderBy(r => r.UpdatedAt)).Skip(from).Take(size).ToListAsync(ct);
+        var infos = await requests.InfoAsync(page, ct);
+        if (sort == "name")
+            infos = (descending ? infos.OrderByDescending(r => r.Title.Name) : infos.OrderBy(r => r.Title.Name)).ToList();
+        var rest = size - infos.Count;
         var ordered = sort == "name"
-            ? descending ? items.OrderByDescending(d => d.Name) : items.OrderBy(d => d.Name)
-            : descending ? items.OrderByDescending(d => d.UpdatedAt) : items.OrderBy(d => d.UpdatedAt);
-        var page = await ordered.Skip(Math.Max(0, skip)).Take(Math.Clamp(take, 1, 500)).Include(d => d.Dumps).ToListAsync(ct);
-        return new DownloadsPage(await Api.DownloadEndpoints.InfoAsync(db, page, ct), total, total);
+            ? descending ? loose.OrderByDescending(d => d.Name) : loose.OrderBy(d => d.Name)
+            : descending ? loose.OrderByDescending(d => d.UpdatedAt) : loose.OrderBy(d => d.UpdatedAt);
+        var arrivals = rest == 0 ? [] : await ordered.Skip(Math.Max(0, from - requestCount)).Take(rest).Include(d => d.Dumps).ToListAsync(ct);
+        return new CouldntFetchPage(infos, await Api.DownloadEndpoints.InfoAsync(db, arrivals, ct), total);
     }
+
+    // Arrivals no request is for that failed, or aren't what was asked for: a request's own wait with it.
+    private IQueryable<Download> Loose() => db.Downloads.AsNoTracking().Where(d => d.RequestId == null && (d.State == DownloadState.Failed
+        || d.State == DownloadState.NeedsReview && (d.HeldFor == HoldReason.NotAskedFor || d.HeldFor == HoldReason.Alternative || d.HeldFor == null)));
 
     private static ReviewFilePage Page(List<ReviewFile> all, int skip, int take, IReadOnlyList<DownloadInfo> arrivals) =>
         new(all.Skip(Math.Max(0, skip)).Take(Math.Clamp(take, 1, 1000)).ToList(), all.Count, arrivals);
 
     private async Task<List<DownloadInfo>> HeldAsync(System.Linq.Expressions.Expression<Func<Download, bool>> held, CancellationToken ct)
     {
-        var items = await db.Downloads.AsNoTracking().Where(d => d.State == DownloadState.NeedsReview).Where(held)
+        var items = await db.Downloads.AsNoTracking().Where(d => d.State == DownloadState.NeedsReview && d.RequestId == null).Where(held)
             .OrderByDescending(d => d.UpdatedAt).Take(200).Include(d => d.Dumps).ToListAsync(ct);
         return await Api.DownloadEndpoints.InfoAsync(db, items, ct);
     }

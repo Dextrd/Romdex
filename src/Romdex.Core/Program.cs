@@ -96,6 +96,7 @@ builder.Services.AddScoped<ITaskHandler, LibraryFormatTask>();
 builder.Services.AddScoped<RetrievalTargets>();
 builder.Services.AddScoped<DownloadService>();
 builder.Services.AddScoped<RetrievalSearch>();
+builder.Services.AddScoped<RequestService>();
 builder.Services.AddScoped<DownloadPipeline>();
 builder.Services.AddScoped<ITaskHandler, DownloadTask>();
 builder.Services.AddSingleton<DownloadSignal>();

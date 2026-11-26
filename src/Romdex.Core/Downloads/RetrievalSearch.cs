@@ -18,9 +18,10 @@ public sealed class RetrievalSearch(RomdexDbContext db, RetrievalPlugins plugins
     private const double UnsaidScore = 0.8;
 
     /// <summary>Every retriever's offers for a title, best first, with what was turned away before marked. Null for no such title.</summary>
-    public async Task<DownloadSearchResult?> SearchAsync(Guid titleId, Guid? dumpId, CancellationToken ct)
+    /// <param name="regions">Only for dumps of these regions, as a request for some wanted regions is; null for every region.</param>
+    public async Task<DownloadSearchResult?> SearchAsync(Guid titleId, Guid? dumpId, CancellationToken ct, IReadOnlyList<string>? regions = null)
     {
-        if (await targets.ForAsync(titleId, dumpId, ct) is not { } target)
+        if (await targets.ForAsync(titleId, dumpId, ct, regions) is not { } target)
             return null;
         var searching = await plugins.WithAsync(RetrievalCapabilities.Search, ct);
         var answers = await Task.WhenAll(searching.Select(async p =>
@@ -49,25 +50,28 @@ public sealed class RetrievalSearch(RomdexDbContext db, RetrievalPlugins plugins
     /// a result with nothing started says why.
     /// </summary>
     /// <param name="replaces">Library files what's fetched replaces, such as a bad dump: deleted once it's filed and verifies.</param>
-    public async Task<FetchResult?> FetchBestAsync(Guid titleId, Guid? dumpId, CancellationToken ct, IReadOnlyList<Guid>? replaces = null)
+    /// <param name="regions">Only dumps of these regions, as a request for some wanted regions is; null for every region.</param>
+    /// <param name="requestId">The request it's an attempt for, if any.</param>
+    public async Task<FetchResult?> FetchBestAsync(Guid titleId, Guid? dumpId, CancellationToken ct, IReadOnlyList<Guid>? replaces = null,
+        IReadOnlyList<string>? regions = null, Guid? requestId = null)
     {
-        if (await SearchAsync(titleId, dumpId, ct) is not { } found)
+        if (await SearchAsync(titleId, dumpId, ct, regions) is not { } found)
             return null;
         var problems = found.Problems.ToList();
-        // An offer the plugin says is a dump of a region never to be fetched isn't fetched.
-        var never = await targets.NeverAsync(titleId, dumpId, ct);
+        // An offer the plugin says is a dump not to be fetched for this, such as of a region never to be, isn't fetched.
+        var never = await targets.OutsideAsync(titleId, dumpId, ct, regions);
         var allowed = found.Offers.Where(o => o.Candidate.DumpName is not { } name || !never.Contains(name)).ToList();
         var best = allowed.FirstOrDefault(o => o.TurnedAway is null);
         if (best is null)
         {
             problems.Add(found.Offers.Count == 0 ? "Nothing was offered."
-                : allowed.Count == 0 ? "Everything offered is of a region never to be fetched."
+                : allowed.Count == 0 ? regions is { Count: > 0 } ? $"Nothing offered is of {string.Join(" or ", regions)}." : "Everything offered is of a region never to be fetched."
                 : "Everything offered was turned away before.");
             return new FetchResult(null, null, problems);
         }
         var instance = (await db.PluginInstances.FindAsync([best.PluginId], ct))!;
-        var target = await targets.ForAsync(titleId, dumpId, ct);
-        var item = await downloads.FetchAsync(instance, best.Candidate, target, titleId, dumpId, ct, replaces);
+        var target = await targets.ForAsync(titleId, dumpId, ct, regions);
+        var item = await downloads.FetchAsync(instance, best.Candidate, target, titleId, dumpId, ct, replaces, requestId);
         return new FetchResult(item, best, problems);
     }
 
