@@ -45,8 +45,9 @@ public static class LibraryEndpoints
 
         library.MapGet("/unknown", async (RomdexDbContext db, int? skip, int? take, CancellationToken ct) =>
             {
-                var contents = db.LibraryContents.AsNoTracking().Where(c => !c.Matches.Any());
-                var unreadable = db.LibraryFiles.AsNoTracking().Where(f => f.Error != null);
+                // Files someone hid or put off deciding about aren't listed.
+                var contents = db.LibraryContents.AsNoTracking().Where(c => !c.Matches.Any() && c.File!.HiddenAt == null && c.File.DeferredAt == null);
+                var unreadable = db.LibraryFiles.AsNoTracking().Where(f => f.Error != null && f.HiddenAt == null && f.DeferredAt == null);
                 var total = await contents.CountAsync(ct) + await unreadable.CountAsync(ct);
                 var from = Math.Max(0, skip ?? 0);
                 var size = Math.Clamp(take ?? 100, 1, 1000);

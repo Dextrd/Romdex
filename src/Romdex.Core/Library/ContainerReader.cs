@@ -8,7 +8,10 @@ using SharpCompress.Archives.SevenZip;
 namespace Romdex.Core.Library;
 
 /// <summary>A file that couldn't be read, with a reason people can act on.</summary>
-public sealed class UnreadableFileException(string message, Exception? inner = null) : Exception(message, inner);
+public sealed class UnreadableFileException(string message, Exception? inner = null, ReadFailure failure = ReadFailure.Damaged) : Exception(message, inner)
+{
+    public ReadFailure Failure { get; } = failure;
+}
 
 /// <summary>
 /// Reads what a library or staged file holds, as a DAT would describe it: the file itself, the files inside a zip or 7z,
@@ -71,7 +74,7 @@ public sealed partial class ContainerReader(IOptions<RomdexOptions> options, ISe
         }
         catch (Downloads.FilingWorkerException e)
         {
-            throw new UnreadableFileException(e.Message, e);
+            throw new UnreadableFileException(e.Message, e, e.Unreachable ? ReadFailure.NoTool : ReadFailure.Damaged);
         }
     }
 
@@ -164,11 +167,11 @@ public sealed partial class ContainerReader(IOptions<RomdexOptions> options, ISe
         Process process;
         try
         {
-            process = Process.Start(start) ?? throw new UnreadableFileException($"{toolName} couldn't be started.");
+            process = Process.Start(start) ?? throw new UnreadableFileException($"{toolName} couldn't be started.", failure: ReadFailure.NoTool);
         }
         catch (System.ComponentModel.Win32Exception e)
         {
-            throw new UnreadableFileException($"Reading it needs {toolName}, which isn't installed here. The Docker image has it.", e);
+            throw new UnreadableFileException($"Reading it needs {toolName}, which isn't installed here. The Docker image has it.", e, ReadFailure.NoTool);
         }
         using (process)
         {

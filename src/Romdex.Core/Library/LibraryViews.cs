@@ -95,6 +95,9 @@ public sealed class LibraryViewBuilder(RomdexDbContext db, LibraryViews cache, P
 
         var matchesByFile = matches.ToLookup(m => m.DumpFileId);
         var filesByDump = files.ToLookup(f => f.DumpId);
+        // Files someone said a dump can do without.
+        var kept = (await db.KeptIncompletes.AsNoTracking().Where(k => systemIds.Contains(k.Dump!.SystemId)).ToListAsync(ct))
+            .ToDictionary(k => k.DumpId, k => k.MissingNames);
 
         // First, which dumps are whole; then which contents those explain, so a track shared with a whole dump of
         // another region doesn't make that region look incomplete.
@@ -104,7 +107,9 @@ public sealed class LibraryViewBuilder(RomdexDbContext db, LibraryViews cache, P
             if (own.Count == 0)
                 return false;
             var fromChd = own.Any(f => matchesByFile[f.Id].Any(m => m.Container == Container.Chd));
-            return own.All(f => matchesByFile[f.Id].Any() || fromChd && IsSheet(f.Name));
+            var doesWithout = kept.GetValueOrDefault(dump.Id);
+            return own.Any(f => matchesByFile[f.Id].Any())
+                && own.All(f => matchesByFile[f.Id].Any() || fromChd && IsSheet(f.Name) || doesWithout?.Contains(f.Name) == true);
         }
         var whole = dumps.Where(Whole).Select(d => d.Id).ToHashSet();
         var fileDump = files.ToDictionary(f => f.Id, f => f.DumpId);
@@ -202,7 +207,7 @@ public sealed class LibraryViewBuilder(RomdexDbContext db, LibraryViews cache, P
 
     private async Task<List<string>> UnmatchedNamesAsync(CancellationToken ct)
     {
-        var unmatched = await db.LibraryContents.AsNoTracking().Where(c => !c.Matches.Any())
+        var unmatched = await db.LibraryContents.AsNoTracking().Where(c => !c.Matches.Any() && c.File!.HiddenAt == null)
             .Select(c => new { c.Entry, c.File!.Path }).ToListAsync(ct);
         return unmatched.Select(c => Path.GetFileName(c.Entry ?? c.Path)).ToList();
     }

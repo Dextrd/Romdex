@@ -84,6 +84,9 @@ public partial class RomdexDbContext(DbContextOptions<RomdexDbContext> options) 
     public DbSet<LibraryFile> LibraryFiles => Set<LibraryFile>();
     public DbSet<LibraryContent> LibraryContents => Set<LibraryContent>();
     public DbSet<LibraryMatch> LibraryMatches => Set<LibraryMatch>();
+    public DbSet<ManualMatch> ManualMatches => Set<ManualMatch>();
+    public DbSet<PastMatch> PastMatches => Set<PastMatch>();
+    public DbSet<KeptIncomplete> KeptIncompletes => Set<KeptIncomplete>();
     public DbSet<Download> Downloads => Set<Download>();
     public DbSet<DownloadDump> DownloadDumps => Set<DownloadDump>();
 
@@ -173,6 +176,9 @@ public partial class RomdexDbContext(DbContextOptions<RomdexDbContext> options) 
         {
             e.HasOne(c => c.File).WithMany(f => f.Contents).HasForeignKey(c => c.LibraryFileId).OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(c => c.LibraryFileId);
+            // For manual and past matches, which go by the library's own hashes.
+            e.HasIndex(c => c.Sha1);
+            e.HasIndex(c => c.HeaderlessSha1);
         });
 
         modelBuilder.Entity<LibraryMatch>(e =>
@@ -181,6 +187,29 @@ public partial class RomdexDbContext(DbContextOptions<RomdexDbContext> options) 
             e.HasOne(m => m.Content).WithMany(c => c.Matches).HasForeignKey(m => m.ContentId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(m => m.DumpFile).WithMany().HasForeignKey(m => m.DumpFileId).OnDelete(DeleteBehavior.Cascade);
             e.HasIndex(m => m.DumpFileId);
+            e.HasOne(m => m.ManualMatch).WithMany().HasForeignKey(m => m.ManualMatchId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(m => m.ManualMatchId);
+        });
+
+        modelBuilder.Entity<ManualMatch>(e =>
+        {
+            e.HasIndex(m => m.Sha1);
+            // A dump that leaves the DATs leaves its links naming what it was, for Review to show.
+            e.HasOne(m => m.DumpFile).WithMany().HasForeignKey(m => m.DumpFileId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(m => m.Title).WithMany().HasForeignKey(m => m.TitleId).OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(m => m.DumpFileId);
+            e.HasIndex(m => m.TitleId);
+        });
+
+        modelBuilder.Entity<PastMatch>(e =>
+        {
+            e.HasKey(m => new { m.Sha1, m.SystemName, m.DumpName, m.FileName });
+        });
+
+        modelBuilder.Entity<KeptIncomplete>(e =>
+        {
+            e.HasKey(k => k.DumpId);
+            e.HasOne(k => k.Dump).WithOne().HasForeignKey<KeptIncomplete>(k => k.DumpId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Download>(e =>

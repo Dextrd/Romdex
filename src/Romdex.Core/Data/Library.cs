@@ -31,6 +31,21 @@ public class LibraryFile
     /// <summary>Why it couldn't be read, such as a damaged archive or a missing tool.</summary>
     public string? Error { get; set; }
 
+    /// <summary>What kind of failure <see cref="Error"/> is; null while it can be read.</summary>
+    public ReadFailure? Failure { get; set; }
+
+    /// <summary>
+    /// When someone put off deciding what it is: it leaves Review, but it's still matched each time, so a DAT that adds
+    /// it later finds it.
+    /// </summary>
+    public DateTime? DeferredAt { get; set; }
+
+    /// <summary>
+    /// When someone hid it: it stays in the library folder, but Romdex never matches it again and lists it nowhere, as
+    /// if it weren't there.
+    /// </summary>
+    public DateTime? HiddenAt { get; set; }
+
     /// <summary>The connected app's ID for the game in it, such as RomM's, once the app has found it.</summary>
     public string? AppGameId { get; set; }
 
@@ -84,4 +99,9 @@ public class LibraryMatch
 
     /// <summary>Matched once its header was left out.</summary>
     public bool Headerless { get; set; }
+
+    /// <summary>The link someone made that this match comes from; null for a match by the DAT's own hashes.</summary>
+    public Guid? ManualMatchId { get; set; }
+
+    public ManualMatch? ManualMatch { get; set; }
 }

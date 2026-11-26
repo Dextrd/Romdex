@@ -178,6 +178,9 @@ namespace Romdex.Core.Data.Migrations
                     b.Property<string>("FilesJson")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("HeldFor")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Message")
                         .HasColumnType("TEXT");
 
@@ -400,6 +403,23 @@ namespace Romdex.Core.Data.Migrations
                     b.ToTable("GameAbout");
                 });
 
+            modelBuilder.Entity("Romdex.Core.Data.KeptIncomplete", b =>
+                {
+                    b.Property<Guid>("DumpId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("KeptAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Missing")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("DumpId");
+
+                    b.ToTable("KeptIncompletes");
+                });
+
             modelBuilder.Entity("Romdex.Core.Data.LibraryContent", b =>
                 {
                     b.Property<Guid>("Id")
@@ -441,7 +461,11 @@ namespace Romdex.Core.Data.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("HeaderlessSha1");
+
                     b.HasIndex("LibraryFileId");
+
+                    b.HasIndex("Sha1");
 
                     b.ToTable("LibraryContents");
                 });
@@ -462,10 +486,19 @@ namespace Romdex.Core.Data.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTime?>("DeferredAt")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Error")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Failure")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime?>("HashedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("HiddenAt")
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime>("ModifiedAt")
@@ -497,11 +530,83 @@ namespace Romdex.Core.Data.Migrations
                     b.Property<bool>("Headerless")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid?>("ManualMatchId")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("ContentId", "DumpFileId");
 
                     b.HasIndex("DumpFileId");
 
+                    b.HasIndex("ManualMatchId");
+
                     b.ToTable("LibraryMatches");
+                });
+
+            modelBuilder.Entity("Romdex.Core.Data.ManualMatch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("DumpFileId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Sha1")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("TitleId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DumpFileId");
+
+                    b.HasIndex("Sha1");
+
+                    b.HasIndex("TitleId");
+
+                    b.ToTable("ManualMatches");
+                });
+
+            modelBuilder.Entity("Romdex.Core.Data.PastMatch", b =>
+                {
+                    b.Property<string>("Sha1")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SystemName")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DumpName")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FileName")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DatVersion")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("FirstMatchedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("LastMatchedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Sha1", "SystemName", "DumpName", "FileName");
+
+                    b.ToTable("PastMatches");
                 });
 
             modelBuilder.Entity("Romdex.Core.Data.PluginInstance", b =>
@@ -839,6 +944,17 @@ namespace Romdex.Core.Data.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Romdex.Core.Data.KeptIncomplete", b =>
+                {
+                    b.HasOne("Romdex.Core.Data.Dump", "Dump")
+                        .WithOne()
+                        .HasForeignKey("Romdex.Core.Data.KeptIncomplete", "DumpId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Dump");
+                });
+
             modelBuilder.Entity("Romdex.Core.Data.LibraryContent", b =>
                 {
                     b.HasOne("Romdex.Core.Data.LibraryFile", "File")
@@ -864,9 +980,33 @@ namespace Romdex.Core.Data.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("Romdex.Core.Data.ManualMatch", "ManualMatch")
+                        .WithMany()
+                        .HasForeignKey("ManualMatchId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
                     b.Navigation("Content");
 
                     b.Navigation("DumpFile");
+
+                    b.Navigation("ManualMatch");
+                });
+
+            modelBuilder.Entity("Romdex.Core.Data.ManualMatch", b =>
+                {
+                    b.HasOne("Romdex.Core.Data.DumpFile", "DumpFile")
+                        .WithMany()
+                        .HasForeignKey("DumpFileId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Romdex.Core.Data.Title", "Title")
+                        .WithMany()
+                        .HasForeignKey("TitleId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("DumpFile");
+
+                    b.Navigation("Title");
                 });
 
             modelBuilder.Entity("Romdex.Core.Data.Title", b =>

@@ -66,7 +66,8 @@ public sealed class DownloadPipeline(
             var message = partial.Count > 0
                 ? $"It's incomplete: {partial[0].Dump.Name} is missing {Names(partial[0].Missing)}."
                 : staged.All(s => s.Error is not null) ? "None of its files could be read." : "It matches nothing in the catalogue.";
-            await SetAsync(item, DownloadState.NeedsReview, message, ct);
+            var reason = partial.Count > 0 ? HoldReason.Incomplete : staged.All(s => s.Error is not null) ? HoldReason.Unreadable : HoldReason.Unmatched;
+            await SetAsync(item, DownloadState.NeedsReview, message, ct, reason);
             return;
         }
 
@@ -75,7 +76,7 @@ public sealed class DownloadPipeline(
 
         if (await AskedForAsync(item, ct) is { } asked && !whole.Any(d => asked.Matches(d)))
         {
-            await SetAsync(item, DownloadState.NeedsReview, $"It isn't what was asked for, {asked.Name}: it's {Names(whole.Select(d => d.Name))}.", ct);
+            await SetAsync(item, DownloadState.NeedsReview, $"It isn't what was asked for, {asked.Name}: it's {Names(whole.Select(d => d.Name))}.", ct, HoldReason.NotAskedFor);
             return;
         }
 
@@ -108,7 +109,7 @@ public sealed class DownloadPipeline(
         if (held.Count > 0)
         {
             await SetAsync(item, DownloadState.NeedsReview, $"{Names(held)} {(held.Count == 1 ? "is another dump" : "are other dumps")} of a game you have, " +
-                "which this system holds for review. Accept to file it.", ct);
+                "which this system holds for review. Accept to file it.", ct, HoldReason.Alternative);
             return;
         }
         if (toFile.Count == 0)
@@ -351,9 +352,10 @@ public sealed class DownloadPipeline(
         s.Path, s.Hashes?.Entry, s.Hashes?.Size ?? 0, s.Hashes?.Crc32, s.Hashes?.Sha1,
         s.Matches.Select(m => $"{m.File.Dump!.Name}: {m.File.Name}{(m.Headerless ? " (without its header)" : "")}").ToList(), s.Error);
 
-    private async Task SetAsync(Download item, DownloadState state, string? message, CancellationToken ct)
+    private async Task SetAsync(Download item, DownloadState state, string? message, CancellationToken ct, HoldReason? heldFor = null)
     {
         item.State = state;
+        item.HeldFor = heldFor;
         item.Message = message;
         item.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);

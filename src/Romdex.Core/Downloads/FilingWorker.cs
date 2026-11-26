@@ -83,7 +83,11 @@ public sealed record MoveResult(IReadOnlyList<LibraryMove> Moved, IReadOnlyList<
 public sealed record WorkerVersion(string Version, string Igir, string? Chdman, string? DolphinTool);
 
 /// <summary>The igir worker said no, with its reason.</summary>
-public sealed class FilingWorkerException(string message) : Exception(message);
+public sealed class FilingWorkerException(string message, bool unreachable = false) : Exception(message)
+{
+    /// <summary>There's no worker to ask, or it didn't answer: nothing is known about what it was asked.</summary>
+    public bool Unreachable { get; } = unreachable;
+}
 
 public interface IFilingWorker
 {
@@ -124,7 +128,7 @@ public sealed class HttpFilingWorker(HttpClient http, IOptions<RomdexOptions> op
     private async Task<T> SendAsync<T>(HttpMethod method, string path, object? body, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(options.Value.WorkerUrl))
-            throw new FilingWorkerException("No igir worker is set up: set Romdex__WorkerUrl to its address, such as http://igir-worker:8080.");
+            throw new FilingWorkerException("No igir worker is set up: set Romdex__WorkerUrl to its address, such as http://igir-worker:8080.", unreachable: true);
         var url = new Uri(new Uri(options.Value.WorkerUrl.TrimEnd('/') + "/"), path);
         using var request = new HttpRequestMessage(method, url);
         if (body is not null)
@@ -136,7 +140,7 @@ public sealed class HttpFilingWorker(HttpClient http, IOptions<RomdexOptions> op
         }
         catch (HttpRequestException e)
         {
-            throw new FilingWorkerException($"The igir worker at {options.Value.WorkerUrl} can't be reached: {e.Message}");
+            throw new FilingWorkerException($"The igir worker at {options.Value.WorkerUrl} can't be reached: {e.Message}", unreachable: true);
         }
         using (response)
         {

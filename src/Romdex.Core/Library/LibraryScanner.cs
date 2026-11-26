@@ -24,7 +24,7 @@ public sealed class LibraryScanner(RomdexDbContext db, ContainerReader reader, I
     /// <param name="Unreadable">Files that couldn't be read, kept to try again next scan.</param>
     public sealed record Result(int Files, int Hashed, int Removed, int Unreadable, long HashedBytes);
 
-    private sealed record Hashed(string Path, long Size, DateTime ModifiedAt, IReadOnlyList<ContentHashes>? Contents, string? Error);
+    private sealed record Hashed(string Path, long Size, DateTime ModifiedAt, IReadOnlyList<ContentHashes>? Contents, string? Error, ReadFailure? Failure = null);
 
     public async Task<Result> ScanAsync(IProgress<string> progress, CancellationToken ct)
     {
@@ -80,7 +80,7 @@ public sealed class LibraryScanner(RomdexDbContext db, ContainerReader reader, I
                         }
                         catch (Exception e) when (e is UnreadableFileException or IOException or UnauthorizedAccessException)
                         {
-                            result = new Hashed(file.Key, file.Value.Length, file.Value.LastWriteTimeUtc, null, e.Message);
+                            result = new Hashed(file.Key, file.Value.Length, file.Value.LastWriteTimeUtc, null, e.Message, FailureOf(e));
                         }
                         await results.Writer.WriteAsync(result, token);
                     });
@@ -142,7 +142,7 @@ public sealed class LibraryScanner(RomdexDbContext db, ContainerReader reader, I
             }
             catch (Exception e) when (e is UnreadableFileException or IOException or UnauthorizedAccessException)
             {
-                batch.Add(new Hashed(path, file.Length, file.LastWriteTimeUtc, null, e.Message));
+                batch.Add(new Hashed(path, file.Length, file.LastWriteTimeUtc, null, e.Message, FailureOf(e)));
             }
         }
         if (gone.Count > 0)
@@ -169,6 +169,7 @@ public sealed class LibraryScanner(RomdexDbContext db, ContainerReader reader, I
             file.ModifiedAt = result.ModifiedAt;
             file.Container = ContainerReader.ContainerOf(result.Path);
             file.Error = result.Error;
+            file.Failure = result.Failure;
             file.HashedAt = result.Error is null ? DateTime.UtcNow : null;
             foreach (var content in result.Contents ?? [])
                 db.LibraryContents.Add(new LibraryContent
@@ -188,6 +189,8 @@ public sealed class LibraryScanner(RomdexDbContext db, ContainerReader reader, I
         await db.SaveChangesAsync(ct);
         db.ChangeTracker.Clear();
     }
+
+    private static ReadFailure FailureOf(Exception e) => e is UnreadableFileException unreadable ? unreadable.Failure : ReadFailure.Inaccessible;
 
     public static string Relative(string root, string path) => Path.GetRelativePath(root, path).Replace('\\', '/');
 

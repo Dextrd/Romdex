@@ -58,6 +58,9 @@ public class Download
 
     public DownloadState State { get; set; }
 
+    /// <summary>Why it's held, while it's <see cref="DownloadState.NeedsReview"/>; meaningless in any other state.</summary>
+    public HoldReason? HeldFor { get; set; }
+
     /// <summary>What happened, or why it's held or failed, for people.</summary>
     public string? Message { get; set; }
 

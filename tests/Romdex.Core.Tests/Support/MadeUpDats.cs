@@ -35,6 +35,15 @@ public sealed class MadeUpDats : IDisposable
         return files;
     }
 
+    /// <summary>Gives one of a dump's files new bytes, as a DAT does when a dump is redumped, and returns them.</summary>
+    public byte[] Redump(string system, string name, int file = 0, byte[]? data = null)
+    {
+        var files = _systems[system].Single(d => d.Name == name).Files;
+        data ??= RandomNumberGenerator.GetBytes(files[file].Data.Length);
+        files[file] = (files[file].Name, data);
+        return data;
+    }
+
     public void WriteDats(string version = "20261101-000000")
     {
         foreach (var (system, dumps) in _systems)

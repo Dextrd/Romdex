@@ -145,6 +145,13 @@ public sealed class DownloadTests : IDisposable
         Assert.Equal(DownloadState.NeedsReview, harbor.State);
         Assert.Equal($"It's incomplete: Harbor Lights (Japan) is missing {disc[2].Name}.", harbor.Message);
         Assert.Empty(_worker.Filed);
+        // Each is held for a reason Review sorts it by.
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var held = scope.ServiceProvider.GetRequiredService<Data.RomdexDbContext>().Downloads.ToDictionary(d => d.Name, d => d.HeldFor);
+            Assert.Equal(Data.HoldReason.Unmatched, held["junk"]);
+            Assert.Equal(Data.HoldReason.Incomplete, held["harbor"]);
+        }
 
         // Rejected, its files are gone.
         junk = await _api.RejectDownloadAsync(junk.Id);
