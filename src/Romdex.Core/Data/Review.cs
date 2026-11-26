@@ -1,20 +1,9 @@
+using Romdex.Client;
+
 namespace Romdex.Core.Data;
 
 // What someone decided about what the DATs don't explain, and what Romdex remembers so it can tell why. The DATs stay
 // the only source of fact: these sit beside them, keyed on hashes and names that survive a rescan or a new DAT version.
-
-/// <summary>Why someone linked a file to the catalogue themselves.</summary>
-public enum ManualMatchReason
-{
-    /// <summary>It matched nothing, and someone searched for what it is.</summary>
-    Searched,
-
-    /// <summary>It's named as a dump is but its hashes differ, and someone said to treat it as that dump all the same.</summary>
-    Approved,
-
-    /// <summary>It matched a dump until a new DAT changed that dump's hashes, and someone kept it as it was.</summary>
-    KeptOutdated,
-}
 
 /// <summary>
 /// Someone's word that some bytes are a dump file, or a version of a game, that the DATs don't list. It's keyed on the
@@ -90,39 +79,4 @@ public class KeptIncomplete
     public DateTime KeptAt { get; set; } = DateTime.UtcNow;
 
     public IReadOnlySet<string> MissingNames => Missing.Split('|', StringSplitOptions.RemoveEmptyEntries).ToHashSet(StringComparer.Ordinal);
-}
-
-/// <summary>Why a file couldn't be read, which says what can be done about it.</summary>
-public enum ReadFailure
-{
-    /// <summary>It's damaged, or isn't what its extension says: only another copy helps.</summary>
-    Damaged,
-
-    /// <summary>
-    /// Reading it needs a tool that isn't there, such as chdman, or the igir worker that has it. The file may well be
-    /// fine: it's read again once the tool is.
-    /// </summary>
-    NoTool,
-
-    /// <summary>Romdex isn't allowed to read it, or the disk failed reading it.</summary>
-    Inaccessible,
-}
-
-/// <summary>Why an arrival waits for someone, which says where it waits under Review.</summary>
-public enum HoldReason
-{
-    /// <summary>It matches nothing in the catalogue.</summary>
-    Unmatched,
-
-    /// <summary>It holds part of a dump, but not all of it.</summary>
-    Incomplete,
-
-    /// <summary>None of its files could be read.</summary>
-    Unreadable,
-
-    /// <summary>It was fetched for one game and is another.</summary>
-    NotAskedFor,
-
-    /// <summary>It's another dump of a game in the library, and its system holds those for review.</summary>
-    Alternative,
 }

@@ -63,13 +63,33 @@ public sealed class DownloadService(
     /// </summary>
     public async Task<Download> ReclaimAsync(LibraryFile file, CancellationToken ct)
     {
+        var item = await TakeOutAsync(file, DownloadState.Queued, null, ct);
+        db.Update(item);
+        await QueueAsync(item, accept: false, ct);
+        return item;
+    }
+
+    /// <summary>
+    /// Deletes a file from the library, such as a bad dump or a damaged archive, from Review. The worker takes it out
+    /// and it's thrown away; it's left on the Downloads page as rejected, so there's a record of it.
+    /// </summary>
+    public async Task<Download> DeleteFromLibraryAsync(LibraryFile file, CancellationToken ct)
+    {
+        var item = await TakeOutAsync(file, DownloadState.Rejected, "Deleted from the library under Review; its files are gone.", ct);
+        DownloadPipeline.DeleteStaging(StagingPath(item));
+        return item;
+    }
+
+    private async Task<Download> TakeOutAsync(LibraryFile file, DownloadState state, string? message, CancellationToken ct)
+    {
         var item = new Download
         {
             Source = "Library",
             CandidateId = file.Path,
             Name = Path.GetFileNameWithoutExtension(file.Path),
             CandidateJson = JsonSerializer.Serialize(new Candidate(file.Path, Path.GetFileNameWithoutExtension(file.Path), $"Library: {file.Path}", Size: file.Size), RetrievalJson.Options),
-            State = DownloadState.Queued,
+            State = state,
+            Message = message,
             StagingDirectory = "",
         };
         item.StagingDirectory = $"downloads/{item.Id}";
@@ -87,8 +107,6 @@ public sealed class DownloadService(
         await db.SaveChangesAsync(ct);
         // It's gone from the library; the scan clears the change tracker, so the item is attached again after.
         await scanner.ScanPathsAsync([file.Path], ct);
-        db.Update(item);
-        await QueueAsync(item, accept: false, ct);
         return item;
     }
 

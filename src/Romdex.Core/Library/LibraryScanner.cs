@@ -1,6 +1,7 @@
 using System.Threading.Channels;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Romdex.Client;
 using Romdex.Core.Data;
 using Romdex.Core.Tasks;
 

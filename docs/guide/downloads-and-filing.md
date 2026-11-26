@@ -17,7 +17,7 @@ Each arrival goes through the same steps, shown on the Downloads page and on the
 2. **Identified.** Every file is hashed, inside zips and 7z archives too, with and without a header, and matched
    against the catalogue. What it holds whole are its dumps.
 3. **Decided.** A dump you already have isn't filed again. Another dump of a game you have, such as another region,
-   is filed, held or thrown away, as its system says (below).
+   is filed or thrown away, as its system says (below).
 4. **Converted**, if its system asks for CHD or RVZ. The converted file is checked against the DAT before the original
    is deleted. If it doesn't match, the original is filed instead.
 5. **Filed.** The igir worker moves it into the library, named as the DAT names it, and Romdex checks it's there and
@@ -30,8 +30,8 @@ An arrival waits for you when:
 - **it matches nothing in the catalogue.** It may be a bad dump, a hack, or from a system you have no DAT for. Reject
   it, or add the DAT, update the catalogue and **Retry**;
 - **it's incomplete**, such as a disc missing a track. The message says which files are missing;
-- **it isn't what you asked for.** You got it for one game, and it's another;
-- **it's an alternative** and its system holds alternatives for review. **Accept** files it.
+- **it isn't what you asked for.** You got it for one game, and it's another. **Accept** files it as what it is;
+  searching again marks what was turned away before.
 
 **Reject** throws an arrival's files away. **Retry** identifies it again, or fetches it again if its files are gone.
 Open an arrival to see its files' hashes, what each matched, and the plugin's notes, such as a ripper's log.
@@ -77,8 +77,7 @@ On a system's page, under **Filing**:
   - **loose files** or **a zip per game**, for cartridges;
   - **CHD**, for CD and DVD systems;
   - **RVZ**, for GameCube and Wii.
-- **Another dump of a game you have:** file it beside the one you have (the default), hold it for review, or throw it
-  away.
+- **Another dump of a game you have:** file it beside the one you have (the default), or throw it away.
 
 These apply to what arrives from then on. Games already in the library move only when you format it.
 

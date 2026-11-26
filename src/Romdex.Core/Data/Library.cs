@@ -1,3 +1,5 @@
+using Romdex.Client;
+
 namespace Romdex.Core.Data;
 
 // The library, filled by the core's scan. Only hashes are stored as fact; what's owned, missing and bad is worked out

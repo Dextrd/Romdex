@@ -249,6 +249,66 @@ public sealed class RomdexClient(HttpClient http)
     public Task<DownloadInfo> ReclaimLibraryFileAsync(Guid fileId, CancellationToken ct = default) =>
         PostForAsync<DownloadInfo>($"{Api}/library/files/{fileId}/download", null, ct);
 
+    // ---- Review ----
+
+    public async Task<ReviewSummary> GetReviewSummaryAsync(CancellationToken ct = default) =>
+        (await http.GetFromJsonAsync<ReviewSummary>($"{Api}/review", RomdexJson.Options, ct))!;
+
+    public Task<ReviewFilePage> ListBadDumpsAsync(int skip = 0, int take = 100, CancellationToken ct = default) => ReviewFilesAsync("bad-dumps", skip, take, ct);
+
+    public Task<ReviewFilePage> ListUnmatchedAsync(int skip = 0, int take = 100, CancellationToken ct = default) => ReviewFilesAsync("matching", skip, take, ct);
+
+    public Task<ReviewFilePage> ListOutdatedAsync(int skip = 0, int take = 100, CancellationToken ct = default) => ReviewFilesAsync("outdated", skip, take, ct);
+
+    public Task<ReviewFilePage> ListCorruptedAsync(int skip = 0, int take = 100, CancellationToken ct = default) => ReviewFilesAsync("corrupted", skip, take, ct);
+
+    /// <summary>Files someone deferred, or with <paramref name="hidden"/>, hid.</summary>
+    public async Task<ReviewFilePage> ListSetAsideAsync(bool hidden = false, int skip = 0, int take = 100, CancellationToken ct = default) =>
+        (await http.GetFromJsonAsync<ReviewFilePage>($"{Api}/review/set-aside?hidden={(hidden ? "true" : "false")}&skip={skip}&take={take}", RomdexJson.Options, ct))!;
+
+    public async Task<ReviewDumpPage> ListIncompleteAsync(int skip = 0, int take = 100, CancellationToken ct = default) =>
+        (await http.GetFromJsonAsync<ReviewDumpPage>($"{Api}/review/incomplete?skip={skip}&take={take}", RomdexJson.Options, ct))!;
+
+    public async Task<DownloadsPage> ListCouldntFetchAsync(int skip = 0, int take = 50, CancellationToken ct = default) =>
+        (await http.GetFromJsonAsync<DownloadsPage>($"{Api}/review/couldnt-fetch?skip={skip}&take={take}", RomdexJson.Options, ct))!;
+
+    private async Task<ReviewFilePage> ReviewFilesAsync(string tab, int skip, int take, CancellationToken ct) =>
+        (await http.GetFromJsonAsync<ReviewFilePage>($"{Api}/review/{tab}?skip={skip}&take={take}", RomdexJson.Options, ct))!;
+
+    public Task DeferFileAsync(Guid fileId, CancellationToken ct = default) => PostAsync($"{Api}/review/files/{fileId}/defer", null, ct);
+
+    public Task HideFileAsync(Guid fileId, CancellationToken ct = default) => PostAsync($"{Api}/review/files/{fileId}/hide", null, ct);
+
+    public Task PutBackFileAsync(Guid fileId, CancellationToken ct = default) => PostAsync($"{Api}/review/files/{fileId}/put-back", null, ct);
+
+    /// <summary>Deletes a file that matches nothing, or can't be read, from the library.</summary>
+    public Task<DownloadInfo> DeleteLibraryFileAsync(Guid fileId, CancellationToken ct = default) => PostForAsync<DownloadInfo>($"{Api}/review/files/{fileId}/delete", null, ct);
+
+    public async Task<IReadOnlyList<ManualMatchInfo>> ListLinksAsync(Guid? titleId = null, CancellationToken ct = default) =>
+        await http.GetFromJsonAsync<List<ManualMatchInfo>>($"{Api}/review/links{(titleId is { } id ? $"?titleId={id}" : "")}", RomdexJson.Options, ct) ?? [];
+
+    /// <summary>Says what a file is: a dump, or a version of a game no DAT lists.</summary>
+    public Task<ManualMatchInfo> LinkFileAsync(LinkFile link, CancellationToken ct = default) => PostForAsync<ManualMatchInfo>($"{Api}/review/links", link, ct);
+
+    public async Task UnlinkFileAsync(Guid linkId, CancellationToken ct = default)
+    {
+        using var response = await http.DeleteAsync($"{Api}/review/links/{linkId}", ct);
+        await EnsureAsync(response, ct);
+    }
+
+    /// <summary>Keeps an incomplete dump as it is, without the files it's missing now.</summary>
+    public Task KeepIncompleteAsync(Guid dumpId, CancellationToken ct = default) => PostAsync($"{Api}/review/dumps/{dumpId}/keep", null, ct);
+
+    public async Task UnkeepIncompleteAsync(Guid dumpId, CancellationToken ct = default)
+    {
+        using var response = await http.DeleteAsync($"{Api}/review/dumps/{dumpId}/keep", ct);
+        await EnsureAsync(response, ct);
+    }
+
+    /// <summary>Deletes what the library has of an incomplete dump.</summary>
+    public async Task<IReadOnlyList<DownloadInfo>> DeleteIncompleteAsync(Guid dumpId, CancellationToken ct = default) =>
+        await PostForAsync<List<DownloadInfo>>($"{Api}/review/dumps/{dumpId}/delete", null, ct);
+
     public async Task<FilingSettings> GetFilingAsync(Guid systemId, CancellationToken ct = default) =>
         (await http.GetFromJsonAsync<FilingSettings>($"{Api}/systems/{systemId}/filing", RomdexJson.Options, ct))!;
 

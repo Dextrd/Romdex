@@ -149,8 +149,8 @@ public sealed class DownloadTests : IDisposable
         using (var scope = _factory.Services.CreateScope())
         {
             var held = scope.ServiceProvider.GetRequiredService<Data.RomdexDbContext>().Downloads.ToDictionary(d => d.Name, d => d.HeldFor);
-            Assert.Equal(Data.HoldReason.Unmatched, held["junk"]);
-            Assert.Equal(Data.HoldReason.Incomplete, held["harbor"]);
+            Assert.Equal(HoldReason.Unmatched, held["junk"]);
+            Assert.Equal(HoldReason.Incomplete, held["harbor"]);
         }
 
         // Rejected, its files are gone.
@@ -161,28 +161,59 @@ public sealed class DownloadTests : IDisposable
     }
 
     [Fact]
-    public async Task Alternatives_follow_the_system_and_can_be_accepted()
+    public async Task Alternatives_are_filed_beside_what_you_have_or_thrown_away_as_the_system_says()
     {
         var usa = _dats.Dump(Handheld, "Tide Bell (USA)", [".gb"]);
         var europe = _dats.Dump(Handheld, "Tide Bell (Europe)", [".gb"], cloneOf: "Tide Bell (USA)");
+        var japan = _dats.Dump(Handheld, "Tide Bell (Japan)", [".gb"], cloneOf: "Tide Bell (USA)");
         _dats.WriteDats();
         _dats.Put("Handheld/Tide Bell (USA).gb", usa[0].Data);
         await SetUpAsync();
         var system = Assert.Single(await _api.ListSystemsAsync());
         Assert.Equal([StorageFormat.Keep, StorageFormat.Loose, StorageFormat.Zip], await _api.ListStorageFormatsAsync(system.Id));
         await Assert.ThrowsAsync<RomdexApiException>(() => _api.SetFilingAsync(system.Id, new FilingSettings(Storage: StorageFormat.Chd)));
-        await _api.SetFilingAsync(system.Id, new FilingSettings(LibraryLayout.DatName, StorageFormat.Zip, AlternativePolicy.Review));
 
-        _plugin.Drop("europe", ("tide.gb", europe[0].Data));
+        await _api.SetFilingAsync(system.Id, new FilingSettings(LibraryLayout.DatName, StorageFormat.Zip, AlternativePolicy.Discard));
+        _plugin.Drop("japan", ("tide.gb", japan[0].Data));
         var item = Assert.Single(await ArriveAsync(1));
-        Assert.Equal(DownloadState.NeedsReview, item.State);
+        Assert.Equal(DownloadState.Discarded, item.State);
         Assert.True(Assert.Single(item.Dumps).Alternative);
-        Assert.True(item.CanAccept);
 
-        await _api.AcceptDownloadAsync(item.Id);
-        item = await WaitAsync(item.Id);
+        await _api.SetFilingAsync(system.Id, new FilingSettings(LibraryLayout.DatName, StorageFormat.Zip, AlternativePolicy.File));
+        _plugin.Drop("europe", ("tide.gb", europe[0].Data));
+        item = Assert.Single(await ArriveAsync(1));
         Assert.Equal(DownloadState.Filed, item.State);
+        Assert.True(Assert.Single(item.Dumps).Alternative);
         Assert.Equal([$"{Handheld}/Tide Bell (Europe).zip"], item.Dumps[0].Filed);
+    }
+
+    [Fact]
+    public async Task Review_deletes_a_file_it_lists_and_what_the_library_has_of_an_incomplete_dump()
+    {
+        var pond = _dats.Dump(Handheld, "Pixel Pond (USA)", [".gb"]);
+        var disc = _dats.Dump(Disc, "Harbor Lights (Japan)", [".cue", ".bin", ".bin"]);
+        _dats.WriteDats();
+        _dats.Put("gb/Pixel Pond (USA).gb", pond[0].Data);
+        _dats.Put("odd/stray.gb", [9, 9, 9]);
+        _dats.Put($"Harbor/{disc[0].Name}", disc[0].Data);
+        _dats.Put($"Harbor/{disc[1].Name}", disc[1].Data);
+        await SetUpAsync();
+
+        var stray = Assert.Single((await _api.ListUnmatchedAsync()).Items);
+        var deleted = await _api.DeleteLibraryFileAsync(stray.FileId);
+        Assert.Equal(DownloadState.Rejected, deleted.State);
+        Assert.False(File.Exists(Path.Combine(_dats.Roms, "odd", "stray.gb")));
+        Assert.Empty((await _api.ListUnmatchedAsync()).Items);
+
+        // What matches the catalogue isn't Review's to delete.
+        var owned = (await _api.GetTitleAsync((await _api.SearchCatalogueAsync("pixel pond", null, null)).Items[0].Id))!.Dumps[0].Files[0].Library[0];
+        Assert.Contains("matches the catalogue", (await Assert.ThrowsAsync<RomdexApiException>(() => _api.DeleteLibraryFileAsync(owned.FileId))).Message);
+
+        var harbor = Assert.Single((await _api.ListIncompleteAsync()).Items);
+        Assert.Equal([disc[2].Name], harbor.Missing);
+        Assert.Equal(2, (await _api.DeleteIncompleteAsync(harbor.Dump.Id)).Count);
+        Assert.False(Directory.EnumerateFiles(Path.Combine(_dats.Roms, "Harbor")).Any());
+        Assert.Empty((await _api.ListIncompleteAsync()).Items);
     }
 
     [Fact]
@@ -239,9 +270,24 @@ public sealed class DownloadTests : IDisposable
         Assert.Equal(DownloadState.NeedsReview, item.State);
         Assert.Equal("It isn't what was asked for, Lantern Run: it's Quiet Quarry (USA).", item.Message);
         Assert.Equal("Lantern Run", item.Title!.Name);
+        Assert.Equal(HoldReason.NotAskedFor, item.HeldFor);
+        Assert.Equal(item.Id, Assert.Single((await _api.ListCouldntFetchAsync()).Items).Id);
+        Assert.Equal(1, (await _api.GetReviewSummaryAsync()).CouldntFetch);
+
+        // Searching again says which offer was turned away before, and why.
+        _plugin.Drop("not it", ("q.gb", quarry[0].Data));
+        Assert.Equal(item.Message, Assert.Single((await _api.SearchDownloadsAsync(wanted.Id)).Offers).TurnedAway);
+
+        // Kept anyway, it's filed as what it is.
+        await _api.AcceptDownloadAsync(item.Id);
+        item = await WaitAsync(item.Id);
+        Assert.Equal(DownloadState.Filed, item.State);
+        Assert.Equal("Quiet Quarry (USA)", Assert.Single(item.Dumps).Dump.Name);
+        Assert.Empty((await _api.ListCouldntFetchAsync()).Items);
 
         _plugin.Drop("it", ("l.gb", lantern[0].Data));
-        offer = (await _api.SearchDownloadsAsync(wanted.Id)).Offers.Single();
+        offer = (await _api.SearchDownloadsAsync(wanted.Id)).Offers.Single(o => o.Candidate.CandidateId == "it");
+        Assert.Null(offer.TurnedAway);
         item = await WaitAsync((await _api.StartDownloadAsync(new StartDownload(wanted.Id, offer.PluginId, offer.Candidate))).Id);
         Assert.Equal(DownloadState.Filed, item.State);
     }

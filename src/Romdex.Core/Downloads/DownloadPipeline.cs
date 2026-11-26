@@ -15,7 +15,7 @@ namespace Romdex.Core.Downloads;
 /// <summary>
 /// Takes one staged item to the library: identifies it by hash, decides whether it's wanted, converts it if its system
 /// says to, has the igir worker file it, and records what it filed. Anything that matches nothing, is incomplete or
-/// isn't what was asked for is held for review, never filed.
+/// isn't what was asked for is held for review, and filed only if someone accepts it.
 /// </summary>
 public sealed class DownloadPipeline(
     RomdexDbContext db,
@@ -42,7 +42,7 @@ public sealed class DownloadPipeline(
         public List<(DumpFile File, bool Headerless)> Matches { get; } = [];
     }
 
-    /// <param name="accepted">Someone accepted it from review, so an alternative the system holds is filed anyway.</param>
+    /// <param name="accepted">Someone accepted it from review: it's filed as what it is, even if it isn't what was asked for.</param>
     public async Task RunAsync(Download item, bool accepted, IProgress<string> progress, CancellationToken ct)
     {
         var directory = StagingDirectory(item);
@@ -74,7 +74,7 @@ public sealed class DownloadPipeline(
         foreach (var dump in whole)
             item.Dumps.Add(new DownloadDump { DumpId = dump.Id, Alternative = false });
 
-        if (await AskedForAsync(item, ct) is { } asked && !whole.Any(d => asked.Matches(d)))
+        if (!accepted && await AskedForAsync(item, ct) is { } asked && !whole.Any(d => asked.Matches(d)))
         {
             await SetAsync(item, DownloadState.NeedsReview, $"It isn't what was asked for, {asked.Name}: it's {Names(whole.Select(d => d.Name))}.", ct, HoldReason.NotAskedFor);
             return;
@@ -84,7 +84,6 @@ public sealed class DownloadPipeline(
         // alternative, which each system files, holds or discards.
         var toFile = new List<(Dump Dump, CatalogueSystem System, FilingSettings Settings)>();
         var notes = new List<string>();
-        var held = new List<string>();
         foreach (var dump in whole)
         {
             var system = (await db.Systems.FindAsync([dump.SystemId], ct))!;
@@ -102,15 +101,7 @@ public sealed class DownloadPipeline(
                 notes.Add($"{dump.Name} is another dump of a game you have, which {owner.Name} discards");
                 continue;
             }
-            if (alternative && settings.Alternatives == AlternativePolicy.Review && !accepted)
-                held.Add(dump.Name);
             toFile.Add((dump, system, settings));
-        }
-        if (held.Count > 0)
-        {
-            await SetAsync(item, DownloadState.NeedsReview, $"{Names(held)} {(held.Count == 1 ? "is another dump" : "are other dumps")} of a game you have, " +
-                "which this system holds for review. Accept to file it.", ct, HoldReason.Alternative);
-            return;
         }
         if (toFile.Count == 0)
         {

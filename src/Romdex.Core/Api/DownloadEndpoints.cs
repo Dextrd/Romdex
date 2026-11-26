@@ -94,7 +94,7 @@ public static class DownloadEndpoints
             .RequireScope(Scopes.Review).WithTags("Downloads").WithName("ReclaimLibraryFile")
             .WithSummary("Takes a file that matches nothing, or can't be read, out of the library and through Downloads again.");
 
-        api.MapPost("/titles/{id:guid}/search", async (Guid id, SearchDownloads? body, RetrievalPlugins plugins, RetrievalTargets targets, CancellationToken ct) =>
+        api.MapPost("/titles/{id:guid}/search", async (Guid id, SearchDownloads? body, RetrievalPlugins plugins, RetrievalTargets targets, RomdexDbContext db, CancellationToken ct) =>
             {
                 if (await targets.ForAsync(id, body?.DumpId, ct) is not { } target)
                     return Results.NotFound();
@@ -110,7 +110,14 @@ public static class DownloadEndpoints
                         return (p.Instance, Candidates: (IReadOnlyList<Candidate>)[], Error: e.Message);
                     }
                 }));
-                var offers = answers.SelectMany(a => a.Candidates.Select(c => new DownloadOffer(a.Instance.Id, a.Instance.Name, c))).ToList();
+                // What was fetched for this title before and turned away, so trying again can pass it over.
+                var turnedAway = (await db.Downloads.AsNoTracking()
+                        .Where(d => d.TitleId == id && d.PluginInstanceId != null && (d.State == DownloadState.Failed || d.State == DownloadState.Rejected
+                            || d.State == DownloadState.NeedsReview && d.HeldFor == HoldReason.NotAskedFor))
+                        .OrderBy(d => d.UpdatedAt).Select(d => new { d.PluginInstanceId, d.CandidateId, d.Message }).ToListAsync(ct))
+                    .GroupBy(d => (d.PluginInstanceId!.Value, d.CandidateId)).ToDictionary(g => g.Key, g => g.Last().Message ?? "It was turned away before.");
+                var offers = answers.SelectMany(a => a.Candidates.Select(c =>
+                    new DownloadOffer(a.Instance.Id, a.Instance.Name, c, turnedAway.GetValueOrDefault((a.Instance.Id, c.CandidateId))))).ToList();
                 var problems = answers.Where(a => a.Error is not null).Select(a => $"{a.Instance.Name}: {a.Error}").ToList();
                 if (searching.Count == 0)
                     problems.Add("No retriever that searches is set up. Add one under Settings → Plugins.");
@@ -233,7 +240,7 @@ public static class DownloadEndpoints
                     return new DownloadDumpInfo(new DumpRef(dump.Id, dump.Name, dump.Regions.Length == 0 ? [] : dump.Regions.Split(',')), dump.SystemId, dump.System,
                         d.Alternative, d.FiledPaths?.Split('|') ?? []);
                 }).ToList(),
-                files, candidate?.Notes, item.CreatedAt, item.UpdatedAt);
+                files, candidate?.Notes, item.CreatedAt, item.UpdatedAt, item.State == DownloadState.NeedsReview ? item.HeldFor : null);
         }).ToList();
     }
 }

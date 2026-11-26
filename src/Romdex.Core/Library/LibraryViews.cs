@@ -207,7 +207,8 @@ public sealed class LibraryViewBuilder(RomdexDbContext db, LibraryViews cache, P
 
     private async Task<List<string>> UnmatchedNamesAsync(CancellationToken ct)
     {
-        var unmatched = await db.LibraryContents.AsNoTracking().Where(c => !c.Matches.Any() && c.File!.HiddenAt == null)
+        var unmatched = await db.LibraryContents.AsNoTracking().Where(c => !c.Matches.Any() && c.File!.HiddenAt == null
+                && !db.ManualMatches.Any(m => m.TitleId != null && (m.Sha1 == c.Sha1 || m.Sha1 == c.HeaderlessSha1)))
             .Select(c => new { c.Entry, c.File!.Path }).ToListAsync(ct);
         return unmatched.Select(c => Path.GetFileName(c.Entry ?? c.Path)).ToList();
     }

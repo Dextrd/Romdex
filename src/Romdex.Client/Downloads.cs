@@ -50,7 +50,8 @@ public sealed record DownloadInfo(
     IReadOnlyList<StagedFileInfo> Files,
     string? Notes,
     DateTime CreatedAt,
-    DateTime UpdatedAt)
+    DateTime UpdatedAt,
+    HoldReason? HeldFor = null)
 {
     /// <summary>Whether it can be accepted: held, with dumps to file.</summary>
     public bool CanAccept => State == DownloadState.NeedsReview && Dumps.Count > 0;
@@ -82,7 +83,11 @@ public sealed record SearchDownloads(Guid? DumpId = null);
 
 /// <summary>What a plugin offered for a title.</summary>
 /// <param name="PluginId">The plugin instance that offered it, for <c>POST /downloads/fetch</c>.</param>
-public sealed record DownloadOffer(Guid PluginId, string Plugin, Candidate Candidate);
+/// <param name="TurnedAway">
+/// Why it was turned away when it was fetched for this title before, such as being another game; null for one not
+/// fetched for it, or that was fine.
+/// </param>
+public sealed record DownloadOffer(Guid PluginId, string Plugin, Candidate Candidate, string? TurnedAway = null);
 
 /// <summary>Answer to <c>POST /titles/{id}/search</c>.</summary>
 /// <param name="Offers">Every plugin's candidates, each plugin's best first, plugins in your order.</param>
@@ -172,9 +177,6 @@ public enum AlternativePolicy
 {
     /// <summary>File it beside the one you have.</summary>
     File,
-
-    /// <summary>Hold it for review.</summary>
-    Review,
 
     /// <summary>Throw it away.</summary>
     Discard,

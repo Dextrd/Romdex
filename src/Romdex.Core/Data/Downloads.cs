@@ -1,3 +1,5 @@
+using Romdex.Client;
+
 namespace Romdex.Core.Data;
 
 // What's arriving: each thing a retriever staged, or is staging, on its way to the library.

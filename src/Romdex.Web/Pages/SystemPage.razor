@@ -148,7 +148,6 @@ else
                 <span class="field-label">Another dump of a game you have</span>
                 <select disabled="@(!CanFile)" @onchange="e => SetFilingAsync(_filing with { Alternatives = Enum.Parse<AlternativePolicy>((string)e.Value!) })">
                     <option value="@AlternativePolicy.File" selected="@(_filing.Alternatives == AlternativePolicy.File)">File it beside the one you have</option>
-                    <option value="@AlternativePolicy.Review" selected="@(_filing.Alternatives == AlternativePolicy.Review)">Hold it for review</option>
                     <option value="@AlternativePolicy.Discard" selected="@(_filing.Alternatives == AlternativePolicy.Discard)">Throw it away</option>
                 </select>
             </label>

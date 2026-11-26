@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO.Compression;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
+using Romdex.Client;
 using Romdex.Core.Data;
 using SharpCompress.Archives.SevenZip;
 
