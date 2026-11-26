@@ -1,0 +1,14 @@
+@page "/settings/regions"
+@layout SettingsLayout
+@inject RomdexClient Api
+@inject AuthState Auth
+
+<PageTitle>Regions · Romdex</PageTitle>
+
+@* Everyone's region tiers: what every system follows until it has its own, set on its page. *@
+<h2>Regions</h2>
+<p class="muted small">
+    Which regions you want a copy of each game in, which will do when it came out in none of them, and which never to fetch.
+    Every system follows these, unless it has its own, set on its page. A World dump counts for every region.
+</p>
+<RegionPreferences />

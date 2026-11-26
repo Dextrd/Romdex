@@ -67,7 +67,7 @@ public sealed class LibraryTests : IDisposable
         Assert.Equal(TitleStatus.Missing, Assert.Single(titles, t => t.Name == "Sky Puzzle").Status);
 
         // Japan first, and the Japanese release is both preferred and owned.
-        await _api.SetSystemPreferencesAsync(system.Id, SystemPreferences.Default with { Regions = ["Japan", "USA"] });
+        await _api.SetSystemPreferencesAsync(system.Id, SystemPreferences.Default with { Wanted = ["Japan"], Fallback = ["USA"] });
         hopper = Assert.Single((await _api.ListTitlesAsync(system.Id)).Items, t => t.Name == "Hopper Quest");
         Assert.Equal("Hopper Quest (Japan) (Rev 1)", hopper.Preferred.Name);
 
@@ -372,6 +372,65 @@ public sealed class LibraryTests : IDisposable
                 Settings: JsonSerializer.SerializeToElement(new { systems }))));
             Assert.Equal(System.Net.HttpStatusCode.BadRequest, error.Status);
         }
+    }
+
+    [Fact]
+    public async Task Region_tiers_rank_releases_and_a_game_only_in_never_regions_isnt_missing()
+    {
+        _dats.Dump(Handheld, "Tide Bell (Europe)", [".gb"]);
+        _dats.Dump(Handheld, "Tide Bell (USA)", [".gb"], cloneOf: "Tide Bell (Europe)");
+        _dats.Dump(Handheld, "Tide Bell (World)", [".gb"], cloneOf: "Tide Bell (Europe)");
+        _dats.Dump(Handheld, "Paper Lantern (Japan)", [".gb"]);
+        var owned = _dats.Dump(Handheld, "Koi Pond (Japan)", [".gb"]);
+        _dats.WriteDats();
+        _dats.Put("Handheld/koi.gb", owned[0].Data);
+        await RefreshAndScanAsync();
+        var system = Assert.Single(await _api.ListSystemsAsync());
+
+        // World is as good as the first wanted region; a wanted region beats a fallback.
+        await _api.SetSystemPreferencesAsync(system.Id, SystemPreferences.Default with { Wanted = ["USA"], Fallback = ["Europe"], Never = ["Japan"] });
+        var titles = (await _api.ListTitlesAsync(system.Id)).Items;
+        Assert.Contains(Assert.Single(titles, t => t.Name == "Tide Bell").Preferred.Name, new[] { "Tide Bell (USA)", "Tide Bell (World)" });
+        // Only in a region never to be fetched: not missing. Owned, it's still listed.
+        Assert.DoesNotContain(titles, t => t.Name == "Paper Lantern");
+        Assert.Equal(TitleStatus.Owned, Assert.Single(titles, t => t.Name == "Koi Pond").Status);
+
+        await _api.SetSystemPreferencesAsync(system.Id, SystemPreferences.Default with { Wanted = ["Europe"], Fallback = ["USA"], Never = ["World"] });
+        Assert.Equal("Tide Bell (Europe)", Assert.Single((await _api.ListTitlesAsync(system.Id)).Items, t => t.Name == "Tide Bell").Preferred.Name);
+
+        // A region goes in one tier, and something has to be wanted.
+        var twice = await Assert.ThrowsAsync<RomdexApiException>(() => _api.SetSystemPreferencesAsync(system.Id,
+            SystemPreferences.Default with { Wanted = ["USA"], Fallback = ["USA"] }));
+        Assert.Contains("one tier only", twice.Message);
+        await Assert.ThrowsAsync<RomdexApiException>(() => _api.SetSystemPreferencesAsync(system.Id, SystemPreferences.Default with { Wanted = [] }));
+    }
+
+    [Fact]
+    public async Task Preferences_saved_as_a_region_list_are_read_as_tiers()
+    {
+        _dats.Dump(Handheld, "Anything (USA)", [".gb"]);
+        _dats.WriteDats();
+        await RefreshAndScanAsync();
+        var system = Assert.Single(await _api.ListSystemsAsync());
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<Data.RomdexDbContext>();
+            db.Settings.Add(new Data.Setting { Key = "preferences", ValueJson = """{"regions":["USA","Europe","Japan"],"languages":["En"],"onlyListedRegions":false,"hidden":["demo"]}""" });
+            db.Settings.Add(new Data.Setting { Key = $"preferences:{Handheld}", ValueJson = """{"regions":["Japan","USA"],"languages":["Ja"],"onlyListedRegions":true,"hidden":[]}""" });
+            await db.SaveChangesAsync();
+        }
+
+        var everyone = await _api.GetDefaultPreferencesAsync();
+        Assert.Equal(["USA"], everyone.Wanted);
+        Assert.Equal(["Europe", "Japan"], everyone.Fallback);
+        Assert.Empty(everyone.Never);
+        var own = (await _api.GetSystemPreferencesAsync(system.Id)).Preferences;
+        Assert.Equal(["Japan"], own.Wanted);
+        Assert.Equal(["USA"], own.Fallback);
+        // Kept to its list: every other region is never.
+        Assert.Contains("Europe", own.Never);
+        Assert.DoesNotContain("USA", own.Never);
+        Assert.Equal(["Ja"], own.Languages);
     }
 
     private async Task RefreshAndScanAsync()

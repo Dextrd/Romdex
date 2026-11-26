@@ -1,0 +1,105 @@
+@inject RomdexClient Api
+@inject AuthState Auth
+
+@*
+    Region tiers, for everyone or for one system, with Save; a system's can go back to everyone's. Who may get games
+    may change them.
+*@
+@if (_value is null)
+{
+    <Loading />
+}
+else
+{
+    <div class="card region-card">
+        @if (SystemId is not null)
+        {
+            <p class="muted small region-own">
+                @(_own ? "This system has region tiers of its own." : "This system follows everyone's region tiers, set under Settings → Regions. Change them here to give it its own.")
+            </p>
+        }
+        <RegionTiers Value="_value" ValueChanged="v => { _value = v; _saved = false; _changed = true; }" Disabled="@(!CanChange)" />
+        @if (_error is not null) { <div class="notice error small">@_error</div> }
+        @if (CanChange)
+        {
+            <div class="toolbar">
+                <button class="primary" disabled="@(_busy || !_changed)" @onclick="SaveAsync">@if (_busy) { <span class="spinner"></span> }Save</button>
+                @if (SystemId is not null && _own)
+                {
+                    <button disabled="@_busy" @onclick="ResetAsync">Follow everyone's</button>
+                }
+                @if (_saved) { <span class="muted small">Saved.</span> }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    /// <summary>The system whose own tiers these are; null for everyone's.</summary>
+    [Parameter] public Guid? SystemId { get; set; }
+
+    /// <summary>Called once they're saved, such as for a page to show the system again.</summary>
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    private SystemPreferences? _value;
+    private bool _own;
+    private bool _busy;
+    private bool _changed;
+    private bool _saved;
+    private string? _error;
+
+    private bool CanChange => Auth.May(UserPermissions.Download);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (SystemId is { } id)
+        {
+            var info = await Api.GetSystemPreferencesAsync(id);
+            (_value, _own) = (info.Preferences, info.Own);
+        }
+        else
+            _value = await Api.GetDefaultPreferencesAsync();
+    }
+
+    private async Task SaveAsync()
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            if (SystemId is { } id)
+            {
+                var info = await Api.SetSystemPreferencesAsync(id, _value!);
+                (_value, _own) = (info.Preferences, info.Own);
+            }
+            else
+                await Api.SetDefaultPreferencesAsync(_value!);
+            _saved = true;
+            _changed = false;
+            await OnSaved.InvokeAsync();
+        }
+        catch (Exception e) when (e is RomdexApiException or HttpRequestException)
+        {
+            _error = e.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ResetAsync()
+    {
+        _busy = true;
+        try
+        {
+            var info = await Api.ResetSystemPreferencesAsync(SystemId!.Value);
+            (_value, _own, _changed) = (info.Preferences, info.Own, false);
+            await OnSaved.InvokeAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

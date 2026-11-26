@@ -76,6 +76,22 @@ A file counts only when its checksums match a dump in the DAT, whatever it's cal
 - **Bad**: you have files of it that don't verify, such as a disc with a track missing, or a file named like a dump
   but with other checksums.
 
+## Regions
+
+Under **Settings → Regions**, and when you first set Romdex up, you say which regions you want games in, in three
+tiers:
+
+- **Wanted**: regions you want a copy of, the main one first. Getting a game fetches the best dump of these it came
+  out in.
+- **Fallback**: for a game that came out in no wanted region. The first of these that has a dump wins, so the order
+  matters: Europe, then USA, then Japan, say. Regions in no tier count as the last fallbacks.
+- **Never**: regions never fetched, even when they're a game's only dump. A game that came out only in these isn't
+  counted as missing; one you have is still listed.
+
+A World dump counts for every region. Within a region, the latest revision comes first, then your languages. Every
+system follows these tiers unless it has its own, set under **Regions** on its page; **Follow everyone's** goes back.
+Which dump of a game is preferred, and what Romdex asks retrievers for and in what order, both follow them.
+
 A game's page shows what it is, when the Hasheous and Wikipedia plugins are on: what it's about, when it came out,
 who made it, what reviewers gave it, its age rating, and links to it on IGDB and other sites; with the libretro
 thumbnails plugin, its title screen and a screenshot. Whose age ratings it shows is yours to choose under

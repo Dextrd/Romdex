@@ -13,6 +13,10 @@
             <NavLink href="settings/log">Log</NavLink>
             <NavLink href="settings/plugins">Plugins</NavLink>
         }
+        @if (Auth.May(UserPermissions.Download))
+        {
+            <NavLink href="settings/regions">Regions</NavLink>
+        }
         @if (Auth.May(UserPermissions.Users))
         {
             <NavLink href="settings/users">Users</NavLink>
@@ -45,6 +49,7 @@
         "settings/users" or "settings/security" => UserPermissions.Users,
         "settings/api" or "settings/webhooks" => UserPermissions.Keys,
         "settings/appearance" or "settings/about" => null,
+        "settings/regions" => UserPermissions.Download,
         var help when help == "settings/help" || help.StartsWith("settings/help/") => null,
         _ => UserPermissions.Settings,
     };

@@ -1018,6 +1018,20 @@ h1:focus { outline: none; }
 svg.flip { transform: scaleY(-1); }
 .icon-button.on { border-color: var(--accent); color: var(--accent); }
 
+/* Region tiers: three lists, each region with its order and tier beside it. */
+.region-card { padding: 1rem; }
+.region-tiers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.25rem; }
+.region-tier-head { margin-bottom: .4rem; }
+.region-tier-head .muted { display: block; }
+.region-list { list-style: none; margin: 0 0 .5rem; padding: 0; display: flex; flex-direction: column; gap: .3rem; }
+.region-list li { display: flex; align-items: center; gap: .35rem; }
+.region-list .region-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.region-list select { max-width: 8.5rem; }
+.region-add { width: 100%; }
+.region-empty { margin-bottom: .4rem; }
+.region-own { margin-top: 0; }
+@media (max-width: 860px) { .region-tiers { grid-template-columns: 1fr; } }
+
 /* Sorting: a button that opens the ways to sort, and one that reverses the order. */
 .sort-menu { position: relative; display: inline-flex; gap: .3rem; flex: none; }
 .sort-menu svg.flip { transform: scaleY(-1); }

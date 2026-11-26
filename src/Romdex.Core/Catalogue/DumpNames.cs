@@ -47,13 +47,7 @@ public sealed record DumpName(string Title, string Release, IReadOnlyList<string
 public static partial class DumpNames
 {
     /// <summary>Regions as the two DATs spell them, in the order shown when choosing preferences.</summary>
-    public static readonly IReadOnlyList<string> KnownRegions =
-    [
-        "World", "Europe", "USA", "Japan", "UK", "Australia", "Canada", "Asia", "Korea", "China", "Taiwan", "Hong Kong", "Brazil", "Latin America",
-        "Mexico", "Argentina", "France", "Germany", "Italy", "Spain", "Netherlands", "Belgium", "Sweden", "Norway", "Denmark", "Finland",
-        "Scandinavia", "Nordic", "Portugal", "Greece", "Poland", "Russia", "Austria", "Switzerland", "Ireland", "New Zealand", "India",
-        "South Africa", "Croatia", "Czech", "Hungary", "Turkey", "Israel", "United Arab Emirates", "Singapore", "Thailand", "Indonesia", "Unknown",
-    ];
+    public static readonly IReadOnlyList<string> KnownRegions = Romdex.Client.SystemPreferences.Regions;
 
     private static readonly HashSet<string> Regions = new(KnownRegions, StringComparer.OrdinalIgnoreCase) { "United Kingdom" };
 

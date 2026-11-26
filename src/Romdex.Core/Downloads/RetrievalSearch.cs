@@ -54,10 +54,15 @@ public sealed class RetrievalSearch(RomdexDbContext db, RetrievalPlugins plugins
         if (await SearchAsync(titleId, dumpId, ct) is not { } found)
             return null;
         var problems = found.Problems.ToList();
-        var best = found.Offers.FirstOrDefault(o => o.TurnedAway is null);
+        // An offer the plugin says is a dump of a region never to be fetched isn't fetched.
+        var never = await targets.NeverAsync(titleId, dumpId, ct);
+        var allowed = found.Offers.Where(o => o.Candidate.DumpName is not { } name || !never.Contains(name)).ToList();
+        var best = allowed.FirstOrDefault(o => o.TurnedAway is null);
         if (best is null)
         {
-            problems.Add(found.Offers.Count == 0 ? "Nothing was offered." : "Everything offered was turned away before.");
+            problems.Add(found.Offers.Count == 0 ? "Nothing was offered."
+                : allowed.Count == 0 ? "Everything offered is of a region never to be fetched."
+                : "Everything offered was turned away before.");
             return new FetchResult(null, null, problems);
         }
         var instance = (await db.PluginInstances.FindAsync([best.PluginId], ct))!;
@@ -75,16 +80,18 @@ public sealed class RetrievalSearch(RomdexDbContext db, RetrievalPlugins plugins
         .GroupBy(d => (d.PluginInstanceId!.Value, d.CandidateId)).ToDictionary(g => g.Key, g => g.Last().Message ?? "It was turned away before.");
 
     /// <summary>
-    /// Offers in the order to try them: one the plugin says is the dump wanted, or the dump you'd want first, before the
-    /// rest; then one whose checksums the source vouches for; then how sure the plugin is. Among equals, your plugins'
-    /// order, and each plugin's own.
+    /// Offers in the order to try them: by the dump the plugin says it is, the dump asked for first and then the target's
+    /// dumps in the order you'd want them, by your region tiers, before offers that don't say; then one whose checksums
+    /// the source vouches for; then how sure the plugin is. Among equals, your plugins' order, and each plugin's own.
     /// </summary>
     public static IReadOnlyList<DownloadOffer> Rank(IReadOnlyList<DownloadOffer> offers, RetrievalTarget target)
     {
-        var wanted = target.DumpName ?? target.Dumps.FirstOrDefault()?.Name;
-        var listed = target.Dumps.Select(d => d.Name).ToHashSet(StringComparer.Ordinal);
+        var order = target.Dumps.Select(d => d.Name).ToList();
+        if (target.DumpName is { } asked)
+            order = [asked, .. order.Where(n => n != asked)];
+        int Place(Candidate c) => c.DumpName is { } name && order.IndexOf(name) is var at and >= 0 ? at : order.Count;
         return offers
-            .OrderBy(o => o.Candidate.DumpName == wanted ? 0 : o.Candidate.DumpName is { } name && listed.Contains(name) ? 1 : 2)
+            .OrderBy(o => Place(o.Candidate))
             .ThenBy(o => o.Candidate.Verified == true ? 0 : 1)
             .ThenByDescending(o => o.Candidate.Score ?? UnsaidScore)
             .ToList();

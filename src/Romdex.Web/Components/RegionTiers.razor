@@ -1,0 +1,121 @@
+@*
+    Region preferences as three tiers: regions you want a copy of, those that will do when a game came out in none of
+    them, and those never to be fetched. Wanted and fallback regions are in order, the best first; a region can be moved
+    up and down, to another tier, or out of them all. Regions in no tier count as the last fallbacks.
+*@
+<div class="region-tiers">
+    @foreach (var (tier, label, hint) in Tiers)
+    {
+        var list = ListOf(tier);
+        <section class="region-tier" aria-label="@label">
+            <div class="region-tier-head">
+                <span class="field-label">@label</span>
+                <span class="muted small">@hint</span>
+            </div>
+            @if (list.Count == 0)
+            {
+                <div class="muted small region-empty">@(tier == RegionTier.Wanted ? "Want at least one region." : "None.")</div>
+            }
+            <ol class="region-list">
+                @for (var i = 0; i < list.Count; i++)
+                {
+                    var index = i;
+                    var region = list[i];
+                    <li @key="region">
+                        <span class="region-name">@region@(region == SystemPreferences.World ? " (covers every region)" : "")</span>
+                        @if (tier != RegionTier.Never)
+                        {
+                            <IconButton Icon="up" Title="@($"Prefer {region} to the one above")" Disabled="@(Disabled || index == 0)" OnClick="() => Move(tier, index, -1)" />
+                            <IconButton Icon="down" Title="@($"Prefer the one below to {region}")" Disabled="@(Disabled || index == list.Count - 1)" OnClick="() => Move(tier, index, 1)" />
+                        }
+                        <select aria-label="@($"Tier for {region}")" disabled="@Disabled" @onchange="e => MoveTo(region, (string)e.Value!)">
+                            @foreach (var (other, otherLabel, _) in Tiers)
+                            {
+                                <option value="@other" selected="@(other == tier)">@otherLabel</option>
+                            }
+                            <option value="none">In no tier</option>
+                        </select>
+                    </li>
+                }
+            </ol>
+            @if (!Disabled && Unused.Count > 0)
+            {
+                @* Made afresh whenever a region is added, so it goes back to its prompt. *@
+                <select class="region-add" @key="Unused.Count" aria-label="@($"Add a region to {label}")" @onchange="e => Add(tier, (string)e.Value!)">
+                    <option value="" selected>Add a region…</option>
+                    @foreach (var region in Unused)
+                    {
+                        <option value="@region">@region</option>
+                    }
+                </select>
+            }
+        </section>
+    }
+</div>
+
+@code {
+    /// <summary>The preferences to edit; the tiers are taken from it, and the rest is kept as it is.</summary>
+    [Parameter, EditorRequired] public SystemPreferences Value { get; set; } = SystemPreferences.Default;
+
+    [Parameter] public EventCallback<SystemPreferences> ValueChanged { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    private static readonly (RegionTier Tier, string Label, string Hint)[] Tiers =
+    [
+        (RegionTier.Wanted, "Wanted", "Regions you want a copy of, the main one first."),
+        (RegionTier.Fallback, "Fallback", "For a game that came out in no wanted region: the first that has a dump wins. Regions in no tier come after these."),
+        (RegionTier.Never, "Never", "Never fetched, even when it's the only dump there is. A game only in these isn't counted as missing."),
+    ];
+
+    private List<string> ListOf(RegionTier tier) => tier switch
+    {
+        RegionTier.Wanted => [.. Value.Wanted],
+        RegionTier.Fallback => [.. Value.Fallback],
+        _ => [.. Value.Never],
+    };
+
+    private List<string> Unused => SystemPreferences.Regions
+        .Where(r => !Value.Wanted.Concat(Value.Fallback).Concat(Value.Never).Contains(r, StringComparer.OrdinalIgnoreCase)).ToList();
+
+    private Task SetAsync(RegionTier tier, List<string> list) => ValueChanged.InvokeAsync(tier switch
+    {
+        RegionTier.Wanted => Value with { Wanted = list },
+        RegionTier.Fallback => Value with { Fallback = list },
+        _ => Value with { Never = list },
+    });
+
+    private async Task Move(RegionTier tier, int index, int by)
+    {
+        var list = ListOf(tier);
+        (list[index], list[index + by]) = (list[index + by], list[index]);
+        await SetAsync(tier, list);
+    }
+
+    private async Task Add(RegionTier tier, string region)
+    {
+        if (region.Length == 0)
+            return;
+        await SetAsync(tier, [.. ListOf(tier), region]);
+    }
+
+    // To the end of another tier, or out of them all.
+    private Task MoveTo(string region, string to)
+    {
+        bool Other(string r) => !r.Equals(region, StringComparison.OrdinalIgnoreCase);
+        var moved = Value with
+        {
+            Wanted = [.. Value.Wanted.Where(Other)],
+            Fallback = [.. Value.Fallback.Where(Other)],
+            Never = [.. Value.Never.Where(Other)],
+        };
+        moved = to switch
+        {
+            nameof(RegionTier.Wanted) => moved with { Wanted = [.. moved.Wanted, region] },
+            nameof(RegionTier.Fallback) => moved with { Fallback = [.. moved.Fallback, region] },
+            nameof(RegionTier.Never) => moved with { Never = [.. moved.Never, region] },
+            _ => moved,
+        };
+        return ValueChanged.InvokeAsync(moved);
+    }
+}

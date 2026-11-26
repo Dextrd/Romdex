@@ -348,6 +348,35 @@ public sealed class DownloadTests : IDisposable
     }
 
     [Fact]
+    public async Task Retrievers_are_asked_for_dumps_in_tier_order_and_never_for_a_never_region()
+    {
+        _dats.Dump(Handheld, "Tide Bell (Europe)", [".gb"]);
+        _dats.Dump(Handheld, "Tide Bell (USA)", [".gb"], cloneOf: "Tide Bell (Europe)");
+        _dats.Dump(Handheld, "Tide Bell (Japan)", [".gb"], cloneOf: "Tide Bell (Europe)");
+        var korea = _dats.Dump(Handheld, "Tide Bell (Korea)", [".gb"], cloneOf: "Tide Bell (Europe)");
+        _dats.WriteDats();
+        await SetUpAsync();
+        var system = Assert.Single(await _api.ListSystemsAsync());
+        await _api.SetSystemPreferencesAsync(system.Id, SystemPreferences.Default with { Wanted = ["Japan"], Fallback = ["USA", "Europe"], Never = ["Korea"] });
+        var title = Assert.Single((await _api.ListAllTitlesAsync()).Items);
+
+        await _api.SearchDownloadsAsync(title.Id);
+        Assert.Equal(["Tide Bell (Japan)", "Tide Bell (USA)", "Tide Bell (Europe)"], _plugin.Searches[^1].Target.Dumps.Select(d => d.Name));
+
+        // An offer the plugin says is the Korean dump isn't fetched.
+        _plugin.Drop("korea", ("k.gb", korea[0].Data));
+        _plugin.DumpNames["korea"] = "Tide Bell (Korea)";
+        var fetch = await _api.FetchTitleAsync(title.Id);
+        Assert.Null(fetch.Download);
+        Assert.Contains("Everything offered is of a region never to be fetched.", fetch.Problems);
+
+        // Asked for by name, it's fetched all the same.
+        var korean = (await _api.GetTitleAsync(title.Id))!.Dumps.Single(d => d.Name == "Tide Bell (Korea)");
+        await _api.SearchDownloadsAsync(title.Id, korean.Id);
+        Assert.Contains("Tide Bell (Korea)", _plugin.Searches[^1].Target.Dumps.Select(d => d.Name));
+    }
+
+    [Fact]
     public void Offers_are_ranked_by_the_dump_wanted_then_verified_then_how_sure_the_plugin_is()
     {
         var target = new RetrievalTarget(Handheld, "Tide Bell",

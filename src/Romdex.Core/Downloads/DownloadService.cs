@@ -397,8 +397,11 @@ public sealed class DownloadSignal
     public Task WaitAsync(TimeSpan timeout, CancellationToken ct) => _signal.WaitAsync(timeout, ct);
 }
 
-/// <summary>What the plugins are told to find for a title: every dump the DAT lists for it, the one you'd want first.</summary>
-public sealed class RetrievalTargets(RomdexDbContext db, LibraryViewBuilder views)
+/// <summary>
+/// What the plugins are told to find for a title: its dumps in the order you'd want them, by the system's region tiers,
+/// without those only of regions never to be fetched, unless one of those is the dump asked for.
+/// </summary>
+public sealed class RetrievalTargets(RomdexDbContext db, LibraryViewBuilder views, Catalogue.Preferences preferences)
 {
     public async Task<RetrievalTarget?> ForAsync(Guid titleId, Guid? dumpId, CancellationToken ct)
     {
@@ -406,12 +409,32 @@ public sealed class RetrievalTargets(RomdexDbContext db, LibraryViewBuilder view
         if (title is null)
             return null;
         var dumps = await db.Dumps.AsNoTracking().Include(d => d.Files).Where(d => d.TitleId == titleId).ToListAsync(ct);
-        var preferred = (await views.GetAsync(title.System!.BiosForId ?? title.SystemId, ct))?.ById.GetValueOrDefault(titleId)?.Preferred;
-        var ordered = dumps.OrderBy(d => d.Release != preferred?.Release).ThenBy(d => d.Name, StringComparer.Ordinal);
+        var owner = title.System!.BiosForId is { } parentId ? await db.Systems.AsNoTracking().FirstAsync(s => s.Id == parentId, ct) : title.System;
+        var (prefs, _) = await preferences.GetAsync(owner.Name, ct);
+        var view = (await views.GetAsync(owner.Id, ct))?.ById.GetValueOrDefault(titleId);
+        // The releases as 1G1R ranks them, the one it prefers first; a dump the views don't have goes last.
+        var order = view is null ? [] : LibraryViewBuilder.Rank(view.Dumps.GroupBy(d => d.Release).Select(g => g.ToList()), prefs)
+            .SelectMany(r => r).Select(d => d.Id).ToList();
+        if (view?.Preferred is { } preferred)
+            order = [.. order.Where(id => view.Dumps.Any(d => d.Id == id && d.Release == preferred.Release)), .. order.Where(id => !view.Dumps.Any(d => d.Id == id && d.Release == preferred.Release))];
+        int Place(Dump d) => order.IndexOf(d.Id) is var at and >= 0 ? at : int.MaxValue;
         var wanted = dumpId is { } id ? dumps.FirstOrDefault(d => d.Id == id)?.Name : null;
+        var ordered = dumps
+            .Where(d => d.Name == wanted || prefs.TierOf(Split(d.Regions)) != RegionTier.Never)
+            .OrderBy(Place).ThenBy(d => d.Name, StringComparer.Ordinal);
         return new RetrievalTarget(title.System.Name, title.Name, ordered.Select(d => new TargetDump(
-                d.Name, d.Regions.Length == 0 ? [] : d.Regions.Split(','), d.Serial,
+                d.Name, Split(d.Regions), d.Serial,
                 d.Files.OrderBy(f => f.Name, StringComparer.Ordinal).Select(f => new TargetFile(f.Name, f.Size, f.Crc32, f.Md5, f.Sha1)).ToList()))
             .ToList(), wanted);
     }
+
+    /// <summary>The names of a title's dumps that are only of regions never to be fetched, other than the dump asked for.</summary>
+    public async Task<IReadOnlySet<string>> NeverAsync(Guid titleId, Guid? dumpId, CancellationToken ct)
+    {
+        var all = await db.Dumps.AsNoTracking().Where(d => d.TitleId == titleId).Select(d => d.Name).ToListAsync(ct);
+        var target = await ForAsync(titleId, dumpId, ct);
+        return all.Except(target?.Dumps.Select(d => d.Name) ?? []).ToHashSet(StringComparer.Ordinal);
+    }
+
+    private static IReadOnlyList<string> Split(string regions) => regions.Length == 0 ? [] : regions.Split(',');
 }

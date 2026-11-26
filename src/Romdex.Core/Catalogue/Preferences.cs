@@ -31,18 +31,44 @@ public sealed class Preferences(RomdexDbContext db, LibraryViews views)
     public static Dictionary<string, string[]> Validate(SystemPreferences value)
     {
         var errors = new Dictionary<string, string[]>();
-        var unknown = value.Regions.Where(r => !DumpNames.KnownRegions.Contains(r, StringComparer.OrdinalIgnoreCase)).ToList();
+        var all = value.Wanted.Concat(value.Fallback).Concat(value.Never).ToList();
+        var unknown = all.Where(r => !DumpNames.KnownRegions.Contains(r, StringComparer.OrdinalIgnoreCase)).Distinct().ToList();
         if (unknown.Count > 0)
             errors["regions"] = [$"Not regions the DATs use: {string.Join(", ", unknown)}."];
-        if (value.OnlyListedRegions && value.Regions.Count == 0)
-            errors["regions"] = ["List at least one region to keep to."];
+        else if (all.GroupBy(r => r, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1).Select(g => g.Key).ToList() is { Count: > 0 } twice)
+            errors["regions"] = [$"A region goes in one tier only: {string.Join(", ", twice)} {(twice.Count == 1 ? "is" : "are")} in more than one."];
+        if (value.Wanted.Count == 0)
+            errors["wanted"] = ["Want at least one region."];
         if (value.Languages.Any(l => l.Length is < 2 or > 8))
             errors["languages"] = ["Languages are codes such as En or Fr."];
         return errors;
     }
 
-    private async Task<SystemPreferences?> ReadAsync(string key, CancellationToken ct) =>
-        await db.Settings.FindAsync([key], ct) is { } setting ? JsonSerializer.Deserialize<SystemPreferences>(setting.ValueJson, RomdexJson.Options) : null;
+    private async Task<SystemPreferences?> ReadAsync(string key, CancellationToken ct)
+    {
+        if (await db.Settings.FindAsync([key], ct) is not { } setting)
+            return null;
+        using var json = JsonDocument.Parse(setting.ValueJson);
+        return json.RootElement.TryGetProperty("wanted", out _)
+            ? json.RootElement.Deserialize<SystemPreferences>(RomdexJson.Options)
+            : FromRegionList(json.RootElement.Deserialize<RegionList>(RomdexJson.Options)!);
+    }
+
+    /// <summary>Preferences saved before the tiers, as one ordered list of regions and whether to keep to it.</summary>
+    internal sealed record RegionList(IReadOnlyList<string> Regions, IReadOnlyList<string> Languages, bool OnlyListedRegions, IReadOnlyList<DumpKind> Hidden);
+
+    /// <summary>
+    /// The tiers for preferences saved as a list: the first region wanted and the rest fallbacks, in order; keeping to
+    /// the list makes every other region never. Saved again, they're saved as tiers.
+    /// </summary>
+    internal static SystemPreferences FromRegionList(RegionList old)
+    {
+        var listed = old.Regions.Count > 0 ? old.Regions : SystemPreferences.Default.Wanted;
+        var never = old.OnlyListedRegions
+            ? DumpNames.KnownRegions.Where(r => !listed.Contains(r, StringComparer.OrdinalIgnoreCase)).ToList()
+            : [];
+        return new SystemPreferences([listed[0]], [.. listed.Skip(1)], never, old.Languages, old.Hidden);
+    }
 
     private async Task WriteAsync(string key, SystemPreferences? value, CancellationToken ct)
     {

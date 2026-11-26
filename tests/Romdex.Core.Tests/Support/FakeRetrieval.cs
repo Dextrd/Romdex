@@ -190,6 +190,9 @@ public sealed class FakeRetriever(string staging) : HttpMessageHandler
     public void Drop(string name, params (string Name, byte[] Data)[] files) =>
         _items[name] = (new Candidate(name, name, "the test", Notes: $"{files.Length} files"), files.ToList());
 
+    /// <summary>The dump each dropped item says it is, by its name, when it says.</summary>
+    public Dictionary<string, string> DumpNames { get; } = [];
+
     public IReadOnlyList<SearchRequest> Searches => _searches;
 
     private readonly List<SearchRequest> _searches = [];
@@ -220,7 +223,7 @@ public sealed class FakeRetriever(string staging) : HttpMessageHandler
     private HttpResponseMessage Search(SearchRequest search)
     {
         _searches.Add(search);
-        return Json(new SearchResponse(_items.Values.Select(i => i.Candidate).ToList()));
+        return Json(new SearchResponse(_items.Values.Select(i => DumpNames.TryGetValue(i.Candidate.CandidateId, out var dump) ? i.Candidate with { DumpName = dump } : i.Candidate).ToList()));
     }
 
     private HttpResponseMessage Fetch(FetchRequest fetch)

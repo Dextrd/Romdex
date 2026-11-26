@@ -6,7 +6,10 @@ using Romdex.Core.Data;
 
 namespace Romdex.Core.Library;
 
-/// <summary>One dump, with where it stands. A <see cref="Hidden"/> dump is one the system's preferences leave out.</summary>
+/// <summary>
+/// One dump, with where it stands. A <see cref="Hidden"/> dump is one the system's preferences leave out; its
+/// <see cref="Tier"/> is the best of its regions' in them.
+/// </summary>
 public sealed record DumpView(
     Guid Id,
     Guid TitleId,
@@ -18,7 +21,8 @@ public sealed record DumpView(
     string Revision,
     DumpKinds Kinds,
     DumpStatus Status,
-    bool Hidden)
+    bool Hidden,
+    RegionTier Tier = RegionTier.Fallback)
 {
     public DumpRef Ref => new(Id, Name, Regions);
 }
@@ -126,15 +130,16 @@ public sealed class LibraryViewBuilder(RomdexDbContext db, LibraryViews cache, P
         }
 
         var hidden = DumpKindNames.ToFlags(prefs.Hidden);
-        var listed = prefs.Regions.ToHashSet(StringComparer.OrdinalIgnoreCase);
         DumpView ViewOf(Dump dump)
         {
             var regions = Split(dump.Regions);
-            var isHidden = (dump.Kinds & hidden) != 0 || prefs.OnlyListedRegions && !regions.Any(listed.Contains);
+            // A dump only of regions never to be fetched is left out, as a demo is, unless it's owned.
+            var tier = prefs.TierOf(regions);
+            var isHidden = (dump.Kinds & hidden) != 0 || tier == RegionTier.Never;
             // Everything in a DAT of BIOS files only is a BIOS, whether or not the DAT marks each one.
             var kinds = dump.SystemId == system.Id ? dump.Kinds : dump.Kinds | DumpKinds.Bios;
             return new DumpView(dump.Id, dump.TitleId, dump.Name, dump.Release, dump.Disc, regions, Split(dump.Languages), dump.Revision, kinds,
-                StatusOf(dump), isHidden);
+                StatusOf(dump), isHidden, tier);
         }
         var views = dumps.Select(ViewOf).ToList();
 
@@ -181,12 +186,13 @@ public sealed class LibraryViewBuilder(RomdexDbContext db, LibraryViews cache, P
     }
 
     /// <summary>
-    /// The releases of a title, best first: the most preferred region, then language, then a release that isn't an
+    /// The releases of a title, best first: the most preferred region by the tiers (World as good as the first wanted
+    /// region), then language, then a release that isn't an
     /// alternate dump, then the latest revision, then retail before anything else.
     /// </summary>
     public static IEnumerable<List<DumpView>> Rank(IEnumerable<List<DumpView>> releases, SystemPreferences prefs) =>
         releases
-            .OrderBy(r => RankIn(r[0].Regions, prefs.Regions))
+            .OrderBy(r => prefs.RankOf(r[0].Regions))
             .ThenBy(r => RankIn(r[0].Languages, prefs.Languages))
             .ThenBy(r => (r[0].Kinds & DumpKinds.Alternate) != 0)
             .ThenByDescending(r => r[0].Revision, StringComparer.Ordinal)

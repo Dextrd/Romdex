@@ -48,25 +48,95 @@ public enum DumpKind
     Dlc,
 }
 
+/// <summary>Where a region stands in someone's preferences.</summary>
+public enum RegionTier
+{
+    /// <summary>A region you want a copy of.</summary>
+    Wanted,
+
+    /// <summary>Good enough when a game came out in no wanted region; the first that has a dump wins.</summary>
+    Fallback,
+
+    /// <summary>Never fetched, even when it's the only dump there is.</summary>
+    Never,
+}
+
 /// <summary>
-/// 1G1R ("one game, one ROM") choices for a system: which of a title's dumps to prefer, and which titles to leave out
-/// of what's missing.
+/// 1G1R ("one game, one ROM") choices for a system: which regions you want, which will do, and which never to fetch;
+/// then languages, and the kinds of dump left out.
 /// </summary>
-/// <param name="Regions">Regions in order of preference.</param>
+/// <param name="Wanted">Regions you want a copy of, the main one first.</param>
+/// <param name="Fallback">
+/// Regions that will do when a game came out in no wanted region, best first. Regions in no tier come after these.
+/// </param>
+/// <param name="Never">Regions never fetched; a game only in these isn't counted as missing.</param>
 /// <param name="Languages">Languages in order of preference, as two-letter codes such as <c>En</c>.</param>
-/// <param name="OnlyListedRegions">Leave out titles with no dump in the listed regions, rather than only preferring them.</param>
 /// <param name="Hidden">Kinds of dump left out: a title of only these isn't listed, unless it's owned.</param>
 public sealed record SystemPreferences(
-    IReadOnlyList<string> Regions,
+    IReadOnlyList<string> Wanted,
+    IReadOnlyList<string> Fallback,
+    IReadOnlyList<string> Never,
     IReadOnlyList<string> Languages,
-    bool OnlyListedRegions,
     IReadOnlyList<DumpKind> Hidden)
 {
+    /// <summary>As Romdex preferred regions before the tiers: Europe, with World as good, then the UK, USA, Australia and Japan.</summary>
     public static SystemPreferences Default { get; } = new(
-        ["World", "Europe", "UK", "USA", "Australia", "Japan"],
+        ["Europe"],
+        ["UK", "USA", "Australia", "Japan"],
+        [],
         ["En"],
-        false,
         [DumpKind.Demo, DumpKind.Beta, DumpKind.Proto, DumpKind.Pirate, DumpKind.Program, DumpKind.Debug, DumpKind.Bad]);
+
+    /// <summary>Every region the DATs name, the commonest first.</summary>
+    public static readonly IReadOnlyList<string> Regions =
+    [
+        "World", "Europe", "USA", "Japan", "UK", "Australia", "Canada", "Asia", "Korea", "China", "Taiwan", "Hong Kong", "Brazil", "Latin America",
+        "Mexico", "Argentina", "France", "Germany", "Italy", "Spain", "Netherlands", "Belgium", "Sweden", "Norway", "Denmark", "Finland",
+        "Scandinavia", "Nordic", "Portugal", "Greece", "Poland", "Russia", "Austria", "Switzerland", "Ireland", "New Zealand", "India",
+        "South Africa", "Croatia", "Czech", "Hungary", "Turkey", "Israel", "United Arab Emirates", "Singapore", "Thailand", "Indonesia", "Unknown",
+    ];
+
+    /// <summary><c>World</c> stands for every region: a world dump is as good as one of the first wanted region.</summary>
+    public const string World = "World";
+
+    // Places, lower being better: wanted regions first, then fallbacks, then regions in no tier, then never.
+    private const int FallbackAt = 1_000, UnlistedAt = 2_000, NeverAt = 3_000;
+
+    /// <summary>A region's tier: listed, or Fallback for one in none. World is wanted unless it's listed as never.</summary>
+    public RegionTier TierOf(string region) =>
+        Contains(Never, region) ? RegionTier.Never
+        : Contains(Wanted, region) || region.Equals(World, StringComparison.OrdinalIgnoreCase) ? RegionTier.Wanted
+        : RegionTier.Fallback;
+
+    /// <summary>A dump's tier, by the best of its regions; a dump that names none counts as a fallback.</summary>
+    public RegionTier TierOf(IReadOnlyList<string> regions) =>
+        regions.Count == 0 ? RegionTier.Fallback : regions.Min(TierOf);
+
+    /// <summary>Where a dump of these regions comes in order of preference: lower is better.</summary>
+    public int RankOf(IReadOnlyList<string> regions) => regions.Count == 0 ? UnlistedAt : regions.Min(RankOf);
+
+    private int RankOf(string region)
+    {
+        if (Contains(Never, region))
+            return NeverAt;
+        if (region.Equals(World, StringComparison.OrdinalIgnoreCase))
+            return 0;
+        var wanted = IndexIn(Wanted, region);
+        if (wanted >= 0)
+            return wanted;
+        var fallback = IndexIn(Fallback, region);
+        return fallback >= 0 ? FallbackAt + fallback : UnlistedAt;
+    }
+
+    private static bool Contains(IReadOnlyList<string> list, string region) => IndexIn(list, region) >= 0;
+
+    private static int IndexIn(IReadOnlyList<string> list, string region)
+    {
+        for (var i = 0; i < list.Count; i++)
+            if (list[i].Equals(region, StringComparison.OrdinalIgnoreCase))
+                return i;
+        return -1;
+    }
 }
 
 /// <summary>Body and answer of <c>GET/PUT /systems/{id}/preferences</c>.</summary>
