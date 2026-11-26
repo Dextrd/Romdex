@@ -13,7 +13,9 @@ Each arrival goes through the same steps, shown on the Downloads page and on the
 
 1. **Staged.** The plugin puts its files in the staging volume. The inbox and dumping tools plugins hand over what
    arrives by themselves; Romdex asks them every 5 minutes, or when you press **Check now**. You can also find a game
-   under **Search** and press **Get**. Romdex asks the plugins that search, and you choose what to get.
+   under **Search** and press **Get**. Romdex asks every plugin that searches and fetches the best offer straight away:
+   one the plugin says is the dump you want, then one whose checksums its source vouches for, then the one the plugin is
+   surest of, in your plugins' order. Anything turned away before is passed over.
 2. **Identified.** Every file is hashed, inside zips and 7z archives too, with and without a header, and matched
    against the catalogue. What it holds whole are its dumps.
 3. **Decided.** A dump you already have isn't filed again. Another dump of a game you have, such as another region,
@@ -31,7 +33,7 @@ An arrival waits for you when:
   it, or add the DAT, update the catalogue and **Retry**;
 - **it's incomplete**, such as a disc missing a track. The message says which files are missing;
 - **it isn't what you asked for.** You got it for one game, and it's another. **Accept** files it as what it is;
-  searching again marks what was turned away before.
+  **Try again** fetches the next best offer, passing over what was turned away, and throws this one away.
 
 **Reject** throws an arrival's files away. **Retry** identifies it again, or fetches it again if its files are gone.
 Open an arrival to see its files' hashes, what each matched, and the plugin's notes, such as a ripper's log.

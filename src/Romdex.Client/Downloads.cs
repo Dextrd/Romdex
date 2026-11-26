@@ -94,6 +94,11 @@ public sealed record DownloadOffer(Guid PluginId, string Plugin, Candidate Candi
 /// <param name="Problems">Plugins that couldn't search, with why.</param>
 public sealed record DownloadSearchResult(IReadOnlyList<DownloadOffer> Offers, IReadOnlyList<string> Problems);
 
+/// <summary>Answer to <c>POST /titles/{id}/fetch</c> and <c>POST /downloads/{id}/try-again</c>.</summary>
+/// <param name="Download">What was started; null when nothing could be.</param>
+/// <param name="Problems">Why nothing was started, and plugins that couldn't search.</param>
+public sealed record TitleFetch(DownloadInfo? Download, IReadOnlyList<string> Problems);
+
 /// <summary>Body of <c>POST /downloads/fetch</c>: a candidate from <c>POST /titles/{id}/search</c>, to stage and file.</summary>
 public sealed record StartDownload(Guid TitleId, Guid PluginId, Candidate Candidate, Guid? DumpId = null);
 

@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Romdex.Client;
 using System.Text.Json;
+using Romdex.Contracts.Plugins.Retrieval;
 using Romdex.Core.Downloads;
 using Romdex.Core.Events;
 using Romdex.Core.Plugins;
@@ -290,6 +291,54 @@ public sealed class DownloadTests : IDisposable
         Assert.Null(offer.TurnedAway);
         item = await WaitAsync((await _api.StartDownloadAsync(new StartDownload(wanted.Id, offer.PluginId, offer.Candidate))).Id);
         Assert.Equal(DownloadState.Filed, item.State);
+    }
+
+    [Fact]
+    public async Task Getting_a_game_fetches_the_best_offer_and_trying_again_passes_over_what_was_turned_away()
+    {
+        var lantern = _dats.Dump(Handheld, "Lantern Run (World)", [".gb"]);
+        var quarry = _dats.Dump(Handheld, "Quiet Quarry (USA)", [".gb"]);
+        _dats.WriteDats();
+        await SetUpAsync();
+        var wanted = (await _api.ListAllTitlesAsync()).Items.Single(t => t.Name == "Lantern Run");
+
+        // Straight away, with nothing to choose: the one offer is fetched, and it's the wrong game.
+        _plugin.Drop("not it", ("q.gb", quarry[0].Data));
+        var fetch = await _api.FetchTitleAsync(wanted.Id);
+        Assert.Empty(fetch.Problems);
+        var wrong = await WaitAsync(fetch.Download!.Id);
+        Assert.Equal(HoldReason.NotAskedFor, wrong.HeldFor);
+
+        // Offered again, it's passed over: there's nothing else to fetch.
+        _plugin.Drop("not it", ("q.gb", quarry[0].Data));
+        fetch = await _api.FetchTitleAsync(wanted.Id);
+        Assert.Null(fetch.Download);
+        Assert.Equal("Everything offered was turned away before.", Assert.Single(fetch.Problems));
+
+        // Once something else is offered, trying again fetches it and throws the wrong one away.
+        _plugin.Drop("it", ("l.gb", lantern[0].Data));
+        fetch = await _api.TryDownloadAgainAsync(wrong.Id);
+        Assert.Equal("it", fetch.Download!.Name);
+        Assert.Equal(DownloadState.Filed, (await WaitAsync(fetch.Download.Id)).State);
+        Assert.Equal(DownloadState.Rejected, (await _api.GetDownloadAsync(wrong.Id))!.State);
+        Assert.Empty((await _api.ListCouldntFetchAsync()).Items);
+    }
+
+    [Fact]
+    public void Offers_are_ranked_by_the_dump_wanted_then_verified_then_how_sure_the_plugin_is()
+    {
+        var target = new RetrievalTarget(Handheld, "Tide Bell",
+            [new TargetDump("Tide Bell (Europe)", ["Europe"], null, []), new TargetDump("Tide Bell (USA)", ["USA"], null, [])]);
+        DownloadOffer Offer(string id, string? dump = null, bool? verified = null, double? score = null) =>
+            new(Guid.Empty, "p", new Candidate(id, id, "s", DumpName: dump, Verified: verified, Score: score));
+        var ranked = RetrievalSearch.Rank([
+            Offer("unnamed, sure", score: 0.99),
+            Offer("usa", dump: "Tide Bell (USA)"),
+            Offer("europe, unsure", dump: "Tide Bell (Europe)", score: 0.3),
+            Offer("europe, verified", dump: "Tide Bell (Europe)", verified: true, score: 0.3),
+            Offer("unnamed, unsure", score: 0.1),
+        ], target);
+        Assert.Equal(["europe, verified", "europe, unsure", "usa", "unnamed, sure", "unnamed, unsure"], ranked.Select(o => o.Candidate.CandidateId));
     }
 
     [Fact]

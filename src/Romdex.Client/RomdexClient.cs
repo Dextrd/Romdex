@@ -242,6 +242,13 @@ public sealed class RomdexClient(HttpClient http)
     public Task<DownloadSearchResult> SearchDownloadsAsync(Guid titleId, Guid? dumpId = null, CancellationToken ct = default) =>
         PostForAsync<DownloadSearchResult>($"{Api}/titles/{titleId}/search", new SearchDownloads(dumpId), ct);
 
+    /// <summary>Gets a title, or one of its dumps: fetches the best offer that wasn't turned away before.</summary>
+    public Task<TitleFetch> FetchTitleAsync(Guid titleId, Guid? dumpId = null, CancellationToken ct = default) =>
+        PostForAsync<TitleFetch>($"{Api}/titles/{titleId}/fetch", new SearchDownloads(dumpId), ct);
+
+    /// <summary>Looks again for what an arrival was fetched for, passing over what was turned away; one that arrived by itself is retried.</summary>
+    public Task<TitleFetch> TryDownloadAgainAsync(Guid id, CancellationToken ct = default) => PostForAsync<TitleFetch>($"{Api}/downloads/{id}/try-again", null, ct);
+
     /// <summary>Has a plugin stage a candidate it offered for a title, to be identified and filed.</summary>
     public Task<DownloadInfo> StartDownloadAsync(StartDownload fetch, CancellationToken ct = default) => PostForAsync<DownloadInfo>($"{Api}/downloads/fetch", fetch, ct);
 

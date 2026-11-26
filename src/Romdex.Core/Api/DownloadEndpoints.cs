@@ -94,37 +94,35 @@ public static class DownloadEndpoints
             .RequireScope(Scopes.Review).WithTags("Downloads").WithName("ReclaimLibraryFile")
             .WithSummary("Takes a file that matches nothing, or can't be read, out of the library and through Downloads again.");
 
-        api.MapPost("/titles/{id:guid}/search", async (Guid id, SearchDownloads? body, RetrievalPlugins plugins, RetrievalTargets targets, RomdexDbContext db, CancellationToken ct) =>
-            {
-                if (await targets.ForAsync(id, body?.DumpId, ct) is not { } target)
-                    return Results.NotFound();
-                var searching = await plugins.WithAsync(RetrievalCapabilities.Search, ct);
-                var answers = await Task.WhenAll(searching.Select(async p =>
-                {
-                    try
-                    {
-                        return (p.Instance, Candidates: await p.Plugin.SearchAsync(target, 10, ct), Error: (string?)null);
-                    }
-                    catch (Exception e) when (e is RetrievalException or HttpRequestException or JsonException or TaskCanceledException && !ct.IsCancellationRequested)
-                    {
-                        return (p.Instance, Candidates: (IReadOnlyList<Candidate>)[], Error: e.Message);
-                    }
-                }));
-                // What was fetched for this title before and turned away, so trying again can pass it over.
-                var turnedAway = (await db.Downloads.AsNoTracking()
-                        .Where(d => d.TitleId == id && d.PluginInstanceId != null && (d.State == DownloadState.Failed || d.State == DownloadState.Rejected
-                            || d.State == DownloadState.NeedsReview && d.HeldFor == HoldReason.NotAskedFor))
-                        .OrderBy(d => d.UpdatedAt).Select(d => new { d.PluginInstanceId, d.CandidateId, d.Message }).ToListAsync(ct))
-                    .GroupBy(d => (d.PluginInstanceId!.Value, d.CandidateId)).ToDictionary(g => g.Key, g => g.Last().Message ?? "It was turned away before.");
-                var offers = answers.SelectMany(a => a.Candidates.Select(c =>
-                    new DownloadOffer(a.Instance.Id, a.Instance.Name, c, turnedAway.GetValueOrDefault((a.Instance.Id, c.CandidateId))))).ToList();
-                var problems = answers.Where(a => a.Error is not null).Select(a => $"{a.Instance.Name}: {a.Error}").ToList();
-                if (searching.Count == 0)
-                    problems.Add("No retriever that searches is set up. Add one under Settings → Plugins.");
-                return Results.Ok(new DownloadSearchResult(offers, problems));
-            })
+        api.MapPost("/titles/{id:guid}/search", async (Guid id, SearchDownloads? body, RetrievalSearch search, CancellationToken ct) =>
+                await search.SearchAsync(id, body?.DumpId, ct) is { } found ? Results.Ok(found) : Results.NotFound())
             .RequireScope(Scopes.Download).WithTags("Downloads").WithName("SearchDownloads")
-            .WithSummary("Asks every retriever that searches for dumps of a title. Fetch one with POST /downloads/fetch.");
+            .WithSummary("Asks every retriever that searches for dumps of a title, and ranks what they offer. Fetch one with POST /downloads/fetch.");
+
+        api.MapPost("/titles/{id:guid}/fetch", async (Guid id, SearchDownloads? body, RetrievalSearch search, RomdexDbContext db, CancellationToken ct) =>
+                await search.FetchBestAsync(id, body?.DumpId, ct) is { } result ? Results.Ok(await FetchInfoAsync(db, result, ct)) : Results.NotFound())
+            .RequireScope(Scopes.Download).WithTags("Downloads").WithName("FetchTitle")
+            .WithSummary("Gets a title, or one of its dumps: asks every retriever, and fetches the best offer that wasn't turned away before.");
+
+        downloads.MapPost("/{id:guid}/try-again", async (Guid id, RomdexDbContext db, RetrievalSearch search, DownloadService service, CancellationToken ct) =>
+            {
+                if (await db.Downloads.Include(i => i.Dumps).FirstOrDefaultAsync(i => i.Id == id, ct) is not { } item)
+                    return Results.NotFound();
+                if (item.State is not (DownloadState.Failed or DownloadState.NeedsReview))
+                    return Results.Problem("Only an arrival held for review, or that failed, can be tried again.", statusCode: StatusCodes.Status409Conflict);
+                // What arrived by itself has nothing to look for: it's identified, or fetched, again.
+                if (item.TitleId is not { } titleId)
+                    return await service.RetryAsync(item, ct)
+                        ? Results.Ok(new TitleFetch((await InfoAsync(db, [item], ct))[0], []))
+                        : Results.Problem(item.Message ?? "It couldn't be tried again.", statusCode: StatusCodes.Status409Conflict);
+                var result = (await search.FetchBestAsync(titleId, item.WantedDumpId, ct))!;
+                // What it was is thrown away once something else is on its way, so it's no longer listed.
+                if (result.Item is not null)
+                    await service.RejectAsync(await db.Downloads.FirstAsync(i => i.Id == id, ct), ct);
+                return Results.Ok(await FetchInfoAsync(db, result, ct));
+            })
+            .RequireScope(Scopes.Download).WithName("TryDownloadAgain")
+            .WithSummary("Looks again for what an arrival was fetched for, passing over what was turned away, and throws the arrival away once something else is fetching. One that arrived by itself is retried.");
 
         api.MapGet("/systems/{id:guid}/filing", async (Guid id, RomdexDbContext db, Filing filing, CancellationToken ct) =>
                 await db.Systems.FindAsync([id], ct) is { } system ? Results.Ok(await filing.GetAsync(system.Name, ct)) : Results.NotFound())
@@ -219,6 +217,9 @@ public static class DownloadEndpoints
 
     private static IResult Problem(string field, string message) =>
         Results.ValidationProblem(new Dictionary<string, string[]> { [field] = [message] });
+
+    private static async Task<TitleFetch> FetchInfoAsync(RomdexDbContext db, FetchResult result, CancellationToken ct) =>
+        new(result.Item is null ? null : (await InfoAsync(db, [result.Item], ct))[0], result.Problems);
 
     internal static async Task<List<DownloadInfo>> InfoAsync(RomdexDbContext db, IReadOnlyList<Download> items, CancellationToken ct)
     {

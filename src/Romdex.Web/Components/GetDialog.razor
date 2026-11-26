@@ -1,73 +1,41 @@
 @inject RomdexClient Api
 
 @*
-    Finds a title through the retrievers that search, and has one of them fetch what it offered. A game on more than one
-    system is found for one at a time, picked at the top.
+    Gets a title through the retrievers that search: the best offer is fetched straight away, as Melodex does, and
+    what it fetched is checked against the DAT before it's filed. A game on more than one system is got for one,
+    picked first.
 *@
 <Dialog Title="@($"Get {Name}")" OnClose="OnClose" Class="get-dialog">
-    @if (Versions is { Count: > 1 } && _fetched is null)
+    @if (Versions is { Count: > 1 } && _result is null && !_fetching)
     {
+        <p class="muted small">It's on more than one system. Which do you want?</p>
         <div class="toolbar">
-            <Segmented T="Guid" Value="_titleId" Options="@(Versions.Select(v => (v.TitleId, v.System, (string?)null)).ToList())" OnChange="PickAsync" Label="System" />
+            <Segmented T="Guid" Value="_titleId" Options="@(Versions.Select(v => (v.TitleId, v.System, (string?)null)).ToList())" OnChange="id => _titleId = id" Label="System" />
+            <button class="primary" @onclick="FetchAsync">Get</button>
         </div>
     }
-    @if (_result is null)
+    else if (_result is null)
     {
         <Loading />
     }
     else
     {
-        @foreach (var problem in _result.Problems)
+        @if (_result.Download is { } started)
         {
-            <div class="notice error small">@problem</div>
-        }
-        @if (_fetched is not null)
-        {
-            <p>@_fetched.Source is fetching it. It's identified and filed once it arrives; follow it on the <a href="downloads">Downloads page</a>.</p>
-        }
-        else if (_result.Offers.Count == 0)
-        {
-            <p class="muted">@(_result.Problems.Count > 0 ? "No other plugin offered anything." : "Nothing was offered. Retrievers that search, such as the inbox folder, are added in Settings.")</p>
+            <p>@started.Source is fetching <strong>@started.Name</strong>. It's checked against the DAT and filed once it arrives; follow it on the <a href="downloads">Downloads page</a>.</p>
+            <p class="muted small">If it isn't the right game, or it fails, it waits under <a href="review/couldnt-fetch">Review → Couldn't fetch</a>, where you can try again.</p>
         }
         else
         {
-            <p class="muted small">
-                What each plugin offered, its best first. Whatever you get is checked against the DAT before it's filed, so a wrong one waits on the
-                Downloads page instead.
-            </p>
-            <div class="get-offers">
-                @foreach (var offer in _result.Offers)
-                {
-                    var candidate = offer.Candidate;
-                    <div class="get-offer">
-                        <div class="get-offer-head">
-                            <span class="dump-name">@candidate.Name</span>
-                            @if (candidate.Verified == true) { <span class="badge owned" title="Its checksums match the DAT's">Verified</span> }
-                            else if (candidate.Score is { } score) { <span class="badge neutral" title="How sure the plugin is">@score.ToString("P0")</span> }
-                            <button class="primary" disabled="@_fetching" @onclick="() => FetchAsync(offer)">Get</button>
-                        </div>
-                        <div class="muted small">
-                            @offer.Plugin · @candidate.Source
-                            @if (candidate.DumpName is not null && candidate.DumpName != candidate.Name) { <span> · as @candidate.DumpName</span> }
-                            @if (candidate.Format is not null) { <span> · @candidate.Format</span> }
-                            @if (candidate.Size is { } size) { <span> · @Format.Size(size)</span> }
-                            @if (candidate.Url is not null) { <span> · <a href="@candidate.Url" target="_blank" rel="noopener noreferrer">source</a></span> }
-                        </div>
-                        @if (candidate.Notes is not null)
-                        {
-                            <details class="small"><summary>Notes</summary><pre class="download-notes">@candidate.Notes</pre></details>
-                        }
-                    </div>
-                }
-            </div>
+            <p>Nothing could be fetched.</p>
         }
-        @if (_error is not null)
+        @foreach (var problem in _result.Problems)
         {
-            <div class="notice error small">@_error</div>
+            <div class="notice @(_result.Download is null ? "error" : null) small">@problem</div>
         }
     }
     <div class="toolbar dialog-buttons">
-        <button @onclick="OnClose">@(_fetched is null ? "Cancel" : "Close")</button>
+        <button @onclick="OnClose">@(_result is null ? "Cancel" : "Close")</button>
     </div>
 </Dialog>
 
@@ -84,55 +52,25 @@
     [Parameter] public IReadOnlyList<(Guid TitleId, string System)>? Versions { get; set; }
 
     private Guid _titleId;
-    private DownloadSearchResult? _result;
-    private DownloadInfo? _fetched;
+    private TitleFetch? _result;
     private bool _fetching;
-    private string? _error;
 
     protected override Task OnInitializedAsync()
     {
         _titleId = TitleId;
-        return SearchAsync();
+        return Versions is { Count: > 1 } ? Task.CompletedTask : FetchAsync();
     }
 
-    private Task PickAsync(Guid titleId)
-    {
-        if (titleId == _titleId)
-            return Task.CompletedTask;
-        _titleId = titleId;
-        _result = null;
-        _error = null;
-        return SearchAsync();
-    }
-
-    private async Task SearchAsync()
-    {
-        var titleId = _titleId;
-        DownloadSearchResult result;
-        try
-        {
-            result = await Api.SearchDownloadsAsync(titleId, titleId == TitleId ? DumpId : null);
-        }
-        catch (Exception e) when (e is RomdexApiException or HttpRequestException)
-        {
-            result = new DownloadSearchResult([], [$"Couldn't search: {e.Message}"]);
-        }
-        // Another system may have been picked while this one was searched for.
-        if (titleId == _titleId)
-            _result = result;
-    }
-
-    private async Task FetchAsync(DownloadOffer offer)
+    private async Task FetchAsync()
     {
         _fetching = true;
-        _error = null;
         try
         {
-            _fetched = await Api.StartDownloadAsync(new StartDownload(_titleId, offer.PluginId, offer.Candidate, _titleId == TitleId ? DumpId : null));
+            _result = await Api.FetchTitleAsync(_titleId, _titleId == TitleId ? DumpId : null);
         }
         catch (Exception e) when (e is RomdexApiException or HttpRequestException)
         {
-            _error = $"Couldn't get it: {e.Message}";
+            _result = new TitleFetch(null, [$"Couldn't get it: {e.Message}"]);
         }
         finally
         {
