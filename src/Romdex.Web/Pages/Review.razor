@@ -111,6 +111,8 @@ else
                     aria-expanded="@(_filterOpen ? "true" : "false")" @onclick="() => _filterOpen = !_filterOpen">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6" /><path d="M20 20l-4.5-4.5" /></svg>
             </button>
+            <SortMenu Options="Sorts" Value="@Sort.Key" Descending="Sort.Descending" DirectionHint="@(Sort.Descending ? "Reverse: reversed now" : "Reverse the order")"
+                      OnChange="SortByAsync" OnReverse="ReverseAsync" />
             <span class="spacer"></span>
             @switch (Tab)
             {
@@ -471,7 +473,11 @@ else
 
     public void Dispose() => Nav.LocationChanged -= OnLocationChanged;
 
-    protected override Task OnInitializedAsync() => LoadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSortsAsync();
+        await LoadAsync();
+    }
 
     private string? _revealed;
 
@@ -510,10 +516,10 @@ else
             switch (tab)
             {
                 case Incomplete:
-                    _dumps = await Api.ListIncompleteAsync();
+                    _dumps = await DumpsAsync(0);
                     break;
                 case CouldntFetch:
-                    _couldntFetch = await Api.ListCouldntFetchAsync();
+                    _couldntFetch = await FetchesAsync(0);
                     break;
                 default:
                     _files = await FilesAsync(tab, 0);
@@ -533,24 +539,90 @@ else
         }
     }
 
-    private Task<ReviewFilePage> FilesAsync(string tab, int skip) => tab switch
+    private Task<ReviewFilePage> FilesAsync(string tab, int skip)
     {
-        BadDumps => Api.ListBadDumpsAsync(skip),
-        Outdated => Api.ListOutdatedAsync(skip),
-        Corrupted => Api.ListCorruptedAsync(skip),
-        _ => Api.ListUnmatchedAsync(skip),
+        var (sort, descending) = SortOf(tab);
+        return tab switch
+        {
+            BadDumps => Api.ListBadDumpsAsync(skip, sort: sort, descending: descending),
+            Outdated => Api.ListOutdatedAsync(skip, sort: sort, descending: descending),
+            Corrupted => Api.ListCorruptedAsync(skip, sort: sort, descending: descending),
+            _ => Api.ListUnmatchedAsync(skip, sort: sort, descending: descending),
+        };
+    }
+
+    private Task<ReviewDumpPage> DumpsAsync(int skip) => Api.ListIncompleteAsync(skip, sort: SortOf(Incomplete).Key, descending: SortOf(Incomplete).Descending);
+
+    private Task<DownloadsPage> FetchesAsync(int skip) => Api.ListCouldntFetchAsync(skip, sort: SortOf(CouldntFetch).Key, descending: SortOf(CouldntFetch).Descending);
+
+    // ---- Sorting: each tab's own, kept in this browser ----
+
+    private readonly Dictionary<string, (string Key, bool Descending)> _sorts = [];
+
+    private IReadOnlyList<(string Key, string Label)> Sorts => Tab switch
+    {
+        Incomplete => [("name", "Name"), ("system", "System"), ("missing", "Files missing")],
+        CouldntFetch => [("date", "Date"), ("name", "Name")],
+        _ => [("path", "Path"), ("name", "Name"), ("size", "Size"), ("modified", "Last changed")],
     };
+
+    private (string Key, bool Descending) Sort => SortOf(Tab);
+
+    private (string Key, bool Descending) SortOf(string tab) =>
+        _sorts.TryGetValue(tab, out var sort) ? sort : tab switch { Incomplete => ("name", false), CouldntFetch => ("date", true), _ => ("path", false) };
+
+    private async Task SortByAsync(string key)
+    {
+        // Dates and sizes start biggest and newest first, names and paths from A.
+        _sorts[Tab] = (key, key is "date" or "size" or "modified");
+        await SaveSortAsync();
+    }
+
+    private async Task ReverseAsync()
+    {
+        _sorts[Tab] = (Sort.Key, !Sort.Descending);
+        await SaveSortAsync();
+    }
+
+    private async Task SaveSortAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("localStorage.setItem", $"romdex.review.{Tab}.sort", $"{Sort.Key}{(Sort.Descending ? ":desc" : "")}");
+        }
+        catch (JSException)
+        {
+            // Storage is turned off in this browser: the sort lasts as long as the page.
+        }
+        await LoadAsync();
+    }
+
+    private async Task LoadSortsAsync()
+    {
+        foreach (var tab in new[] { Matching, BadDumps, Outdated, Incomplete, Corrupted, CouldntFetch })
+        {
+            try
+            {
+                if (await JS.InvokeAsync<string?>("localStorage.getItem", $"romdex.review.{tab}.sort") is { Length: > 0 } saved)
+                    _sorts[tab] = (saved.Split(':')[0], saved.EndsWith(":desc"));
+            }
+            catch (JSException)
+            {
+                return;
+            }
+        }
+    }
 
     private async Task MoreAsync()
     {
         switch (Tab)
         {
             case Incomplete when _dumps is not null:
-                var dumps = await Api.ListIncompleteAsync(_dumps.Items.Count);
+                var dumps = await DumpsAsync(_dumps.Items.Count);
                 _dumps = _dumps with { Items = [.. _dumps.Items, .. dumps.Items], Total = dumps.Total };
                 break;
             case CouldntFetch when _couldntFetch is not null:
-                var more = await Api.ListCouldntFetchAsync(_couldntFetch.Items.Count);
+                var more = await FetchesAsync(_couldntFetch.Items.Count);
                 _couldntFetch = _couldntFetch with { Items = [.. _couldntFetch.Items, .. more.Items], Total = more.Total };
                 break;
             default:

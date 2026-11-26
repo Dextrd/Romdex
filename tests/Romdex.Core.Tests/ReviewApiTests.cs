@@ -160,6 +160,23 @@ public sealed class ReviewApiTests : IDisposable
     }
 
     [Fact]
+    public async Task Each_tab_sorts_as_asked()
+    {
+        _dats.Dump(Handheld, "Anything (USA)", [".gb"]);
+        _dats.WriteDats();
+        _dats.Put("Handheld/a/zebra.gb", new byte[300]);
+        _dats.Put("Handheld/b/apple.gb", new byte[100]);
+        _dats.Put("Handheld/c/mango.gb", new byte[200]);
+        await RefreshAndScanAsync();
+
+        Assert.Equal(["Handheld/a/zebra.gb", "Handheld/b/apple.gb", "Handheld/c/mango.gb"], (await _api.ListUnmatchedAsync()).Items.Select(f => f.Path));
+        Assert.Equal(["apple.gb", "mango.gb", "zebra.gb"], (await _api.ListUnmatchedAsync(sort: "name")).Items.Select(f => Path.GetFileName(f.Path)));
+        Assert.Equal([300L, 200, 100], (await _api.ListUnmatchedAsync(sort: "size", descending: true)).Items.Select(f => f.Size));
+        // Paged, the order holds across pages.
+        Assert.Equal("mango.gb", Path.GetFileName(Assert.Single((await _api.ListUnmatchedAsync(skip: 1, take: 1, sort: "name")).Items).Path));
+    }
+
+    [Fact]
     public async Task An_incomplete_dump_kept_as_it_is_counts_as_whole_until_its_let_go()
     {
         var disc = _dats.Dump(Disc, "Half Track (Europe)", [".cue", ".bin", ".bin"]);

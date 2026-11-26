@@ -20,22 +20,22 @@ public static class ReviewEndpoints
         review.MapGet("", (ReviewService service, CancellationToken ct) => service.SummarizeAsync(ct))
             .WithName("GetReviewSummary").WithSummary("How much waits under each of Review's tabs, and how many files wait for a tool to read them.");
 
-        review.MapGet("/bad-dumps", (ReviewService service, int? skip, int? take, CancellationToken ct) => service.BadDumpsAsync(skip ?? 0, take ?? 100, ct))
+        review.MapGet("/bad-dumps", (ReviewService service, int? skip, int? take, string? sort, bool? descending, CancellationToken ct) => service.BadDumpsAsync(skip ?? 0, take ?? 100, ct, sort, descending ?? false))
             .WithName("ListBadDumps").WithSummary("Files, and files inside archives, named as a dump's file is but with other hashes: likely bad or modified copies of it.");
 
-        review.MapGet("/matching", (ReviewService service, int? skip, int? take, CancellationToken ct) => service.MatchingAsync(skip ?? 0, take ?? 100, ct))
+        review.MapGet("/matching", (ReviewService service, int? skip, int? take, string? sort, bool? descending, CancellationToken ct) => service.MatchingAsync(skip ?? 0, take ?? 100, ct, sort, descending ?? false))
             .WithName("ListUnmatched").WithSummary("Files, and files inside archives, that match nothing and are named as nothing is, with arrivals that match nothing.");
 
-        review.MapGet("/outdated", (ReviewService service, int? skip, int? take, CancellationToken ct) => service.OutdatedAsync(skip ?? 0, take ?? 100, ct))
+        review.MapGet("/outdated", (ReviewService service, int? skip, int? take, string? sort, bool? descending, CancellationToken ct) => service.OutdatedAsync(skip ?? 0, take ?? 100, ct, sort, descending ?? false))
             .WithName("ListOutdated").WithSummary("Files that matched a dump until a new DAT changed it, with the match they had.");
 
-        review.MapGet("/corrupted", (ReviewService service, int? skip, int? take, CancellationToken ct) => service.CorruptedAsync(skip ?? 0, take ?? 100, ct))
+        review.MapGet("/corrupted", (ReviewService service, int? skip, int? take, string? sort, bool? descending, CancellationToken ct) => service.CorruptedAsync(skip ?? 0, take ?? 100, ct, sort, descending ?? false))
             .WithName("ListCorrupted").WithSummary("Files that couldn't be read, other than for want of a tool, with the dump each one's name suggests, and arrivals none of whose files could be.");
 
-        review.MapGet("/incomplete", (ReviewService service, int? skip, int? take, CancellationToken ct) => service.IncompletePageAsync(skip ?? 0, take ?? 100, ct))
+        review.MapGet("/incomplete", (ReviewService service, int? skip, int? take, string? sort, bool? descending, CancellationToken ct) => service.IncompletePageAsync(skip ?? 0, take ?? 100, ct, sort, descending ?? false))
             .WithName("ListIncomplete").WithSummary("Dumps the library has some files of but not all, with which are missing, and incomplete arrivals.");
 
-        review.MapGet("/couldnt-fetch", (ReviewService service, int? skip, int? take, CancellationToken ct) => service.CouldntFetchAsync(skip ?? 0, take ?? 50, ct))
+        review.MapGet("/couldnt-fetch", (ReviewService service, int? skip, int? take, string? sort, bool? descending, CancellationToken ct) => service.CouldntFetchAsync(skip ?? 0, take ?? 50, ct, sort, descending ?? sort != "name"))
             .WithName("ListCouldntFetch").WithSummary("Arrivals that aren't what was asked for, and fetches that failed, newest first.");
 
         review.MapGet("/set-aside", (ReviewService service, bool? hidden, int? skip, int? take, CancellationToken ct) =>

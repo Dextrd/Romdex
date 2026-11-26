@@ -49,17 +49,32 @@ public sealed class ReviewService(RomdexDbContext db, LibraryMatcher matcher, Li
             noTool.Count == 0 ? null : new ToolNotice(noTool.Count, noTool[0].Error!));
     }
 
-    public async Task<ReviewFilePage> BadDumpsAsync(int skip, int take, CancellationToken ct) =>
-        Page((await SortAsync(ct)).BadDumps, skip, take, []);
+    // Each tab's list sorts by: for files, path (the default), name, size or when it last changed; for dumps, name
+    // (the default), system or how many files are missing; for fetches, when (newest first by default) or name.
 
-    public async Task<ReviewFilePage> OutdatedAsync(int skip, int take, CancellationToken ct) =>
-        Page((await SortAsync(ct)).Outdated, skip, take, []);
+    public async Task<ReviewFilePage> BadDumpsAsync(int skip, int take, CancellationToken ct, string? sort = null, bool descending = false) =>
+        Page(Sort((await SortAsync(ct)).BadDumps, sort, descending), skip, take, []);
 
-    public async Task<ReviewFilePage> MatchingAsync(int skip, int take, CancellationToken ct) =>
-        Page((await SortAsync(ct)).Matching, skip, take, await HeldAsync(d => d.HeldFor == HoldReason.Unmatched, ct));
+    public async Task<ReviewFilePage> OutdatedAsync(int skip, int take, CancellationToken ct, string? sort = null, bool descending = false) =>
+        Page(Sort((await SortAsync(ct)).Outdated, sort, descending), skip, take, []);
 
-    public async Task<ReviewFilePage> CorruptedAsync(int skip, int take, CancellationToken ct) =>
-        Page((await UnreadableAsync(ct)).Corrupted, skip, take, await HeldAsync(d => d.HeldFor == HoldReason.Unreadable, ct));
+    public async Task<ReviewFilePage> MatchingAsync(int skip, int take, CancellationToken ct, string? sort = null, bool descending = false) =>
+        Page(Sort((await SortAsync(ct)).Matching, sort, descending), skip, take, await HeldAsync(d => d.HeldFor == HoldReason.Unmatched, ct));
+
+    public async Task<ReviewFilePage> CorruptedAsync(int skip, int take, CancellationToken ct, string? sort = null, bool descending = false) =>
+        Page(Sort((await UnreadableAsync(ct)).Corrupted, sort, descending), skip, take, await HeldAsync(d => d.HeldFor == HoldReason.Unreadable, ct));
+
+    private static List<ReviewFile> Sort(List<ReviewFile> files, string? sort, bool descending)
+    {
+        IEnumerable<ReviewFile> ordered = sort switch
+        {
+            "name" => files.OrderBy(f => Path.GetFileName(f.Entry ?? f.Path), StringComparer.OrdinalIgnoreCase).ThenBy(f => f.Path, StringComparer.Ordinal),
+            "size" => files.OrderBy(f => f.Size).ThenBy(f => f.Path, StringComparer.Ordinal),
+            "modified" => files.OrderBy(f => f.ModifiedAt).ThenBy(f => f.Path, StringComparer.Ordinal),
+            _ => files.OrderBy(f => f.Path, StringComparer.Ordinal).ThenBy(f => f.Entry, StringComparer.Ordinal),
+        };
+        return (descending ? ordered.Reverse() : ordered).ToList();
+    }
 
     /// <summary>Files someone deferred, or with <paramref name="hidden"/>, hid: one a file, newest decision first.</summary>
     public async Task<ReviewFilePage> SetAsideAsync(bool hidden, int skip, int take, CancellationToken ct)
@@ -72,20 +87,29 @@ public sealed class ReviewService(RomdexDbContext db, LibraryMatcher matcher, Li
             total, []);
     }
 
-    public async Task<ReviewDumpPage> IncompletePageAsync(int skip, int take, CancellationToken ct)
+    public async Task<ReviewDumpPage> IncompletePageAsync(int skip, int take, CancellationToken ct, string? sort = null, bool descending = false)
     {
-        var all = await IncompleteAsync(ct);
+        IEnumerable<ReviewDump> ordered = sort switch
+        {
+            "system" => (await IncompleteAsync(ct)).OrderBy(d => d.System, StringComparer.Ordinal).ThenBy(d => d.Dump.Name, StringComparer.Ordinal),
+            "missing" => (await IncompleteAsync(ct)).OrderBy(d => d.Missing.Count).ThenBy(d => d.Dump.Name, StringComparer.Ordinal),
+            _ => (await IncompleteAsync(ct)).OrderBy(d => d.Dump.Name, StringComparer.Ordinal),
+        };
+        var all = (descending ? ordered.Reverse() : ordered).ToList();
         return new ReviewDumpPage(all.Skip(Math.Max(0, skip)).Take(Math.Clamp(take, 1, 1000)).ToList(), all.Count,
             await HeldAsync(d => d.HeldFor == HoldReason.Incomplete, ct));
     }
 
     /// <summary>Arrivals that aren't what was asked for, and fetches that failed, newest first.</summary>
-    public async Task<DownloadsPage> CouldntFetchAsync(int skip, int take, CancellationToken ct)
+    public async Task<DownloadsPage> CouldntFetchAsync(int skip, int take, CancellationToken ct, string? sort = null, bool descending = true)
     {
         var items = db.Downloads.AsNoTracking().Where(d => d.State == DownloadState.Failed || d.State == DownloadState.NeedsReview
             && (d.HeldFor == HoldReason.NotAskedFor || d.HeldFor == HoldReason.Alternative || d.HeldFor == null));
         var total = await items.CountAsync(ct);
-        var page = await items.OrderByDescending(d => d.UpdatedAt).Skip(Math.Max(0, skip)).Take(Math.Clamp(take, 1, 500)).Include(d => d.Dumps).ToListAsync(ct);
+        var ordered = sort == "name"
+            ? descending ? items.OrderByDescending(d => d.Name) : items.OrderBy(d => d.Name)
+            : descending ? items.OrderByDescending(d => d.UpdatedAt) : items.OrderBy(d => d.UpdatedAt);
+        var page = await ordered.Skip(Math.Max(0, skip)).Take(Math.Clamp(take, 1, 500)).Include(d => d.Dumps).ToListAsync(ct);
         return new DownloadsPage(await Api.DownloadEndpoints.InfoAsync(db, page, ct), total, total);
     }
 

@@ -262,26 +262,37 @@ public sealed class RomdexClient(HttpClient http)
     public async Task<ReviewSummary> GetReviewSummaryAsync(CancellationToken ct = default) =>
         (await http.GetFromJsonAsync<ReviewSummary>($"{Api}/review", RomdexJson.Options, ct))!;
 
-    public Task<ReviewFilePage> ListBadDumpsAsync(int skip = 0, int take = 100, CancellationToken ct = default) => ReviewFilesAsync("bad-dumps", skip, take, ct);
+    // Files sort by path (the default), name, size or modified; dumps by name (the default), system or missing; fetches
+    // by date (newest first unless told otherwise) or name.
 
-    public Task<ReviewFilePage> ListUnmatchedAsync(int skip = 0, int take = 100, CancellationToken ct = default) => ReviewFilesAsync("matching", skip, take, ct);
+    public Task<ReviewFilePage> ListBadDumpsAsync(int skip = 0, int take = 100, string? sort = null, bool descending = false, CancellationToken ct = default) =>
+        ReviewFilesAsync("bad-dumps", skip, take, sort, descending, ct);
 
-    public Task<ReviewFilePage> ListOutdatedAsync(int skip = 0, int take = 100, CancellationToken ct = default) => ReviewFilesAsync("outdated", skip, take, ct);
+    public Task<ReviewFilePage> ListUnmatchedAsync(int skip = 0, int take = 100, string? sort = null, bool descending = false, CancellationToken ct = default) =>
+        ReviewFilesAsync("matching", skip, take, sort, descending, ct);
 
-    public Task<ReviewFilePage> ListCorruptedAsync(int skip = 0, int take = 100, CancellationToken ct = default) => ReviewFilesAsync("corrupted", skip, take, ct);
+    public Task<ReviewFilePage> ListOutdatedAsync(int skip = 0, int take = 100, string? sort = null, bool descending = false, CancellationToken ct = default) =>
+        ReviewFilesAsync("outdated", skip, take, sort, descending, ct);
+
+    public Task<ReviewFilePage> ListCorruptedAsync(int skip = 0, int take = 100, string? sort = null, bool descending = false, CancellationToken ct = default) =>
+        ReviewFilesAsync("corrupted", skip, take, sort, descending, ct);
 
     /// <summary>Files someone deferred, or with <paramref name="hidden"/>, hid.</summary>
     public async Task<ReviewFilePage> ListSetAsideAsync(bool hidden = false, int skip = 0, int take = 100, CancellationToken ct = default) =>
         (await http.GetFromJsonAsync<ReviewFilePage>($"{Api}/review/set-aside?hidden={(hidden ? "true" : "false")}&skip={skip}&take={take}", RomdexJson.Options, ct))!;
 
-    public async Task<ReviewDumpPage> ListIncompleteAsync(int skip = 0, int take = 100, CancellationToken ct = default) =>
-        (await http.GetFromJsonAsync<ReviewDumpPage>($"{Api}/review/incomplete?skip={skip}&take={take}", RomdexJson.Options, ct))!;
+    public async Task<ReviewDumpPage> ListIncompleteAsync(int skip = 0, int take = 100, string? sort = null, bool descending = false, CancellationToken ct = default) =>
+        (await http.GetFromJsonAsync<ReviewDumpPage>($"{Api}/review/incomplete?skip={skip}&take={take}{Sorted(sort, descending)}", RomdexJson.Options, ct))!;
 
-    public async Task<DownloadsPage> ListCouldntFetchAsync(int skip = 0, int take = 50, CancellationToken ct = default) =>
-        (await http.GetFromJsonAsync<DownloadsPage>($"{Api}/review/couldnt-fetch?skip={skip}&take={take}", RomdexJson.Options, ct))!;
+    public async Task<DownloadsPage> ListCouldntFetchAsync(int skip = 0, int take = 50, string? sort = null, bool? descending = null, CancellationToken ct = default) =>
+        (await http.GetFromJsonAsync<DownloadsPage>($"{Api}/review/couldnt-fetch?skip={skip}&take={take}{(sort is null ? "" : $"&sort={sort}")}{(descending is { } d ? $"&descending={(d ? "true" : "false")}" : "")}",
+            RomdexJson.Options, ct))!;
 
-    private async Task<ReviewFilePage> ReviewFilesAsync(string tab, int skip, int take, CancellationToken ct) =>
-        (await http.GetFromJsonAsync<ReviewFilePage>($"{Api}/review/{tab}?skip={skip}&take={take}", RomdexJson.Options, ct))!;
+    private async Task<ReviewFilePage> ReviewFilesAsync(string tab, int skip, int take, string? sort, bool descending, CancellationToken ct) =>
+        (await http.GetFromJsonAsync<ReviewFilePage>($"{Api}/review/{tab}?skip={skip}&take={take}{Sorted(sort, descending)}", RomdexJson.Options, ct))!;
+
+    private static string Sorted(string? sort, bool descending) =>
+        (sort is null ? "" : $"&sort={Uri.EscapeDataString(sort)}") + (descending ? "&descending=true" : "");
 
     public Task DeferFileAsync(Guid fileId, CancellationToken ct = default) => PostAsync($"{Api}/review/files/{fileId}/defer", null, ct);
 
