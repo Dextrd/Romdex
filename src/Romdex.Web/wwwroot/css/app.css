@@ -15,6 +15,8 @@
     --covered-bg: #e2edf7;
     --missing: #a23b2d;
     --missing-bg: #f8e4e1;
+    /* Buttons that delete or can't be undone, outlined in it. */
+    --danger: #8f1d14;
     /* Fills, for the ownership meters and legend: brighter than the text colours, which have to be read on their backgrounds. */
     --owned-fill: #2e9e63;
     --partial-fill: #e5a32b;
@@ -48,6 +50,7 @@
     --covered-bg: #18293a;
     --missing: #f08a7c;
     --missing-bg: #3a1d19;
+    --danger: #e5534b;
     --owned-fill: #5cc890;
     --partial-fill: #e8b453;
     --covered-fill: #78aee0;
@@ -83,6 +86,7 @@
     --covered-bg: #d6e9f7;
     --missing: #93306a;
     --missing-bg: #f6dcec;
+    --danger: #7a0d0d;
     --owned-fill: #009e73;
     --partial-fill: #e69f00;
     --covered-fill: #0072b2;
@@ -101,6 +105,7 @@
     --covered-bg: #0b2a40;
     --missing: #f08ccb;
     --missing-bg: #3d1530;
+    --danger: #ff6b63;
     --owned-fill: #2fc597;
     --partial-fill: #f2a91a;
     --covered-fill: #3fa3e8;
@@ -1021,8 +1026,8 @@ a.plain:hover { color: var(--accent); }
 .format-choices label > span { display: flex; flex-direction: column; }
 .format-choices select { width: 100%; }
 @media (max-width: 480px) { .format-choices label { grid-template-columns: 1fr; gap: .25rem; } }
-button.danger { background: var(--missing); border-color: var(--missing); color: #fff; }
-button.danger:hover:not(:disabled) { filter: brightness(1.1); }
+button.danger { background: transparent; border: 1.5px solid var(--danger); color: var(--danger); font-weight: 600; }
+button.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 12%, transparent); }
 button .spinner { width: .85rem; height: .85rem; vertical-align: -2px; margin-right: .3rem; }
 
 /* A remove button in the corner of a library tile, shown on hover or focus. */

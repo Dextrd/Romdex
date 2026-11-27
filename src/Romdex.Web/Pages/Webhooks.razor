@@ -317,5 +317,5 @@ else
         }
     }
 
-    private async Task CopyAsync(string text) => await Js.InvokeVoidAsync("navigator.clipboard.writeText", text);
+    private async Task CopyAsync(string text) => await Js.InvokeAsync<bool>("romdexCopy", text);
 }

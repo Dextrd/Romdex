@@ -286,7 +286,7 @@ else
                 <IconButton Icon="power" On="plugin.Enabled" Title="@(plugin.Enabled ? "On: click to turn it off" : "Off: click to turn it on")"
                             Disabled="_busy" OnClick="() => SetEnabledAsync(plugin, !plugin.Enabled)" />
                 <IconButton Icon="test" Title="Test the connection" Disabled="_busy" OnClick="() => TestAsync(plugin)" />
-                @if (plugin.Manifest is not { UsesSettingsOf: not null })
+                @if (plugin.Manifest is not { UsesSettingsOf: not null } && Configurable(plugin))
                 {
                     <IconButton Icon="settings" Title="Settings" OnClick="() => Edit(plugin)" />
                 }
@@ -296,6 +296,13 @@ else
     };
 
     private static string Ordinal(int n) => n switch { 1 => "first", 2 => "second", 3 => "third", _ => $"{n}th" };
+
+    // Settings to set or checks to run; a plugin with neither has nothing to open.
+    private static bool Configurable(PluginInfo plugin) =>
+        plugin.Manifest is not { } manifest
+        || manifest.Checks is { Count: > 0 }
+        || manifest.SettingsSchema is { ValueKind: System.Text.Json.JsonValueKind.Object } schema
+           && schema.TryGetProperty("properties", out var properties) && properties.EnumerateObject().Any();
 
     private void Edit(PluginInfo plugin)
     {

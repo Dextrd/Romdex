@@ -225,6 +225,5 @@ else
         }
     }
 
-    // Melodex's copies over plain http too (romdexCopy), which comes with the polish (docs/plans/parity.md, 9).
-    private async Task CopyAsync(string text) => await Js.InvokeVoidAsync("navigator.clipboard.writeText", text);
+    private async Task CopyAsync(string text) => await Js.InvokeAsync<bool>("romdexCopy", text);
 }
