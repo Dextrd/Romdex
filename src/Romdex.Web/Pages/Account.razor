@@ -1,11 +1,12 @@
+@page "/settings/account"
 @page "/account"
+@layout SettingsLayout
 @inject RomdexClient Api
 @inject AuthState Auth
 
 <PageTitle>Your account · Romdex</PageTitle>
 
-@* Your own username and password, what you may do, and signing out. *@
-<h1>Your account</h1>
+@* Your own username and password, and what you may do, then signing out at the foot. It heads Settings, as Melodex's (#238). *@
 @if (Auth.Status is { } status)
 {
     <p class="muted">
@@ -44,11 +45,18 @@
                 <button class="primary" disabled="@(_busy || _currentPassword.Length == 0)" @onclick="SaveAsync">Save</button>
                 @if (_saved) { <span class="muted small">Saved.</span> }
                 @if (_error is not null) { <span class="error small">@_error</span> }
-                <span class="spacer"></span>
-                <button @onclick="SignOutAsync">Sign out</button>
             </div>
         </div>
     </section>
+
+    <h2>Sign out</h2>
+    <div class="card settings-card">
+        <div class="setting-line">
+            <span>Sign out of Romdex in this browser.</span>
+            <span class="spacer"></span>
+            <button class="danger" @onclick="SignOutAsync">Sign out</button>
+        </div>
+    </div>
 }
 
 @code {

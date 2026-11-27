@@ -1,0 +1,109 @@
+@implements IAsyncDisposable
+
+@*
+    Saves a settings page as it changes, without a Save button. A change waits a moment for the next, so stepping a
+    number or typing saves once, and leaving the page saves what's still waiting. It says when it's saving and when it's
+    saved, and why it couldn't, such as a value the server turned down, with a way to try again.
+*@
+@if (_state != State.Idle)
+{
+    <div class="autosave small @(_state == State.Failed ? "failed" : "")" role="status" aria-live="polite">
+        @switch (_state)
+        {
+            case State.Saving:
+                <span class="spinner"></span><span>Saving…</span>
+                break;
+            case State.Saved:
+                <span>✓ Saved</span>
+                break;
+            case State.Failed:
+                <span class="ellipsis" title="@_error">Couldn't save: @_error</span>
+                <button class="link small" @onclick="SaveNowAsync">Try again</button>
+                break;
+        }
+    </div>
+}
+
+@code {
+    /// <summary>Saves everything on the page. Throws <see cref="RomdexApiException"/> or <see cref="HttpRequestException"/> to say why it couldn't.</summary>
+    [Parameter, EditorRequired] public Func<Task> Save { get; set; } = null!;
+
+    private enum State { Idle, Saving, Saved, Failed }
+
+    private static readonly TimeSpan Wait = TimeSpan.FromMilliseconds(700), ShowSaved = TimeSpan.FromSeconds(2);
+
+    private State _state;
+    private string? _error;
+    private bool _pending, _saving;
+    private CancellationTokenSource? _waiting;
+
+    /// <summary>Something changed: it's saved in a moment, unless something else changes first.</summary>
+    public void Changed()
+    {
+        _pending = true;
+        _waiting?.Cancel();
+        var waiting = _waiting = new CancellationTokenSource();
+        _ = Task.Delay(Wait, waiting.Token).ContinueWith(t =>
+        {
+            if (!t.IsCanceled)
+                _ = InvokeAsync(SaveNowAsync);
+        }, TaskScheduler.Default);
+    }
+
+    /// <summary>Saves now whatever is waiting, or tries again what failed.</summary>
+    public async Task SaveNowAsync()
+    {
+        _waiting?.Cancel();
+        if (_saving)
+        {
+            // Saved again once this one's done, so the last change isn't lost.
+            _pending = true;
+            return;
+        }
+        _saving = true;
+        _pending = false;
+        _state = State.Saving;
+        StateHasChanged();
+        try
+        {
+            await Save();
+            _state = State.Saved;
+            _error = null;
+        }
+        catch (Exception e) when (e is RomdexApiException or HttpRequestException)
+        {
+            _state = State.Failed;
+            _error = e.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+        StateHasChanged();
+        if (_pending)
+        {
+            await SaveNowAsync();
+            return;
+        }
+        if (_state == State.Saved)
+        {
+            await Task.Delay(ShowSaved);
+            if (_state == State.Saved && !_saving)
+            {
+                _state = State.Idle;
+                StateHasChanged();
+            }
+        }
+    }
+
+    // Leaving the page saves what's still waiting.
+    public async ValueTask DisposeAsync()
+    {
+        _waiting?.Cancel();
+        if (_pending && !_saving)
+        {
+            try { await Save(); }
+            catch (Exception e) when (e is RomdexApiException or HttpRequestException) { }
+        }
+    }
+}

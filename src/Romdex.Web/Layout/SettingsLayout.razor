@@ -3,32 +3,65 @@
 @inject AuthState Auth
 @inject NavigationManager Nav
 
-@* Settings, the log, plugins, users, API access and appearance, as sections listed down the left (across the top on narrow screens), each shown to those who may use it. *@
-<h1>Settings</h1>
+@*
+    Settings (#238): your own account first, as a large button with your initial and name, then the rest in sections,
+    each page shown to those who may use it. Down the left, or across the top on narrow
+    screens. Only the page beside them changes as you go between them.
+*@
+<h1 class="settings-title">Settings</h1>
 <div class="settings-page">
     <nav class="settings-nav" aria-label="Settings sections">
+        @if (Auth.Status is { Username: { } name } status)
+        {
+            <a href="settings/account" class="settings-account @(OnAccount ? "active" : "")" aria-current="@(OnAccount ? "page" : null)">
+                <span class="avatar" aria-hidden="true">@Initial(name)</span>
+                <span class="settings-account-text">
+                    <strong class="ellipsis">@name</strong>
+                    <span class="muted small">@(status.IsAdmin ? "Admin" : "Your account")</span>
+                </span>
+            </a>
+        }
         @if (Auth.May(UserPermissions.Settings))
         {
-            <NavLink href="settings" Match="NavLinkMatch.All">General</NavLink>
-            <NavLink href="settings/log">Log</NavLink>
-            <NavLink href="settings/plugins">Plugins</NavLink>
+            <div class="settings-group" role="group" aria-labelledby="settings-library">
+                <h2 id="settings-library">Library</h2>
+                <NavLink href="settings" Match="NavLinkMatch.All">Library</NavLink>
+                @* Romdex's own: Fetching and Scheduled tasks join these as they're brought over from Melodex. *@
+                <NavLink href="settings/regions">Regions</NavLink>
+            </div>
         }
-        @if (Auth.May(UserPermissions.Download))
-        {
-            <NavLink href="settings/regions">Regions</NavLink>
-        }
-        @if (Auth.May(UserPermissions.Users))
-        {
-            <NavLink href="settings/users">Users</NavLink>
-        }
-        @if (Auth.May(UserPermissions.Keys))
-        {
-            <NavLink href="settings/api">API</NavLink>
-            <NavLink href="settings/webhooks">Webhooks</NavLink>
-        }
-        <NavLink href="settings/appearance">Appearance</NavLink>
-        <NavLink href="settings/help">Help</NavLink>
-        <NavLink href="settings/about">About</NavLink>
+        <div class="settings-group" role="group" aria-labelledby="settings-web-app">
+            <h2 id="settings-web-app">Web app</h2>
+            <NavLink href="settings/appearance">Appearance</NavLink>
+        </div>
+        <div class="settings-group" role="group" aria-labelledby="settings-server">
+            <h2 id="settings-server">Server</h2>
+            @if (Auth.May(UserPermissions.Settings))
+            {
+                <NavLink href="settings/plugins">Plugins</NavLink>
+            }
+            @if (Auth.May(UserPermissions.Users))
+            {
+                <NavLink href="settings/users">Users</NavLink>
+            }
+            @if (Auth.May(UserPermissions.Keys))
+            {
+                <NavLink href="settings/api">API keys</NavLink>
+            }
+            @if (Auth.May(UserPermissions.Keys))
+            {
+                <NavLink href="settings/webhooks">Webhooks</NavLink>
+            }
+            @if (Auth.May(UserPermissions.Settings))
+            {
+                <NavLink href="settings/log">Log</NavLink>
+            }
+        </div>
+        <div class="settings-group" role="group" aria-labelledby="settings-romdex">
+            <h2 id="settings-romdex">Romdex</h2>
+            <NavLink href="settings/help">Help</NavLink>
+            <NavLink href="settings/about">About</NavLink>
+        </div>
     </nav>
     <div class="settings-body">
         @if (Needed is null || Auth.May(Needed))
@@ -43,14 +76,22 @@
 </div>
 
 @code {
-    // What the open tab needs: users and keys have tabs of their own, appearance is for everyone, and the rest are settings.
-    private string? Needed => Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#')[0].TrimEnd('/') switch
+    private string Path => Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#')[0].TrimEnd('/');
+
+    private bool OnAccount => Path is "settings/account" or "account";
+
+    // What the open page needs: users and webhooks have pages of their own, everyone has their own account and look,
+    // regions are for who may get games, and the rest are settings. (Everyone's own API keys come over from Melodex next.)
+    private string? Needed => Path switch
     {
         "settings/users" or "settings/security" => UserPermissions.Users,
-        "settings/api" or "settings/webhooks" => UserPermissions.Keys,
-        "settings/appearance" or "settings/about" => null,
+        "settings/webhooks" => UserPermissions.Keys,
+        "settings/api" => UserPermissions.Keys,
         "settings/regions" => UserPermissions.Download,
+        "settings/account" or "account" or "settings/appearance" or "settings/about" => null,
         var help when help == "settings/help" || help.StartsWith("settings/help/") => null,
         _ => UserPermissions.Settings,
     };
+
+    private static string Initial(string name) => name.Trim() is { Length: > 0 } trimmed ? char.ToUpperInvariant(trimmed[0]).ToString() : "?";
 }

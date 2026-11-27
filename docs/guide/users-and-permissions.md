@@ -27,7 +27,7 @@ Someone who just plays needs Browse and Play. Buttons for what someone may not d
 
 ## API keys
 
-Apps use a key from **Settings → API**, sent in the `X-Api-Key` header. A key belongs to whoever made it and can never
+Apps use a key from **Settings → API keys**, sent in the `X-Api-Key` header. A key belongs to whoever made it and can never
 do more than they may: if their permissions shrink, or they're removed, so does the key. **Everything you may do**
 gives a key all its owner's permissions, now and later. The API reference is at `/api/docs`.
 

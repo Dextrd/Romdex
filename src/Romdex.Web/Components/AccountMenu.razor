@@ -19,7 +19,7 @@
                     <span class="muted small">@(status.IsAdmin ? "Admin" : "Signed in")</span>
                 </div>
                 <hr />
-                <a role="menuitem" href="account" @onclick="() => _open = false">Your account</a>
+                <a role="menuitem" href="settings/account" @onclick="() => _open = false">Your account</a>
                 @if (status.May(UserPermissions.Users))
                 {
                     <a role="menuitem" href="settings/users" @onclick="() => _open = false">Users</a>

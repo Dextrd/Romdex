@@ -1,0 +1,34 @@
+@inject RomdexClient Api
+
+@* How far back the Log page goes, and how long its files are kept: at the top of the Log page, as Melodex's (#238). *@
+@if (_log is not null)
+{
+    <div class="card settings-card">
+        <div class="setting-line">
+            Show the last
+            <NumberField Min="1" Max="90" Label="Days" Value="_log.MemoryDays" ValueChanged="n => SetLog(_log with { MemoryDays = n })" />
+            days on the Log page
+        </div>
+        <div class="setting-line">
+            Keep backup files for
+            <NumberField Min="1" Max="3650" Label="Days" Value="_log.FileDays" ValueChanged="n => SetLog(_log with { FileDays = n })" />
+            days
+        </div>
+        <div class="muted small">Every entry is written to a file per day under <code>data/logs</code> as it happens, so a restart loses nothing. Older files are deleted.</div>
+    </div>
+
+    <AutoSave @ref="_saver" Save="() => Api.SaveLogSettingsAsync(_log!)" />
+}
+
+@code {
+    private LogSettings? _log;
+    private AutoSave? _saver;
+
+    protected override async Task OnInitializedAsync() => _log = await Api.GetLogSettingsAsync();
+
+    private void SetLog(LogSettings log)
+    {
+        _log = log;
+        _saver?.Changed();
+    }
+}

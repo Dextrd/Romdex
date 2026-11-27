@@ -44,7 +44,7 @@ Open an arrival to see its files' hashes, what each matched, and the plugin's no
 
 ## The library's layout
 
-Under **Settings**, **Library layout** says how the library folder is laid out, so the app you play with finds
+Under **Settings → Library**, **Library format** says how the library folder is laid out, so the app you play with finds
 everything. Whatever Downloads files goes where it says.
 
 - **Layout:** how each system's folder is named, as an app expects:
@@ -89,7 +89,7 @@ These apply to what arrives from then on. Games already in the library move only
 
 ## Formatting the library you have
 
-**Preview formatting**, under **Settings → Library layout**, compares the games in the library with where the layout
+**Preview formatting**, under **Settings → Library → Library format**, compares the games in the library with where the layout
 puts them, and lists every one that would move, and where. On a system's page, **Check the library** does the same for
 its games. Nothing moves until you choose **Move** and confirm.
 
