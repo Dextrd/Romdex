@@ -160,7 +160,7 @@ else
                          ValueChanged="m => Set(_settings with { ArrivalCheckMinutes = m })" />
             @(_settings.ArrivalCheckMinutes == 1 ? "minute" : "minutes")
         </div>
-        <div class="muted small">All day, rather than in a window. <a href="downloads">Downloads</a> can check now.</div>
+        <div class="muted small">All day, rather than in a window. <a href="activity/fetches">Activity → Fetches</a> can check now.</div>
     </div>
 
     <AutoSave @ref="_saver" Save="SaveAsync" />

@@ -8,10 +8,10 @@ bar's menu, and on the Library page, is all of them together.
 Arrivals that wait for you are under the tab their reason belongs to: one that matches nothing under **Matching**, an
 incomplete one under **Incomplete**, one none of whose files could be read under **Corrupted**, and one that isn't the
 game asked for under **Couldn't fetch**. **Retry** identifies one again, such as after a catalogue update; **Reject**
-throws its files away; **Details** opens it on the Downloads page, with its files' hashes and what each matched.
+throws its files away; **Details** opens it under Activity → Fetches, with its files' hashes and what each matched.
 
 Each tab has a filter, and buttons for everything it shows, such as **Defer all**, or **Defer these** once you've
-filtered. Deleting a file takes it out of the library through the igir worker and throws it away; Downloads keeps a
+filtered. Deleting a file takes it out of the library through the igir worker and throws it away; Activity → Fetches keeps a
 note of it. **Send to Downloads** takes a file out of the library to be identified again, such as after you add a DAT.
 
 ## Matching

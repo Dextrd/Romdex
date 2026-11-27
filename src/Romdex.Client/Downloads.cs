@@ -51,7 +51,8 @@ public sealed record DownloadInfo(
     string? Notes,
     DateTime CreatedAt,
     DateTime UpdatedAt,
-    HoldReason? HeldFor = null)
+    HoldReason? HeldFor = null,
+    Guid? RequestId = null)
 {
     /// <summary>Whether it can be accepted: held, with dumps to file.</summary>
     public bool CanAccept => State == DownloadState.NeedsReview && Dumps.Count > 0;

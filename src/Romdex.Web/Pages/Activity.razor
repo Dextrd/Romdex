@@ -1,113 +1,582 @@
 @page "/activity"
+@page "/activity/{Tab}"
 @implements IDisposable
 @inject RomdexClient Api
 @inject ServerEvents Events
+@inject Preferences Prefs
+@inject NavigationManager Nav
+@inject IJSRuntime Js
+@inject AuthState Auth
+@using Microsoft.JSInterop
 
 <PageTitle>Activity · Romdex</PageTitle>
 
+@*
+    What Romdex is doing and has done, in two tabs, as Melodex's: tasks such as scans, formatting and catalogue
+    updates; and fetches, what you asked for and what arrived by itself. Each shows what's recent (still going, or
+    changed in the last hour) or what's earlier.
+*@
 <h1>Activity</h1>
-<p class="muted">What Romdex is doing and has done: scans, DAT updates, downloads and conversions, as each arrives.</p>
+<nav class="page-tabs" aria-label="Activity">
+    @foreach (var (tab, label, count) in Tabs)
+    {
+        <a href="activity/@tab" class="@(Shown == tab ? "active" : null)" aria-current="@(Shown == tab ? "page" : null)">
+            @label@if (count > 0) { <span class="tab-count">@count</span> }
+        </a>
+    }
+</nav>
+
+<p class="muted">
+    @switch (Shown)
+    {
+        case "tasks":
+            <span>Scans, formatting, catalogue updates, covers, and filing what's fetched.</span>
+            break;
+        case "fetches":
+            <span>
+                Games asked for, and what arrived by itself, such as through the inbox folder, newest first. Open one that arrived to see its files'
+                hashes, what each matched, and the retriever's notes. What waits for a decision is under <a href="review">Review</a>.
+            </span>
+            break;
+    }
+</p>
 
 <div class="toolbar">
-    <Segmented T="bool" Value="_activeOnly" Options="Tabs" OnChange="v => _activeOnly = v" Label="Show" />
-    <input type="search" placeholder="Filter by title" @bind="_filter" @bind:event="oninput" />
+    <Segmented T="bool" Value="_recent" Options="Times" OnChange="ShowRecentAsync" Label="Show" />
+    <input class="filter" type="search" placeholder="@(Shown == "tasks" ? "Filter by title" : "Filter by game or name")" aria-label="Filter"
+           @bind="_filter" @bind:event="oninput" />
+    <SortMenu Options="SortOptions" Value="@_sort" Descending="_descending" DirectionHint="@DirectionHint"
+              OnChange="@(key => SortAsync(key, key == "newest"))" OnReverse="() => SortAsync(_sort, !_descending)" />
+    @if (_loaded && MayChange && Changeable.Count > 0)
+    {
+        var which = _filter.Length > 0 ? "these" : "all";
+        @if (Changeable.All(i => i.Paused))
+        {
+            <IconButton Icon="play" Label="@($"Resume {which}")" Title="@($"Let {Format.Count(Changeable.Count, Noun, Nouns)} go again")" Disabled="_busy"
+                        OnClick="() => ChangeAsync(BulkAction.Resume)" />
+        }
+        else
+        {
+            <IconButton Icon="pause" Label="@($"Pause {which}")" Title="@($"Hold back {Format.Count(Changeable.Count(i => !i.Paused), Noun, Nouns)} until resumed")"
+                        Disabled="_busy" OnClick="() => ChangeAsync(BulkAction.Pause)" />
+        }
+        <IconButton Icon="cancel" Label="@($"Cancel {which}")" Title="@($"Cancel {Format.Count(Changeable.Count, Noun, Nouns)}")" Disabled="_busy"
+                    OnClick="() => _confirmCancel = true" />
+    }
+    @if (_loaded && Shown != "tasks" && Auth.May(UserPermissions.Download) && FailedCount > 0)
+    {
+        <IconButton Icon="retry" Label="Retry failed" Title="@($"Look again for {Format.Count(FailedCount, "fetch that failed", "fetches that failed")}")"
+                    Disabled="_busy" OnClick="RetryFailedAsync" />
+    }
+    @* Romdex's own: the retrievers that hand over what arrives by themselves, asked now. *@
+    @if (Shown != "tasks" && Auth.May(UserPermissions.Download))
+    {
+        <IconButton Icon="search" Label="Check now" Title="Ask the retrievers that hand over what arrives, such as the inbox folder, for anything new"
+                    Disabled="_checking" OnClick="CheckAsync" />
+    }
 </div>
+@if (_loaded && Shown != "tasks" && Auth.May(UserPermissions.Download) && FailedCount > 0)
+{
+    <ScheduleNote Task="ScheduledTask.RetryFailed" />
+}
+
+@if (_confirmCancel)
+{
+    <Dialog Title="@($"Cancel {Format.Count(Changeable.Count, Noun, Nouns)}?")" OnClose="() => _confirmCancel = false" Alert="true">
+        <p>Each stops for good. What a task has done already stays done.</p>
+        <div class="toolbar dialog-buttons">
+            <button @onclick="() => _confirmCancel = false">Keep them</button>
+            <button class="danger" disabled="@_busy" @onclick="() => ChangeAsync(BulkAction.Cancel)">@if (_busy) { <span class="spinner"></span> }Cancel them</button>
+        </div>
+    </Dialog>
+}
 
 @if (!_loaded)
 {
+    _hasEnd = false;
     <Loading />
 }
 else if (!Visible.Any())
 {
+    _hasEnd = false;
     <div class="empty card">
         @if (_filter.Length > 0) { <span>Nothing matches.</span> }
-        else if (_activeOnly)
+        else if (_recent)
         {
-            <span>Nothing's happening right now. </span>
-            @if (_tasks.Count > 0) { <button class="link" @onclick="() => _activeOnly = false">Show all time</button> }
+            <span>Nothing in the last hour. </span>
+            <button class="link" @onclick="() => ShowRecentAsync(false)">Show earlier</button>
         }
-        else { <span>Nothing yet.</span> }
+        else if (Shown == "tasks") { <span>Nothing earlier. Scan the library from the Scan menu.</span> }
+        else { <span>Nothing earlier. Use the Get buttons on a game's page and in Search, or add a retriever such as the inbox folder.</span> }
     </div>
 }
 else
 {
-    <div class="card">
-        @foreach (var task in Visible)
+    var drawn = 0;
+    <div class="activity-list" @ref="_list">
+    @foreach (var (section, items) in Grouped)
+    {
+        @if (section is { } part)
         {
-            <div class="request">
-                <div class="request-head">
-                    <span class="request-toggle">
-                        <span aria-hidden="true"></span>
-                        <span class="request-title">@(task.Title ?? task.Kind)</span>
-                    </span>
-                    <span class="request-state"><span class="badge @Format.TaskBadge(task)">@Format.TaskLabel(task)</span></span>
-                    <span class="muted small request-time hide-narrow" title="@task.UpdatedAt.ToLocalTime()">@Format.Ago(task.UpdatedAt)</span>
-                    <span class="request-actions"><TaskActions Item="task" Queue="TaskQueue" OnChanged="ChangedAsync" /></span>
+            var closed = _closed.Contains(SectionKey(part));
+            <h2 class="activity-section">
+                <button class="request-toggle" aria-expanded="@(closed ? "false" : "true")" @onclick="() => ToggleSectionAsync(part)">
+                    <span class="chevron @(closed ? "" : "open")" aria-hidden="true"></span>
+                    <span>@SectionLabel(part)</span><span class="tab-count">@items.Count</span>
+                </button>
+            </h2>
+            @if (closed)
+            {
+                continue;
+            }
+        }
+        <div class="card">
+        @foreach (var item in items)
+        {
+            @if (drawn++ >= _shown)
+            {
+                break;
+            }
+            @if (item.Task is { } task)
+            {
+                <div class="request" id="task-@task.Id" data-flip="task-@task.Id" @key="task.Id">
+                    <div class="request-head">
+                        <span class="request-toggle">
+                            <span aria-hidden="true"></span>
+                            <span class="request-title">@(task.Title ?? task.Kind)</span>
+                        </span>
+                        <span class="muted small request-kind hide-narrow">@KindLabel(task.Kind)</span>
+                        <span class="request-state"><span class="badge @Format.TaskBadge(task)">@Format.TaskLabel(task)</span></span>
+                        <span class="muted small request-time hide-narrow" title="@task.UpdatedAt.ToLocalTime()">@Format.Ago(task.UpdatedAt)</span>
+                        <span class="request-actions"><TaskActions Item="task" Queue="TaskQueue" OnChanged="TasksChangedAsync" /></span>
+                    </div>
+                    @if (task.Error is not null) { <div class="small request-detail error">@task.Error</div> }
+                    else if (task.Progress is not null) { <div class="muted small request-detail">@task.Progress</div> }
                 </div>
-                @if (task.Error is not null) { <div class="small request-detail error">@task.Error</div> }
-                else if (task.Progress is not null) { <div class="muted small request-detail">@task.Progress</div> }
+                continue;
+            }
+            @if (item.Request is { } request)
+            {
+                <div class="request" id="request-@request.Id" data-flip="request-@request.Id" @key="request.Id">
+                    <div class="request-head">
+                        <span class="request-toggle">
+                            <span aria-hidden="true"></span>
+                            <span class="request-title">
+                                <a href="titles/@request.Title.Id">@(request.Dump?.Name ?? request.Title.Name)</a>
+                                @if (request.Regions.Count > 0) { <span class="request-by small muted">@string.Join(", ", request.Regions)</span> }
+                            </span>
+                        </span>
+                        <span class="muted small request-kind hide-narrow">@Format.Count(request.Attempts.Count, "attempt", "attempts")</span>
+                        <span class="request-state"><span class="badge @Format.RequestBadge(request.State)">@Format.RequestLabel(request.State)</span></span>
+                        <span class="muted small request-time hide-narrow" title="@request.UpdatedAt.ToLocalTime()">@Format.Ago(request.UpdatedAt)</span>
+                        <span class="request-actions">
+                            @if (request.State == RequestState.Failed && Auth.May(UserPermissions.Download))
+                            {
+                                <IconButton Icon="retry" Class="small" Title="Look again: search every retriever again, passing over what was turned away" Disabled="_busy"
+                                            OnClick="() => RequestActionAsync(() => Api.TryRequestAgainAsync(request.Id))" />
+                                <IconButton Icon="cancel" Class="small" Title="Dismiss: take it off Review, without fetching anything" Disabled="_busy"
+                                            OnClick="() => RequestActionAsync(() => Api.DismissRequestAsync(request.Id))" />
+                            }
+                        </span>
+                    </div>
+                    @if (request.Message is not null) { <div class="muted small request-detail">@request.Message</div> }
+                </div>
+                continue;
+            }
+            var arrival = item.Arrival!;
+            var open = _openArrivals.Contains(arrival.Id);
+            <div class="request" id="request-@arrival.Id" data-flip="arrival-@arrival.Id" @key="arrival.Id">
+                <div class="request-head">
+                    <button class="request-toggle" aria-expanded="@(open ? "true" : "false")" @onclick="() => ToggleArrival(arrival.Id)">
+                        <span class="chevron @(open ? "open" : "")" aria-hidden="true"></span>
+                        <span class="request-title">@arrival.Name</span>
+                    </button>
+                    <span class="muted small request-kind hide-narrow">@arrival.Source</span>
+                    <span class="request-state"><span class="badge @Format.Badge(arrival.State)">@Format.Label(arrival.State)</span></span>
+                    <span class="muted small request-time hide-narrow" title="@arrival.UpdatedAt.ToLocalTime()">@Format.Ago(arrival.UpdatedAt)</span>
+                    <span class="request-actions">
+                        @* What waits for a decision is decided under Review; here, only what's still on its way can be stopped. *@
+                        @if (ReviewTab(arrival) is { } tab)
+                        {
+                            <a class="button small" href="@tab" title="It waits for you under Review">In Review</a>
+                        }
+                        else if (Auth.May(UserPermissions.Download) && arrival.CanReject)
+                        {
+                            <IconButton Icon="cancel" Class="small" Title="Cancel: stop it and throw its files away" Disabled="_busy"
+                                        OnClick="() => ArrivalActionAsync(() => Api.RejectDownloadAsync(arrival.Id))" />
+                        }
+                    </span>
+                </div>
+                @if (arrival.Message is not null) { <div class="muted small request-detail">@arrival.Message</div> }
+                @if (open)
+                {
+                    <div class="request-body small">
+                        @if (arrival.Dumps.Count > 0)
+                        {
+                            <div class="field-label">Dumps</div>
+                            @foreach (var dump in arrival.Dumps)
+                            {
+                                <div class="download-dump">
+                                    <a href="systems/@dump.SystemId">@dump.System</a>: <strong>@dump.Dump.Name</strong>
+                                    @if (dump.Alternative) { <span class="badge neutral">Alternative</span> }
+                                    @foreach (var path in dump.Filed) { <div class="muted">Filed as <code>@path</code></div> }
+                                </div>
+                            }
+                        }
+                        @if (arrival.Files.Count > 0)
+                        {
+                            <div class="field-label">Files</div>
+                            @foreach (var file in arrival.Files)
+                            {
+                                <div class="download-file">
+                                    <span>@file.Path@(file.Entry is null ? "" : $" → {file.Entry}")</span> <span class="muted">@Format.Size(file.Size)</span>
+                                    @if (file.Error is not null) { <div class="error">@file.Error</div> }
+                                    else if (file.Matches.Count == 0) { <div class="muted">Matches nothing</div> }
+                                    @foreach (var match in file.Matches) { <div class="muted">Matches @match</div> }
+                                    @if (file.Crc32 is not null) { <div class="hashes"><code title="CRC32">@file.Crc32</code><code title="SHA-1">@file.Sha1</code></div> }
+                                </div>
+                            }
+                        }
+                        @if (arrival.Notes is not null)
+                        {
+                            <div class="field-label">Notes from @arrival.Source</div>
+                            <pre class="download-notes">@arrival.Notes</pre>
+                        }
+                        @if (arrival.Dumps.Count == 0 && arrival.Files.Count == 0 && arrival.Notes is null)
+                        {
+                            <div class="muted">Nothing more to show until it's identified.</div>
+                        }
+                    </div>
+                }
             </div>
         }
+        </div>
+    }
     </div>
+    @* The rest come as it's scrolled to: those already loaded, then, among earlier fetches, the ones before them. *@
+    _hasEnd = Drawable.Count() > _shown || (Shown == "fetches" && !_recent && _hasEarlier);
+    @if (_hasEnd)
+    {
+        <div class="list-end muted small" @ref="_end"><span class="spinner"></span> Loading more…</div>
+    }
 }
 
 @code {
-    private bool _loaded;
-    private static readonly IReadOnlyList<(bool Value, string Label, string? Hint)> Tabs = [(true, "Now", null), (false, "All time", null)];
+    [SupplyParameterFromQuery(Name = "open")] public Guid? OpenId { get; set; }
 
-    private bool _activeOnly = true;
+    /// <summary>tasks or fetches, from the address; the one last shown when it doesn't say.</summary>
+    [Parameter] public string? Tab { get; set; }
+
+    private const string TabKey = "activity.tab", RecentKey = "activity.recent", SortKey = "activity.sort", DescendingKey = "activity.descending",
+        ClosedKey = "activity.closed";
+
+    // Newest: what's going first, then the rest as they last changed. The other goes by name.
+    private IReadOnlyList<(string Key, string Label)> SortOptions => [("newest", "Newest"), ("name", "Title")];
+
+    private string _sort = "newest";
+    private bool _descending = true;
+
+    private string DirectionHint => _sort == "newest"
+        ? $"{(_descending ? "Newest" : "Oldest")} first; click to reverse"
+        : $"Sorted {(_descending ? "Z to A" : "A to Z")}; click to reverse";
+
+    private async Task SortAsync(string key, bool descending)
+    {
+        (_sort, _descending) = (key, descending);
+        await Prefs.SetAsync(SortKey, key);
+        await Prefs.SetAsync(DescendingKey, descending);
+    }
+
+    private string _remembered = "fetches";
+    private string Shown => Tab is "tasks" or "fetches" ? Tab : _remembered;
+
+    // Tabs with how many things in each are still going.
+    private IEnumerable<(string Tab, string Label, int Count)> Tabs =>
+    [
+        ("tasks", "Tasks", _tasks.Count(t => t.Active)),
+        ("fetches", "Fetches", _requests.Count(r => r.State == RequestState.Active) + _arrivals.Count(Going)),
+    ];
+
+    private bool _loaded;
+
+    // How many rows are drawn; more as the list's end is scrolled to, so a long one stays quick.
+    private const int Step = 100;
+    private int _shown = Step;
+    private ElementReference _end;
+    private DotNetObjectReference<Activity>? _self;
+    private bool _disposed;
+    private bool _hasEnd;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_moving)
+        {
+            _moving = false;
+            await Js.InvokeVoidAsync("romdexFlip.play", _list);
+        }
+        await LandAsync();
+        if (!_hasEnd || _disposed)
+            return;
+        _self ??= DotNetObjectReference.Create(this);
+        await Js.InvokeVoidAsync("romdexScroll.atEnd", _end, _self);
+    }
+
+    /// <summary>The list's end has come into view: draws more, loading earlier fetches once all loaded are drawn.</summary>
+    [JSInvokable]
+    public async Task MoreAsync()
+    {
+        if (Drawable.Count() > _shown)
+            _shown += Step;
+        else if (Shown == "fetches" && !_recent && _hasEarlier)
+        {
+            if (!await LoadEarlierAsync())
+                return;
+        }
+        else
+            return;
+        StateHasChanged();
+    }
+
+    private static readonly IReadOnlyList<(bool Value, string Label, string? Hint)> Times =
+        [(true, "Recent", "Still going, or changed in the last hour"), (false, "Earlier", "Everything before that")];
+
+    private bool _recent = true;
+
+    // What a task is, in a word.
+    private static string KindLabel(string kind) => kind switch
+    {
+        "library-scan" => "Scan",
+        "library-format" => "Format",
+        "download" => "Filing",
+        "art-lookup" => "Covers",
+        _ => "Catalogue",
+    };
+
+    private async Task ShowRecentAsync(bool recent)
+    {
+        _recent = recent;
+        await Prefs.SetAsync(RecentKey, recent);
+    }
+
+    private static bool IsRecent(bool active, DateTime updatedAt) => active || updatedAt > DateTime.UtcNow.AddHours(-1);
     private string _filter = "";
     private IReadOnlyList<TaskInfo> _tasks = [];
     private Timer? _timer;
-    private int _idlePolls;
+
+    private bool _busy, _confirmCancel, _checking;
+
+    // Pause all and Cancel all act on the tasks shown and still going. Fetches get theirs with the request queue (docs/plans/parity.md).
+    private bool MayChange => Shown == "tasks" && Auth.May(UserPermissions.Scan);
+    private List<Item> Changeable => Visible.Where(i => i.Active && i.Task is not null).ToList();
+    private string Noun => "task";
+    private string Nouns => "tasks";
+
+    // Requests out of offers, which Retry failed looks for again.
+    private int FailedCount => _requests.Count(r => r.State == RequestState.Failed);
+
+    private async Task RetryFailedAsync()
+    {
+        _busy = true;
+        try
+        {
+            await Api.RetryFailedAsync();
+            await LoadFetchesAsync();
+        }
+        catch (Exception e) when (e is HttpRequestException or RomdexApiException)
+        {
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task CheckAsync()
+    {
+        _checking = true;
+        try
+        {
+            await Api.CheckDownloadsAsync();
+        }
+        catch (Exception e) when (e is HttpRequestException or RomdexApiException)
+        {
+        }
+        finally
+        {
+            _checking = false;
+        }
+    }
+
+    private async Task ChangeAsync(BulkAction action)
+    {
+        _busy = true;
+        try
+        {
+            await Api.ChangeTasksAsync(new BulkChange(action, Changeable.Select(i => i.Task!.Id).ToList()));
+            await LoadTasksAsync();
+        }
+        finally
+        {
+            _busy = false;
+            _confirmCancel = false;
+        }
+    }
+
+    private async Task RequestActionAsync(Func<Task> action)
+    {
+        _busy = true;
+        try
+        {
+            await action();
+        }
+        catch (Exception e) when (e is HttpRequestException or RomdexApiException)
+        {
+        }
+        finally
+        {
+            _busy = false;
+        }
+        await LoadFetchesAsync();
+        await RedrawAsync();
+    }
+
+    private Task ArrivalActionAsync(Func<Task> action) => RequestActionAsync(action);
+
+    /// <summary>A task, a request, or something that arrived by itself, in one list.</summary>
+    private sealed record Item(DateTime UpdatedAt, RequestInfo? Request = null, TaskInfo? Task = null, DownloadInfo? Arrival = null)
+    {
+        public bool Active => Request is { } r ? r.State == RequestState.Active : Arrival is { } a ? Going(a) : Task!.Active;
+        public bool Paused => Task?.Paused ?? false;
+        public string Title => Request is { } r ? r.Dump?.Name ?? r.Title.Name : Arrival?.Name ?? Task!.Title ?? Task.Kind;
+
+        /// <summary>Working on it now, rather than waiting its turn or paused.</summary>
+        public bool Running => Task is { } t ? t.State == TaskState.Running : Arrival is { } a ? a.State != DownloadState.Queued : true;
+
+        public double QueueOrder => Task?.QueueOrder ?? 0;
+
+        public bool Matches(string text) =>
+            new[] { Title, Request?.Title.Name, Arrival?.Source }.Any(s => s?.Contains(text, StringComparison.CurrentCultureIgnoreCase) == true);
+    }
+
+    private static bool Going(DownloadInfo item) => item.State is DownloadState.Fetching or DownloadState.Queued or DownloadState.Working;
 
     /// <summary>Tasks waiting their turn, in the order they'll run.</summary>
     private IReadOnlyList<TaskInfo> TaskQueue =>
         _tasks.Where(t => t.State == TaskState.Queued).OrderBy(t => t.QueueOrder).ThenBy(t => t.CreatedAt).ToList();
 
-    // What's running, then what's waiting in queue order, then the rest, most recently changed first.
-    private IEnumerable<TaskInfo> Visible
+    // The tab's: what's running, then what's waiting in queue order, then the rest, most recently changed first.
+    private IEnumerable<Item> Visible
     {
         get
         {
-            var tasks = _tasks.Where(t => !_activeOnly || t.Active)
-                .Where(t => _filter.Length == 0 || (t.Title ?? t.Kind).Contains(_filter, StringComparison.OrdinalIgnoreCase))
+            var items = (Shown == "tasks"
+                    ? _tasks.Select(t => new Item(t.UpdatedAt, Task: t))
+                    : _requests.Select(r => new Item(r.UpdatedAt, Request: r)).Concat(_arrivals.Select(a => new Item(a.UpdatedAt, Arrival: a))))
+                .Where(i => IsRecent(i.Active, i.UpdatedAt) == _recent)
+                .Where(i => _filter.Length == 0 || i.Matches(_filter))
                 .ToList();
-            var active = tasks.Where(t => t.Active).OrderByDescending(t => t.State == TaskState.Running).ThenBy(t => t.QueueOrder).ThenBy(t => t.CreatedAt);
-            return active.Concat(tasks.Where(t => !t.Active).OrderByDescending(t => t.UpdatedAt));
+            // Recent is in sections, each sorted on its own; Earlier is all finished.
+            return _recent ? Sections.SelectMany(part => Sorted(items.Where(i => SectionOf(i) == part))) : Sorted(items);
         }
+    }
+
+    // Newest: what's going in the order it runs, the next first, then the rest as they last changed. The other by name.
+    private IEnumerable<Item> Sorted(IEnumerable<Item> items)
+    {
+        if (_sort != "newest")
+        {
+            var text = StringComparer.CurrentCultureIgnoreCase;
+            return _descending ? items.OrderByDescending(i => i.Title, text) : items.OrderBy(i => i.Title, text);
+        }
+        var list = items.ToList();
+        var active = list.Where(i => i.Active)
+            .OrderByDescending(i => i.Running).ThenBy(i => i.Task is null).ThenBy(i => i.QueueOrder).ThenBy(i => i.UpdatedAt);
+        var newest = active.Concat(list.Where(i => !i.Active).OrderByDescending(i => i.UpdatedAt));
+        return _descending ? newest : newest.Reverse();
+    }
+
+    /// <summary>Recent's three sections, each of which can be closed.</summary>
+    private enum Section { Running, Queued, Completed }
+
+    private static readonly Section[] Sections = [Section.Running, Section.Queued, Section.Completed];
+
+    private static Section SectionOf(Item item) => !item.Active ? Section.Completed : item.Running ? Section.Running : Section.Queued;
+
+    private static string SectionLabel(Section section) => section switch
+    {
+        Section.Running => "Running",
+        Section.Queued => "Queued",
+        _ => "Completed",
+    };
+
+    // Kept per tab, so Tasks and Fetches each remember theirs.
+    private string SectionKey(Section section) => $"{Shown}:{section}";
+
+    private HashSet<string> _closed = [];
+
+    private async Task ToggleSectionAsync(Section section)
+    {
+        if (!_closed.Remove(SectionKey(section)))
+            _closed.Add(SectionKey(section));
+        await Prefs.SetAsync(ClosedKey, _closed.ToList());
+    }
+
+    /// <summary>What's shown, in sections in Recent (those with anything in them), or all together in Earlier.</summary>
+    private List<(Section? Section, List<Item> Items)> Grouped
+    {
+        get
+        {
+            var visible = Visible.ToList();
+            return _recent
+                ? Sections.Select(part => ((Section?)part, visible.Where(i => SectionOf(i) == part).ToList())).Where(g => g.Item2.Count > 0).ToList()
+                : [(null, visible)];
+        }
+    }
+
+    /// <summary>What can be drawn, leaving out closed sections, in the order it's drawn.</summary>
+    private IEnumerable<Item> Drawable => _recent ? Visible.Where(i => !_closed.Contains(SectionKey(SectionOf(i)))) : Visible;
+
+    private async Task TasksChangedAsync()
+    {
+        await LoadTasksAsync();
+        await RedrawAsync();
     }
 
     protected override async Task OnInitializedAsync()
     {
+        _remembered = await Prefs.GetAsync(TabKey, "fetches");
+        _recent = await Prefs.GetAsync(RecentKey, true);
+        _sort = await Prefs.GetAsync(SortKey, "newest");
+        _descending = await Prefs.GetAsync(DescendingKey, true);
+        _closed = [.. await Prefs.GetAsync<List<string>>(ClosedKey, [])];
         Events.Received += OnEvent;
-        await LoadAsync();
+        await Task.WhenAll(LoadFetchesAsync(), LoadTasksAsync());
         _loaded = true;
         // Polled too, in case events don't arrive; quicker while something's running.
         _timer = new Timer(_ => InvokeAsync(async () =>
         {
-            if (_tasks.Any(t => t.Active) || ++_idlePolls % 5 == 0)
+            if (_tasks.Any(t => t.Active) || _requests.Any(r => r.State == RequestState.Active) || _arrivals.Any(Going) || ++_idlePolls % 5 == 0)
             {
-                await LoadAsync();
-                StateHasChanged();
+                await Task.WhenAll(LoadTasksAsync(), LoadFetchesAsync());
+                await RedrawAsync();
             }
         }), null, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
     }
 
-    // A task that starts shows at once, not at the next idle poll.
+    private int _idlePolls;
+
+    // A scan or a fetch that starts shows at once, not at the next idle poll.
     private void OnEvent(string type)
     {
-        if (type is "tasks" or "connected")
-            InvokeAsync(ChangedAsync);
+        if (type is "tasks" or "downloads" or "connected")
+            InvokeAsync(async () =>
+            {
+                await (type == "tasks" ? LoadTasksAsync() : type == "downloads" ? LoadFetchesAsync() : Task.WhenAll(LoadTasksAsync(), LoadFetchesAsync()));
+                await RedrawAsync();
+            });
     }
 
-    private async Task ChangedAsync()
-    {
-        await LoadAsync();
-        StateHasChanged();
-    }
-
-    private async Task LoadAsync()
+    private async Task LoadTasksAsync()
     {
         try
         {
@@ -119,8 +588,174 @@ else
         }
     }
 
+    // How many finished ones come with each load, and each page of earlier ones.
+    private const int Page = 200;
+
+    // Requests, newest first: those going and the newest of the rest, with earlier ones loaded on top as they're wanted;
+    // and what arrived by itself, no request for it.
+    private IReadOnlyList<RequestInfo> _requests = [];
+    private IReadOnlyList<RequestInfo> _earlier = [];
+    private IReadOnlyList<DownloadInfo> _arrivals = [];
+    private bool _hasEarlier = true;
+
+    private async Task LoadFetchesAsync()
+    {
+        try
+        {
+            var going = await Api.ListRequestsAsync(active: true, limit: 10_000);
+            var newest = await Api.ListRequestsAsync(limit: Page);
+            _requests = going.Concat(newest).Concat(_earlier).DistinctBy(r => r.Id).OrderByDescending(r => r.CreatedAt).ToList();
+            if (newest.Count < Page)
+                _hasEarlier = false;
+            _arrivals = (await Api.ListDownloadsAsync(null, 0, Page)).Items.Where(d => d.RequestId is null).ToList();
+        }
+        catch (Exception e) when (e is HttpRequestException or RomdexApiException)
+        {
+            // Keep what's shown; the next poll tries again.
+        }
+    }
+
+    // The page of requests before the earliest loaded; false when there were none.
+    private async Task<bool> LoadEarlierAsync()
+    {
+        if (_requests.Count == 0)
+            return _hasEarlier = false;
+        var before = await Api.ListRequestsAsync(limit: Page, before: _requests.Min(r => r.CreatedAt));
+        if (before.Count < Page)
+            _hasEarlier = false;
+        if (before.Count == 0)
+            return false;
+        _earlier = [.. _earlier, .. before];
+        _requests = _requests.Concat(before).DistinctBy(r => r.Id).OrderByDescending(r => r.CreatedAt).ToList();
+        return true;
+    }
+
+    // Where under Review an arrival waits, if it does.
+    private static string? ReviewTab(DownloadInfo item) => item.State switch
+    {
+        DownloadState.Failed => "review/couldnt-fetch",
+        DownloadState.NeedsReview => item.HeldFor switch
+        {
+            HoldReason.Unmatched => "review",
+            HoldReason.Incomplete => "review/incomplete",
+            HoldReason.Unreadable => "review/corrupted",
+            _ => "review/couldnt-fetch",
+        },
+        _ => null,
+    };
+
+    private readonly HashSet<Guid> _openArrivals = [];
+
+    private void ToggleArrival(Guid id)
+    {
+        if (!_openArrivals.Remove(id))
+            _openArrivals.Add(id);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Tab == "downloads")
+        {
+            // The Downloads page became Fetches, as Melodex's did; old links, with what they open, go there.
+            Nav.NavigateTo("activity/fetches" + new Uri(Nav.Uri).Query, replace: true);
+            return;
+        }
+        if (Tab is "tasks" or "fetches" && Tab != _remembered)
+        {
+            _remembered = Tab;
+            await Prefs.SetAsync(TabKey, Tab);
+        }
+        if (OpenId is { } id && id != _landed)
+        {
+            // Where the link points: a request, something that arrived, or failing those a task. Each is shown, open
+            // where it opens, scrolled to and flashed.
+            _landed = id;
+            if (await Api.GetRequestAsync(id) is { } request)
+            {
+                if (Tab is null)
+                    _remembered = "fetches";
+                _recent = IsRecent(request.State == RequestState.Active, request.UpdatedAt);
+                _landing = $"request-{id}";
+                return;
+            }
+            if (await Api.GetDownloadAsync(id) is { } arrival)
+            {
+                if (Tab is null)
+                    _remembered = "fetches";
+                // One a request tried shows with its request.
+                if (arrival.RequestId is { } parent)
+                {
+                    _landed = parent;
+                    _landing = $"request-{parent}";
+                    return;
+                }
+                _recent = IsRecent(Going(arrival), arrival.UpdatedAt);
+                _openArrivals.Add(id);
+                _landing = $"request-{id}";
+                return;
+            }
+            await LoadTasksAsync();
+            if (_tasks.FirstOrDefault(t => t.Id == id) is { } task)
+            {
+                if (Tab is null)
+                    _remembered = "tasks";
+                _recent = IsRecent(task.Active, task.UpdatedAt);
+                _landing = $"task-{id}";
+            }
+        }
+    }
+
+    // The request, arrival or task a link named, and the row to scroll to and flash once it's drawn.
+    private Guid? _landed;
+    private string? _landing;
+
+    // Draws enough of the list to include the row landed on, loading earlier fetches until it's there.
+    private async Task LandAsync()
+    {
+        if (_landing is not { } row || !_loaded)
+            return;
+        _landing = null;
+        var id = Guid.Parse(row[(row.IndexOf('-') + 1)..]);
+        Guid IdOf(Item i) => i.Request?.Id ?? i.Arrival?.Id ?? i.Task!.Id;
+        for (var tries = 0; tries < 50; tries++)
+        {
+            // The section it's in opens.
+            if (_recent && Visible.FirstOrDefault(i => IdOf(i) == id) is { } landed)
+                _closed.Remove(SectionKey(SectionOf(landed)));
+            var index = Drawable.ToList().FindIndex(i => IdOf(i) == id);
+            if (index >= 0)
+            {
+                _shown = Math.Max(_shown, (index / Step + 1) * Step);
+                break;
+            }
+            if (Shown != "fetches" || _recent || !_hasEarlier || !await LoadEarlierAsync())
+                break;
+        }
+        StateHasChanged();
+        await Js.InvokeVoidAsync("romdexScroll.land", row);
+    }
+
+    private ElementReference _list;
+    private bool _moving;
+
+    // Redraws after the list changed, rows sliding from where they were to where they are now (flip.js).
+    private async Task RedrawAsync()
+    {
+        try
+        {
+            await Js.InvokeVoidAsync("romdexFlip.measure", _list);
+            _moving = true;
+        }
+        catch (JSException)
+        {
+        }
+        StateHasChanged();
+    }
+
     public void Dispose()
     {
+        _disposed = true;
+        _self?.Dispose();
         Events.Received -= OnEvent;
         _timer?.Dispose();
     }

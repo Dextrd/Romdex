@@ -500,8 +500,12 @@ a.button:hover { text-decoration: none; border-color: var(--accent); }
     font: inherit; font-weight: 600; border: none; background: none; padding: 0; color: var(--text); text-align: left;
     display: grid; grid-template-columns: .9rem minmax(0, 1fr); gap: .5rem; align-items: center; min-width: 0;
 }
-button.request-toggle { cursor: pointer; }
+button.request-toggle, div.request-toggle { cursor: pointer; }
 .request-title { overflow-wrap: anywhere; }
+.request-title a { color: inherit; text-decoration: none; }
+/* The regions a request is for, on a line under the game. */
+.request-by { display: block; font-weight: 400; }
+.request-title a:hover { text-decoration: underline; }
 .request-state { min-width: 0; }
 .request-time { text-align: right; white-space: nowrap; }
 .request-actions { display: flex; justify-content: flex-end; gap: .3rem; }
@@ -1656,12 +1660,7 @@ table.slots thead th { height: 32px; box-sizing: border-box; }
 .add-ons > summary.section .muted { font-weight: 400; }
 .toolbar .search-box { flex: 1; min-width: 12rem; }
 
-/* Downloads: what's arriving, and getting a game through the plugins. */
-.downloads .request-head { grid-template-columns: minmax(0, 1fr) 7rem 5.5rem 14rem; }
-@media (max-width: 640px) {
-    .downloads .request-head { grid-template-columns: minmax(0, 1fr) auto; }
-    .downloads .request-actions { grid-column: 1 / -1; justify-content: flex-start; }
-}
+/* What arrived: its dumps, files and the retriever's notes, in Activity → Fetches. */
 .download-dump, .download-file { margin: .25rem 0 .5rem; overflow-wrap: anywhere; }
 .download-dump .badge { margin-left: .4rem; }
 .request-body .field-label { margin-top: .6rem; }
@@ -1929,3 +1928,20 @@ a.toast-body:hover .toast-title { text-decoration: underline; }
 @media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
 @media (max-width: 760px) {
     .toasts { left: .5rem; right: .5rem; bottom: .5rem; width: auto; }
+
+/* What a link landed on flashes, then fades back. */
+.landed { animation: landed 2s ease-out; }
+@keyframes landed {
+    0%, 25% { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 70%, transparent); background-color: color-mix(in srgb, var(--accent) 14%, var(--surface, transparent)); }
+    100% { box-shadow: inset 0 0 0 2px transparent; }
+}
+@media (prefers-reduced-motion: reduce) { .landed { animation-duration: 3s; } }
+
+/* A long list's end, while more is coming. */
+.list-end { display: flex; align-items: center; justify-content: center; gap: .5rem; padding: 1rem; }
+
+/* Activity's Recent view: Running, Queued and Completed, each with a heading that opens and closes it. */
+.activity-section { margin: 1.25rem 0 .5rem; font-size: 1rem; }
+.activity-section:first-child { margin-top: .5rem; }
+.activity-section .request-toggle { display: inline-flex; align-items: center; gap: .5rem; padding: 0; border: none; background: none; color: var(--text); font: inherit; font-weight: 600; cursor: pointer; }
+.activity-list .request { position: relative; background: var(--surface); }

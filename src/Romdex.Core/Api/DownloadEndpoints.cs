@@ -125,6 +125,17 @@ public static class DownloadEndpoints
             .RequireScope(Scopes.Download).WithTags("Downloads").WithName("DismissRequest")
             .WithSummary("Dismisses a request that ran out of offers, throwing away the other game it kept, if any.");
 
+        api.MapGet("/requests", async (RequestService requests, RomdexDbContext db, bool? active, int? limit, DateTime? before, CancellationToken ct) =>
+            {
+                var take = Math.Clamp(limit ?? 100, 1, active == true ? 10_000 : 500);
+                var list = db.Requests.AsNoTracking().Where(r => active != true || r.State == Client.RequestState.Active);
+                if (before?.ToUniversalTime() is { } then)
+                    list = list.Where(r => r.CreatedAt < then);
+                return await requests.InfoAsync(await list.OrderByDescending(r => r.CreatedAt).Take(take).ToListAsync(ct), ct);
+            })
+            .WithTags("Downloads").WithName("ListRequests")
+            .WithSummary("Requests, newest first, each with its attempts. Up to 500 at a time, or 10,000 of those still going; `before` (the oldest one's createdAt) pages back.");
+
         api.MapGet("/requests/{id:guid}", async (Guid id, RequestService requests, RomdexDbContext db, CancellationToken ct) =>
                 await db.Requests.AsNoTracking().FirstOrDefaultAsync(r => r.Id == id, ct) is { } request
                     ? Results.Ok((await requests.InfoAsync([request], ct))[0])
@@ -270,7 +281,7 @@ public static class DownloadEndpoints
                     return new DownloadDumpInfo(new DumpRef(dump.Id, dump.Name, dump.Regions.Length == 0 ? [] : dump.Regions.Split(',')), dump.SystemId, dump.System,
                         d.Alternative, d.FiledPaths?.Split('|') ?? []);
                 }).ToList(),
-                files, candidate?.Notes, item.CreatedAt, item.UpdatedAt, item.State == DownloadState.NeedsReview ? item.HeldFor : null);
+                files, candidate?.Notes, item.CreatedAt, item.UpdatedAt, item.State == DownloadState.NeedsReview ? item.HeldFor : null, item.RequestId);
         }).ToList();
     }
 }

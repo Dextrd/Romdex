@@ -181,7 +181,7 @@ else
             <div class="review-actions">
                 <IconButton Icon="retry" Requires="@UserPermissions.Download" Title="Retry: identify it again, such as after a catalogue update" Disabled="_busy" OnClick="() => RetryAsync(arrival)" />
                 <IconButton Icon="discard" Requires="@UserPermissions.Download" Title="Reject: throw its files away" Disabled="_busy" OnClick="() => RejectAsync(arrival)" />
-                <IconButton Icon="open" Title="Details: its files, their hashes and what each matched" OnClick="@(() => Nav.NavigateTo($"downloads?open={arrival.Id}"))" />
+                <IconButton Icon="open" Title="Details: its files, their hashes and what each matched" OnClick="@(() => Nav.NavigateTo($"activity/fetches?open={arrival.Id}"))" />
             </div>
         </div>
     }
@@ -274,7 +274,7 @@ else
                         }
                         <IconButton Icon="retry" Primary="true" Requires="@UserPermissions.Download" Title="Try again: fetch the next best offer, and throw this one away" Disabled="_busy" OnClick="() => TryAgainAsync(arrival)" />
                         <IconButton Icon="cancel" Requires="@UserPermissions.Download" Title="Dismiss: throw it away" Disabled="_busy" OnClick="() => RejectAsync(arrival)" />
-                        <IconButton Icon="open" Title="Details: its files, their hashes and what each matched" OnClick="@(() => Nav.NavigateTo($"downloads?open={arrival.Id}"))" />
+                        <IconButton Icon="open" Title="Details: its files, their hashes and what each matched" OnClick="@(() => Nav.NavigateTo($"activity/fetches?open={arrival.Id}"))" />
                     </div>
                 </div>
             }
@@ -527,7 +527,7 @@ else
         _revealed = Tab;
         try
         {
-            await JS.InvokeVoidAsync("romdexTabs.reveal", ".review-tabs");
+            await JS.InvokeVoidAsync("romdexScroll.tabIntoView");
         }
         catch (Microsoft.JSInterop.JSException)
         {

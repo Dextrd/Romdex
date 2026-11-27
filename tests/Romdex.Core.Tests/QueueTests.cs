@@ -75,6 +75,30 @@ public sealed class QueueTests : IDisposable
         Assert.Equal(TaskState.Failed, task.State);
     }
 
+    [Fact]
+    public async Task Tasks_can_be_paused_resumed_and_cancelled_together()
+    {
+        List<Guid> ids;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<RomdexDbContext>();
+            var tasks = new[] { "first", "second", "third" }.Select((kind, i) => new BackgroundTask { Kind = kind, Paused = true, QueueOrder = i }).ToList();
+            db.BackgroundTasks.AddRange(tasks);
+            await db.SaveChangesAsync();
+            ids = tasks.Select(t => t.Id).ToList();
+        }
+
+        // Cancelling two leaves the third; cancelling them again changes nothing.
+        Assert.Equal(2, (await _api.ChangeTasksAsync(new BulkChange(BulkAction.Cancel, ids[..2]))).Changed);
+        Assert.Equal(0, (await _api.ChangeTasksAsync(new BulkChange(BulkAction.Cancel, ids[..2]))).Changed);
+        foreach (var id in ids[..2])
+            Assert.Equal(TaskState.Cancelled, (await _api.GetTaskAsync(id))!.State);
+        Assert.Equal(TaskState.Queued, (await _api.GetTaskAsync(ids[2]))!.State);
+
+        Assert.Equal(1, (await _api.ChangeTasksAsync(new BulkChange(BulkAction.Resume, ids))).Changed);
+        Assert.False((await FinishedAsync(ids[2])).Paused);
+    }
+
     private async Task<TaskInfo> FinishedAsync(Guid id)
     {
         var deadline = DateTime.UtcNow.AddSeconds(10);

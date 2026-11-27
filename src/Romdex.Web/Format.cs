@@ -225,4 +225,20 @@ public static class Format
         DownloadState.Failed => "missing",
         _ => "neutral",
     };
+
+    public static string RequestLabel(RequestState state) => state switch
+    {
+        RequestState.Active => "Fetching",
+        RequestState.Done => "In library",
+        RequestState.Failed => "Failed",
+        _ => "Dismissed",
+    };
+
+    public static string RequestBadge(RequestState state) => state switch
+    {
+        RequestState.Active => "active",
+        RequestState.Done => "owned",
+        RequestState.Failed => "missing",
+        _ => "neutral",
+    };
 }

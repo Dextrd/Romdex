@@ -47,7 +47,7 @@ public sealed class RequestTracker : IDisposable
             return;
         }
         // Another says when it's finished.
-        _notices.Show(new Notice(key, NoticeKind.Download, title, "Asked for: follow it in Downloads", "downloads", "get"));
+        _notices.Show(new Notice(key, NoticeKind.Download, title, "Asked for: follow it in Activity", "activity/fetches", "get"));
         _lots.Add(new Lot(key, title, replaced, [.. requests]));
         EnsureStarted();
         Schedule(Busy);

@@ -1,15 +1,19 @@
 # Downloads and filing
 
 Downloads bring dumps into the library. They arrive through retrievers, such as the inbox folder. Romdex works out
-what each one is from its checksums and files it where its system says. Anything it can't verify waits for you on the
-**Downloads** page.
+what each one is from its checksums and files it where its system says. Anything it can't verify waits for you under
+[Review](review.md).
 
 You're responsible for what you bring in. Romdex checks that a dump is what the DATs say it is; it doesn't know where
 it came from, and it comes with no retrievers of its own: you choose which to add.
 
 ## How a dump arrives
 
-Each arrival goes through the same steps, shown on the Downloads page and on the Activity page while they run:
+Each arrival goes through the same steps. **Activity → Fetches** shows them, as Melodex's does: each game you asked for,
+with its regions and how many offers it has tried, and what arrived by itself, such as through the inbox folder. Open
+one that arrived to see its files' hashes, what each matched, and the retriever's notes. **Recent** shows what's still
+going, or changed in the last hour, in Running, Queued and Completed sections you can close; **Earlier** shows the
+rest. The old Downloads page's links go there.
 
 1. **Staged.** The plugin puts its files in the staging volume. The inbox and dumping tools plugins hand over what
    arrives by themselves; Romdex asks them every 5 minutes, or when you press **Check now**. You can also find a game
@@ -103,7 +107,7 @@ whose new place is taken, or whose archive holds other games too: the preview sa
 another storage format isn't part of formatting.
 
 Under [Review](review.md), **Send to Downloads** takes a file that matches nothing, or can't be read, out of the
-library and through Downloads again. There it can be identified afresh, such as after you add a DAT, or rejected.
+library and through fetching again. It shows under Activity → Fetches, and can be identified afresh, such as after you add a DAT, or rejected.
 
 ## The igir worker
 

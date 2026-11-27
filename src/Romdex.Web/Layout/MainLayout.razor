@@ -14,7 +14,6 @@
     <nav class="nav">
         <NavLink href="" Match="NavLinkMatch.All" class="@(OnLibrary ? "active" : null)" title="Library">@PageIcon("library")<span class="nav-label">Library</span></NavLink>
         <NavLink href="activity" title="Activity">@PageIcon("activity")<span class="nav-label">Activity</span></NavLink>
-        <NavLink href="downloads" title="Downloads">@PageIcon("downloads")<span class="nav-label">Downloads</span></NavLink>
         @if (Auth.May(UserPermissions.Review))
         {
             <NavLink href="review" title="Review">@PageIcon("review")<span class="nav-label">Review</span></NavLink>

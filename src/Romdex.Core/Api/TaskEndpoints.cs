@@ -39,6 +39,21 @@ public static class TaskEndpoints
                 ActAsync(id, db, titles, task => queue.CancelAsync(task, ct), ct))
             .RequireScope(Scopes.Scan).WithName("CancelTask").WithSummary("Stop a queued or running task for good.")
             .Produces<TaskInfo>().Produces(StatusCodes.Status404NotFound).Produces(StatusCodes.Status409Conflict);
+        tasks.MapPost("/bulk", async (BulkChange body, RomdexDbContext db, TaskQueue queue, CancellationToken ct) =>
+            {
+                var changed = 0;
+                foreach (var task in await db.BackgroundTasks.Where(t => body.Ids.Contains(t.Id)).ToListAsync(ct))
+                    if (await (body.Action switch
+                        {
+                            BulkAction.Pause => queue.PauseAsync(task, ct),
+                            BulkAction.Resume => queue.ResumeAsync(task, ct),
+                            _ => queue.CancelAsync(task, ct),
+                        }))
+                        changed++;
+                return new BulkChanged(changed);
+            })
+            .RequireScope(Scopes.Scan).WithName("ChangeTasks")
+            .WithSummary("Pause, resume or cancel many tasks at once, as each one's own action does. Any already past it are left as they are.");
         tasks.MapPost("/{id:guid}/pause", (Guid id, RomdexDbContext db, TaskQueue queue, TaskTitles titles, CancellationToken ct) =>
                 ActAsync(id, db, titles, task => queue.PauseAsync(task, ct), ct))
             .RequireScope(Scopes.Scan).WithName("PauseTask")

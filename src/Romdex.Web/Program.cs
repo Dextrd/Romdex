@@ -12,6 +12,7 @@ builder.Services.AddScoped<AuthState>();
 builder.Services.AddScoped<Theme>();
 builder.Services.AddScoped<GameLayout>();
 builder.Services.AddScoped<Schedules>();
+builder.Services.AddScoped<Preferences>();
 builder.Services.AddScoped<Notices>();
 builder.Services.AddScoped<TaskNotices>();
 builder.Services.AddScoped<RequestTracker>();

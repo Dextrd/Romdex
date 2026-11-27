@@ -39,6 +39,16 @@ public sealed record TaskInfo(Guid Id, string Kind, TaskState State, string? Pro
     public DateTime UpdatedAt => FinishedAt ?? StartedAt ?? CreatedAt;
 }
 
+/// <summary>What to do to many tasks, or requests, at once.</summary>
+public enum BulkAction { Pause, Resume, Cancel }
+
+/// <summary>Body of <c>POST /tasks/bulk</c>: one action for many at once.</summary>
+/// <param name="Ids">Tasks to act on. Any already past it (cancelling a finished one, say) are left as they are.</param>
+public sealed record BulkChange(BulkAction Action, IReadOnlyList<Guid> Ids);
+
+/// <summary>How many of those given were changed.</summary>
+public sealed record BulkChanged(int Changed);
+
 /// <summary>Body of <c>POST /tasks/{id}/move</c>.</summary>
 /// <param name="Before">Put it just before this one in the queue; null for the end.</param>
 public sealed record MoveInQueue(Guid? Before);

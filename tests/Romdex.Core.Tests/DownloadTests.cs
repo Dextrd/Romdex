@@ -351,6 +351,31 @@ public sealed class DownloadTests : IDisposable
     }
 
     [Fact]
+    public async Task Activity_lists_requests_newest_first_and_what_each_tried_names_it()
+    {
+        var lantern = _dats.Dump(Handheld, "Lantern Run (World)", [".gb"]);
+        var quarry = _dats.Dump(Handheld, "Quiet Quarry (USA)", [".gb"]);
+        _dats.WriteDats();
+        await SetUpAsync();
+        var titles = (await _api.ListAllTitlesAsync()).Items;
+
+        _plugin.Drop("l", ("l.gb", lantern[0].Data));
+        var first = await SettleAsync(Assert.Single((await _api.FetchTitleAsync(titles.Single(t => t.Name == "Lantern Run").Id)).Requests!).Id);
+        _plugin.Drop("q", ("q.gb", quarry[0].Data));
+        var second = await SettleAsync(Assert.Single((await _api.FetchTitleAsync(titles.Single(t => t.Name == "Quiet Quarry").Id)).Requests!).Id);
+
+        Assert.Equal([second.Id, first.Id], (await _api.ListRequestsAsync()).Select(r => r.Id));
+        Assert.Empty(await _api.ListRequestsAsync(active: true));
+        Assert.Equal([first.Id], (await _api.ListRequestsAsync(before: second.CreatedAt)).Select(r => r.Id));
+        Assert.Equal([second.Id], (await _api.ListRequestsAsync(limit: 1)).Select(r => r.Id));
+
+        // What a request fetched says which, so Activity shows it with its request rather than as arriving by itself.
+        var tried = (await _api.ListDownloadsAsync()).Items;
+        Assert.All(tried, d => Assert.NotNull(d.RequestId));
+        Assert.Equal(first.Id, tried.Single(d => d.Name == "l").RequestId);
+    }
+
+    [Fact]
     public async Task Getting_a_game_asks_for_each_wanted_region_it_came_out_in()
     {
         var europe = _dats.Dump(Handheld, "Tide Bell (Europe)", [".gb"]);

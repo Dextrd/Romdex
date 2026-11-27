@@ -250,6 +250,14 @@ public sealed class RomdexClient(HttpClient http)
     public Task<TitleFetch> FetchTitleAsync(Guid titleId, Guid? dumpId = null, IReadOnlyList<Guid>? replaces = null, CancellationToken ct = default) =>
         PostForAsync<TitleFetch>($"{Api}/titles/{titleId}/fetch", new SearchDownloads(dumpId, replaces), ct);
 
+    /// <summary>Requests, newest first; with <paramref name="active"/>, only those still going; <paramref name="before"/> pages back.</summary>
+    public async Task<IReadOnlyList<RequestInfo>> ListRequestsAsync(bool active = false, int limit = 100, DateTime? before = null, CancellationToken ct = default) =>
+        await http.GetFromJsonAsync<List<RequestInfo>>($"{Api}/requests?active={(active ? "true" : "false")}&limit={limit}" +
+            (before is { } b ? $"&before={Uri.EscapeDataString(b.ToUniversalTime().ToString("O"))}" : ""), RomdexJson.Options, ct) ?? [];
+
+    /// <summary>Pauses, resumes or cancels many tasks at once.</summary>
+    public Task<BulkChanged> ChangeTasksAsync(BulkChange change, CancellationToken ct = default) => PostForAsync<BulkChanged>($"{Api}/tasks/bulk", change, ct);
+
     public Task<RequestInfo?> GetRequestAsync(Guid id, CancellationToken ct = default) => GetOrNullAsync<RequestInfo>($"{Api}/requests/{id}", ct);
 
     /// <summary>Looks again for a request that ran out of offers, passing over what was turned away.</summary>

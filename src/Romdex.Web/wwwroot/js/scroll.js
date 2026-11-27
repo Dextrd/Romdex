@@ -7,6 +7,21 @@ window.romdexScroll = {
         return box && getComputedStyle(box).overflowY === 'auto' ? box : document.scrollingElement;
     },
     get: () => window.romdexScroll.scroller().scrollTop,
+    // Calls MoreAsync on the page when a long list's end comes near the screen. The page watches its end again each
+    // time it's drawn, so while the end stays near and more keeps coming, more is asked for.
+    atEnd: (end, page) => {
+        window.romdexScroll.endObserver?.disconnect();
+        if (!end)
+            return;
+        const observer = new IntersectionObserver(entries => {
+            if (!entries.some(e => e.isIntersecting))
+                return;
+            observer.disconnect();
+            page.invokeMethodAsync('MoreAsync').catch(() => { });
+        }, { rootMargin: '0px 0px 600px 0px' });
+        window.romdexScroll.endObserver = observer;
+        observer.observe(end);
+    },
     to: y => {
         let tries = 0;
         const go = () => {
@@ -17,7 +32,53 @@ window.romdexScroll = {
         };
         go();
     },
+    // Something the page is getting on with, such as the list an import is matching: brought into view, unless the
+    // page has been scrolled by hand in the last little while.
+    follow: id => {
+        // After the list before has had time to shrink shut, so it isn't aimed at a moving target.
+        setTimeout(() => {
+            const element = document.getElementById(id);
+            if (!element || Date.now() - window.romdexScroll.touched < 8000)
+                return;
+            const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+            element.scrollIntoView({ block: 'start', behavior: reduce ? 'instant' : 'smooth' });
+        }, 280);
+    },
+    touched: 0,
+    // A link's landing: the element it names (by its id, or the first a selector such as ".review-item" finds), once
+    // the page has drawn it, scrolled to the middle of the screen and flashed so it stands out. Gives up after a few
+    // seconds if it never comes.
+    land: id => {
+        const started = Date.now();
+        const go = () => {
+            const element = id.startsWith('.') ? document.querySelector(id) : document.getElementById(id);
+            if (!element) {
+                if (Date.now() - started < 5000)
+                    setTimeout(go, 100);
+                return;
+            }
+            const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+            element.scrollIntoView({ block: 'center', behavior: reduce ? 'instant' : 'smooth' });
+            element.classList.remove('landed');
+            void element.offsetWidth;
+            element.classList.add('landed');
+            setTimeout(() => element.classList.remove('landed'), 2200);
+        };
+        go();
+    },
+    // A row of tabs that scrolls sideways on a phone: the open tab, centred where it can be.
+    tabIntoView: () => {
+        const tab = document.querySelector('.page-tabs .active');
+        if (!tab)
+            return;
+        const row = tab.parentElement;
+        const left = tab.getBoundingClientRect().left - row.getBoundingClientRect().left + row.scrollLeft;
+        row.scrollTo({ left: left - (row.clientWidth - tab.offsetWidth) / 2, behavior: 'instant' });
+    },
 };
+
+for (const name of ['wheel', 'touchmove', 'keydown'])
+    window.addEventListener(name, () => window.romdexScroll.touched = Date.now(), { passive: true, capture: true });
 
 // Blazor scrolls the window to the top as a new page opens; where the page scrolls in its own box, that box is what goes.
 (() => {
@@ -31,7 +92,6 @@ window.romdexScroll = {
     };
 })();
 
-// A scan's files on the Activity page: opened where the scan is, and following it along unless someone's scrolled or
 // clicked in the list in the last little while.
 window.romdexScanList = {
     show: (list, index, opening) => {
@@ -146,8 +206,3 @@ function scrollBox(element) {
     }
     return window.romdexScroll.scroller();
 }
-
-// A row of page tabs too wide for a phone scrolls sideways: the one picked is brought into view.
-window.romdexTabs = {
-    reveal: selector => document.querySelector(selector + ' a.active')?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'instant' }),
-};
