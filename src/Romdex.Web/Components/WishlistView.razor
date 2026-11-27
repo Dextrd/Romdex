@@ -1,0 +1,170 @@
+@implements IDisposable
+@inject WishlistStore Wishlist
+@inject ServerEvents Events
+@inject Preferences Prefs
+@inject RomdexClient Api
+@inject Notices Notices
+@inject AuthState Auth
+
+@*
+    Your wishlist: games you'd like, a view of the Library, as Melodex's is a tab of it. Each can be got once something
+    can fetch it, or taken off; all of them at once with Get them all, by hand or on a schedule. What the library has
+    now isn't on it.
+*@
+<div class="toolbar">
+    <input class="filter" type="search" placeholder="Filter by game or system" aria-label="Filter" @bind="_filter" @bind:event="oninput" />
+    <SortMenu Options="SortOptions" Value="@_sort" Descending="_descending" DirectionHint="@DirectionHint"
+              OnChange="@(key => SortAsync(key, key == "newest"))" OnReverse="() => SortAsync(_sort, !_descending)" />
+    @if (_error is not null) { <span class="error small" title="@_error">@_error</span> }
+    <span class="spacer"></span>
+    @if (Wishlist.CanFetch && Wishlist.Loaded && Shown.Count > 0)
+    {
+        <IconButton Icon="get" Requires="@UserPermissions.Download" Label="Get them all" Disabled="_getting"
+                    Title="Ask for everything on your wishlist, as Get does for each" OnClick="GetAllAsync" />
+    }
+</div>
+<p class="muted small">
+    Games you'd like, kept until your library has them in every region you want.
+    @if (!Wishlist.CanFetch) { <span>Nothing can fetch them now: turn on a retriever that searches in <a href="settings/plugins">Plugins</a> to get them.</span> }
+    <ScheduleNote Task="ScheduledTask.Wishlist" />
+</p>
+
+@if (!Wishlist.Loaded)
+{
+    <Loading />
+}
+else if (Shown.Count == 0)
+{
+    <div class="empty card">
+        @if (_filter.Length > 0) { <span>Nothing matches.</span> }
+        else { <span>Nothing on it. Add games you don't have with the star on their page, or everything a system is missing from its page.</span> }
+    </div>
+}
+else
+{
+    <div class="card">
+        <table class="table wishlist-table">
+            <tbody>
+                @foreach (var item in Shown)
+                {
+                    <tr @key="item.Id">
+                        <td>
+                            <a class="game-name" href="titles/@item.TitleId"><Cover Url="@item.Cover" /><span>@item.Name<RegionDot Fit="item.Fit" WantedMissing="item.WantedMissing" /></span></a>
+                        </td>
+                        <td class="muted small"><a href="systems/@item.SystemId">@item.System</a></td>
+                        <td class="muted small hide-narrow" title="@item.AddedAt.ToLocalTime().ToString("f")">Added @Format.Ago(item.AddedAt)</td>
+                        <td class="num actions">
+                            @if (Wishlist.CanFetch)
+                            {
+                                <IconButton Icon="get" Requires="@UserPermissions.Download" Title="Get it: find it through the retrievers"
+                                            OnClick="() => _getting1 = item" />
+                            }
+                            <IconButton Icon="wished" On="true" Title="Take it off your wishlist" OnClick="() => RemoveAsync(item)" />
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@if (_getting1 is { } one)
+{
+    <GetDialog TitleId="one.TitleId" DumpId="one.DumpId" Name="@one.Name" OnClose="() => _getting1 = null" />
+}
+
+@code {
+    private bool _getting;
+    private WishlistItem? _getting1;
+
+    private async Task GetAllAsync()
+    {
+        _getting = true;
+        try
+        {
+            var asked = (await Api.GetWishlistItemsAsync()).Asked;
+            Notices.Show(new Notice($"wishlist:{Guid.NewGuid()}", NoticeKind.Action, "Your wishlist",
+                asked == 0 ? "Everything on it is being fetched already" : $"Asked for {Format.Count(asked, "game", "games")}",
+                "activity/fetches", "get"), always: true);
+        }
+        catch (Exception e) when (e is HttpRequestException or RomdexApiException)
+        {
+            _error = e.Message;
+        }
+        _getting = false;
+    }
+
+    private const string SortKey = "wishlist.sort", DescendingKey = "wishlist.descending";
+
+    private static readonly IReadOnlyList<(string Key, string Label)> SortOptions = [("newest", "Newest"), ("name", "Title"), ("system", "System")];
+
+    private string _filter = "";
+    private string _sort = "newest";
+    private bool _descending = true;
+    private string? _error;
+
+    private string DirectionHint => _sort == "newest"
+        ? $"{(_descending ? "Newest" : "Oldest")} first; click to reverse"
+        : $"Sorted {(_descending ? "Z to A" : "A to Z")}; click to reverse";
+
+    private List<WishlistItem> Shown
+    {
+        get
+        {
+            var items = Wishlist.Items.Where(Matches);
+            if (_sort == "newest")
+                return (_descending ? items : items.Reverse()).ToList();
+            Func<WishlistItem, string> key = _sort == "system" ? i => i.System : i => i.Name;
+            var text = StringComparer.CurrentCultureIgnoreCase;
+            return (_descending ? items.OrderByDescending(key, text) : items.OrderBy(key, text)).ToList();
+        }
+    }
+
+    private bool Matches(WishlistItem item) =>
+        _filter.Length == 0 || new[] { item.Name, item.System }.Any(s => s.Contains(_filter, StringComparison.CurrentCultureIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        Wishlist.Changed += Redraw;
+        Events.Received += OnEvent;
+        _sort = await Prefs.GetAsync(SortKey, "newest");
+        _descending = await Prefs.GetAsync(DescendingKey, true);
+        // Afresh each time, so what's arrived in the library since has gone.
+        await Wishlist.RefreshAsync();
+    }
+
+    private async Task SortAsync(string key, bool descending)
+    {
+        (_sort, _descending) = (key, descending);
+        await Prefs.SetAsync(SortKey, key);
+        await Prefs.SetAsync(DescendingKey, descending);
+    }
+
+    private async Task RemoveAsync(WishlistItem item)
+    {
+        _error = null;
+        try
+        {
+            await Wishlist.RemoveAsync(item.TitleId);
+        }
+        catch (Exception e) when (e is HttpRequestException or RomdexApiException)
+        {
+            _error = e.Message;
+        }
+    }
+
+    // A request landing in the library may take something off it.
+    private void OnEvent(string type)
+    {
+        if (type is "requests")
+            _ = InvokeAsync(Wishlist.RefreshAsync);
+    }
+
+    private void Redraw() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Wishlist.Changed -= Redraw;
+        Events.Received -= OnEvent;
+    }
+}

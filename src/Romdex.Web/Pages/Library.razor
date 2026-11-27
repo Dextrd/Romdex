@@ -1,4 +1,5 @@
 @page "/"
+@page "/wishlist"
 @implements IDisposable
 @inject RomdexClient Api
 @inject ServerEvents Events
@@ -8,9 +9,12 @@
 <PageTitle>Library · Romdex</PageTitle>
 
 <h1>Library</h1>
-<p class="muted">@(_view == "games"
-    ? "Every game in your library, checked against the DATs."
-    : "Every system you have games for, checked against its DAT.")</p>
+<p class="muted">@(_view switch
+    {
+        "games" => "Every game in your library, checked against the DATs.",
+        "wishlist" => "Games you'd like, to get when you're ready.",
+        _ => "Every system you have games for, checked against its DAT.",
+    })</p>
 
 <div class="toolbar">
     <Segmented T="string" Value="_view" Options="Views" OnChange="Show" Label="View" />
@@ -26,7 +30,11 @@
     }
 </div>
 
-@if (!_loaded)
+@if (_view == "wishlist")
+{
+    <WishlistView />
+}
+else if (!_loaded)
 {
     <Loading />
 }
@@ -107,7 +115,7 @@ else
 
 @code {
     private const int PageSize = 100;
-    private static readonly IReadOnlyList<(string Value, string Label, string? Hint)> Views = [("systems", "Systems", null), ("games", "Games", null)];
+    private static readonly IReadOnlyList<(string Value, string Label, string? Hint)> Views = [("systems", "Systems", null), ("games", "Games", null), ("wishlist", "Wishlist", "Games you'd like, to get later")];
 
     [SupplyParameterFromQuery(Name = "view")] public string? ViewParameter { get; set; }
 
@@ -135,7 +143,8 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
-        _view = ViewParameter == "games" ? "games" : "systems";
+        // Melodex's wishlist has an address of its own; Romdex's goes there too.
+        _view = Nav.ToBaseRelativePath(Nav.Uri).StartsWith("wishlist") ? "wishlist" : ViewParameter is "games" or "wishlist" ? ViewParameter : "systems";
         _layout = await Layout.GetAsync();
         await LoadAsync();
         _loaded = true;
@@ -177,7 +186,7 @@ else
         _titles = skip == 0 ? [.. page.Items] : [.. _titles, .. page.Items];
     }
 
-    private void Show(string view) => Nav.NavigateTo(view == "games" ? "?view=games" : "", replace: true);
+    private void Show(string view) => Nav.NavigateTo(Nav.BaseUri + (view == "systems" ? "" : $"?view={view}"), replace: true);
 
     private RegionFit? _fit;
 

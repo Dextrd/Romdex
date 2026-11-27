@@ -32,6 +32,7 @@ public sealed class Schedules(RomdexClient api)
     {
         ScheduledTask.Scan => "Scan the library",
         ScheduledTask.CatalogueUpdate => "Update the catalogue",
+        ScheduledTask.Wishlist => "Get what's on wishlists",
         _ => "Retry failed fetches",
     };
 
@@ -39,14 +40,16 @@ public sealed class Schedules(RomdexClient api)
     {
         ScheduledTask.Scan => "Hashes new and changed files in the library and matches them against the DATs.",
         ScheduledTask.CatalogueUpdate => "Reads the DATs again, and what the catalogue plugins know, such as a new No-Intro or Redump release.",
+        ScheduledTask.Wishlist => "Asks for what's on everyone's wishlist, a few at a time, if a retriever is on to fetch it. Any not asked for when the window closes wait for the next, and stay wished for.",
         _ => "Looks again for what you asked for that ran out of offers, a few at a time, passing over what was turned away. Any not looked for when the window closes wait for the next.",
     };
 
-    /// <summary>Where it can be run now, by hand. (Retry failed moves to Activity → Fetches when that's brought over from Melodex.)</summary>
+    /// <summary>Where it can be run now, by hand.</summary>
     public static (string Where, string Href) RunNow(ScheduledTask task) => task switch
     {
         ScheduledTask.Scan or ScheduledTask.CatalogueUpdate => ("the Scan menu", ""),
-        _ => ("Review → Couldn't fetch", "review/couldnt-fetch"),
+        ScheduledTask.Wishlist => ("Wishlist", "wishlist"),
+        _ => ("Activity → Fetches", "activity/fetches"),
     };
 
     public static string Name(ScheduleRepeat repeat) => repeat switch

@@ -1,0 +1,56 @@
+@implements IDisposable
+@inject WishlistStore Wishlist
+@inject Notices Notices
+
+@*
+    A game's star: puts it on your wishlist, to get later, or takes it off, as Melodex's does for songs and albums.
+    Melodex shows it in Listen now's place while nothing can fetch; Romdex has no Listen now, so it's always beside Get.
+*@
+@{ var wished = Wishlist.Contains(TitleId); }
+<IconButton Icon="@(wished ? "wished" : "wish")" On="wished" Large="Large" Disabled="_busy"
+            Label="@(Labelled ? wished ? "On your wishlist" : "Wishlist" : null)"
+            Title="@(wished ? "On your wishlist: take it off" : "Add to your wishlist, to get later")" OnClick="ToggleAsync" />
+
+@code {
+    [Parameter, EditorRequired] public Guid TitleId { get; set; }
+
+    /// <summary>The game's name, for what's said when it's added.</summary>
+    [Parameter] public string Name { get; set; } = "";
+
+    [Parameter] public bool Large { get; set; }
+
+    /// <summary>Says what it does beside its star, as a large button with a label does.</summary>
+    [Parameter] public bool Labelled { get; set; }
+
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Wishlist.Changed += OnChanged;
+        await Wishlist.EnsureLoadedAsync();
+    }
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task ToggleAsync()
+    {
+        _busy = true;
+        try
+        {
+            var add = !Wishlist.Contains(TitleId);
+            if (add)
+                await Wishlist.AddAsync(TitleId);
+            else
+                await Wishlist.RemoveAsync(TitleId);
+            Notices.Show(new Notice($"wish:{TitleId}", NoticeKind.Action, Name,
+                add ? "On your wishlist, under Library → Wishlist" : "Taken off your wishlist", add ? "wishlist" : null, add ? "wished" : "wish"));
+        }
+        catch (Exception e) when (e is HttpRequestException or RomdexApiException)
+        {
+            // It stays as it was, which the button shows.
+        }
+        _busy = false;
+    }
+
+    public void Dispose() => Wishlist.Changed -= OnChanged;
+}

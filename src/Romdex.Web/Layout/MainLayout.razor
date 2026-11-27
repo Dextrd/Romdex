@@ -74,7 +74,7 @@
     private ElementReference _topbar;
 
     // A system's and a title's pages belong to the library.
-    private bool OnLibrary => Nav.ToBaseRelativePath(Nav.Uri) is var path && (path.StartsWith("systems/") || path.StartsWith("titles/"));
+    private bool OnLibrary => Nav.ToBaseRelativePath(Nav.Uri) is var path && (path.StartsWith("systems/") || path.StartsWith("titles/") || path.StartsWith("wishlist"));
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {

@@ -22,6 +22,7 @@ public sealed class ScheduledTasks(
     SettingsService settings,
     TaskQueue queue,
     RequestService requests,
+    Wishlists.WishlistService wishlists,
     ILogger<ScheduledTasks> logger)
 {
     private const string Closed = "The window closed before it started";
@@ -140,6 +141,9 @@ public sealed class ScheduledTasks(
         return step.Task switch
         {
             ScheduledTask.RetryFailed => await RetryingAsync(step, downloads, atATime, open, ct),
+            ScheduledTask.Wishlist when step.State == ScheduledStepState.Waiting && !await wishlists.CanFetchAsync(ct) =>
+                (step with { State = ScheduledStepState.Skipped, Detail = "No retriever that searches is on to fetch them" }, downloads),
+            ScheduledTask.Wishlist => await WishingAsync(step, downloads, atATime, open, ct),
             _ => (step with { State = ScheduledStepState.Skipped }, downloads),
         };
     }
@@ -187,6 +191,73 @@ public sealed class ScheduledTasks(
         if (left > 0 || going > 0)
             return step with { State = ScheduledStepState.Running, Detail = $"{verb} {LibraryMatcher.Plural(asked.Count, one, many)} so far, {going} going" };
         return step with { State = ScheduledStepState.Done, Detail = asked.Count == 0 ? nothing : $"{verb} {LibraryMatcher.Plural(asked.Count, one, many)}" };
+    }
+
+    // What's on wishlists asked for a few at a time, each once, the longest wished for first, as Melodex's are.
+    private async Task<(ScheduledStep, ScheduleDownloads)> WishingAsync(ScheduledStep step, ScheduleDownloads downloads, int atATime, bool open,
+        CancellationToken ct)
+    {
+        var asked = downloads.Asked.ToList();
+        var tried = downloads.Tried.ToHashSet();
+        if (!open)
+            return (step with
+            {
+                State = ScheduledStepState.Done,
+                Detail = $"Asked for {LibraryMatcher.Plural(tried.Count, "game", "games")} before the window closed",
+            }, new ScheduleDownloads());
+
+        var untried = (await WishedAsync(null, ct)).Where(w => !tried.Contains(w.Key)).ToList();
+        var places = atATime - await GoingAsync(asked, ct);
+        var taken = 0;
+        foreach (var wished in untried)
+        {
+            if (taken >= places)
+                break;
+            tried.Add(wished.Key);
+            var started = await AskForAsync(wished.TitleId, wished.DumpId, ct);
+            asked.AddRange(started);
+            if (started.Count > 0)
+                taken++;
+        }
+        if (taken > 0)
+            logger.LogInformation("Asked for {Count} games from wishlists on a schedule", taken);
+        var left = untried.Count(w => !tried.Contains(w.Key));
+        return (await RollingAsync(step, asked, left, "Asked for", "fetch", "fetches", "Nothing on a wishlist could be asked for", ct),
+            new ScheduleDownloads(asked, tried.ToList()));
+    }
+
+    /// <summary>
+    /// Get them all: asks, all at once, for what's on a wishlist, or everyone's, as Get does for each. Games being
+    /// fetched already are left as they are. Returns how many games it asked for.
+    /// </summary>
+    public async Task<int> GetWishlistsAsync(Guid? userId, CancellationToken ct)
+    {
+        var asked = 0;
+        foreach (var wished in await WishedAsync(userId, ct))
+            if ((await AskForAsync(wished.TitleId, wished.DumpId, ct)).Count > 0)
+                asked++;
+        if (asked > 0)
+            logger.LogInformation("Asked for {Count} games from wishlists", asked);
+        return asked;
+    }
+
+    // What's on a wishlist, or everyone's, the longest wished for first: each game once.
+    private async Task<List<(string Key, Guid TitleId, Guid? DumpId)>> WishedAsync(Guid? userId, CancellationToken ct)
+    {
+        var users = await db.Users.Where(u => userId == null || u.Id == userId)
+            .Where(u => db.WishlistEntries.Any(w => w.UserId == u.Id)).Select(u => u.Id).ToListAsync(ct);
+        var wished = new List<WishlistItem>();
+        foreach (var user in users)
+            wished.AddRange((await wishlists.GetAsync(user, ct)).Items);
+        return wished.OrderBy(w => w.AddedAt).Select(w => (Key: $"{w.TitleId}:{w.DumpId}", w.TitleId, w.DumpId)).DistinctBy(w => w.TitleId).ToList();
+    }
+
+    // Gets a game as Get does, unless it's being fetched already: the requests it started.
+    private async Task<IReadOnlyList<Guid>> AskForAsync(Guid titleId, Guid? dumpId, CancellationToken ct)
+    {
+        if (await db.Requests.AnyAsync(r => r.TitleId == titleId && (r.State == RequestState.Active || r.State == RequestState.Queued), ct))
+            return [];
+        return await requests.StartAsync(titleId, dumpId, null, ct) is { } started ? started.Requests.Select(r => r.Id).ToList() : [];
     }
 
     /// <summary>Retry failed: looks again, all at once, for every request that ran out of offers. Returns how many.</summary>

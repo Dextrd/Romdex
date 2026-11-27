@@ -404,6 +404,39 @@ public sealed class DownloadTests : IDisposable
     }
 
     [Fact]
+    public async Task A_wishlist_keeps_games_until_the_library_has_them_and_gets_them_all()
+    {
+        var lantern = _dats.Dump(Handheld, "Lantern Run (World)", [".gb"]);
+        _dats.Dump(Handheld, "Quiet Quarry (USA)", [".gb"]);
+        _dats.WriteDats();
+        await SetUpAsync();
+        var titles = (await _api.ListAllTitlesAsync()).Items;
+        var wanted = titles.Single(t => t.Name == "Lantern Run");
+
+        // Every game the system is missing, once; adding one again changes nothing.
+        Assert.Equal(2, (await _api.WishForMissingAsync(wanted.SystemId)).Added);
+        Assert.Equal(0, (await _api.WishForMissingAsync(wanted.SystemId)).Added);
+        await _api.AddToWishlistAsync(new AddToWishlist(wanted.Id));
+        var wishlist = await _api.GetWishlistAsync();
+        Assert.True(wishlist.CanFetch);
+        Assert.Equal(["Lantern Run", "Quiet Quarry"], wishlist.Items.Select(i => i.Name).Order());
+
+        // Taken off by hand, it's gone; taking it off again finds nothing.
+        var quarry = titles.Single(t => t.Name == "Quiet Quarry").Id;
+        await _api.RemoveFromWishlistAsync(quarry);
+        var missing = await Assert.ThrowsAsync<RomdexApiException>(() => _api.RemoveFromWishlistAsync(quarry));
+        Assert.Equal(HttpStatusCode.NotFound, missing.Status);
+
+        // Get them all asks for each, as Get does; once the library has it, it leaves the wishlist.
+        _plugin.Drop("l", ("l.gb", lantern[0].Data));
+        _plugin.DumpNames["l"] = "Lantern Run (World)";
+        Assert.Equal(1, (await _api.GetWishlistItemsAsync()).Asked);
+        Assert.Equal(RequestState.Done, (await SettleAsync(Assert.Single(await _api.ListRequestsAsync()).Id)).State);
+        Assert.Empty((await _api.GetWishlistAsync()).Items);
+        Assert.Equal(HttpStatusCode.NotFound, missing.Status);
+    }
+
+    [Fact]
     public async Task Activity_lists_requests_newest_first_and_what_each_tried_names_it()
     {
         var lantern = _dats.Dump(Handheld, "Lantern Run (World)", [".gb"]);

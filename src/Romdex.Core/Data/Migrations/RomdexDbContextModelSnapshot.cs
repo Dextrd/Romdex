@@ -895,6 +895,36 @@ namespace Romdex.Core.Data.Migrations
                     b.ToTable("WebhookDeliveries");
                 });
 
+            modelBuilder.Entity("Romdex.Core.Data.WishlistEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("AddedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("DumpId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("TitleId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DumpId");
+
+                    b.HasIndex("TitleId");
+
+                    b.HasIndex("UserId", "TitleId")
+                        .IsUnique();
+
+                    b.ToTable("WishlistEntries");
+                });
+
             modelBuilder.Entity("Romdex.Core.Data.ApiKey", b =>
                 {
                     b.HasOne("Romdex.Core.Data.User", "User")
@@ -1105,6 +1135,26 @@ namespace Romdex.Core.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Webhook");
+                });
+
+            modelBuilder.Entity("Romdex.Core.Data.WishlistEntry", b =>
+                {
+                    b.HasOne("Romdex.Core.Data.Dump", null)
+                        .WithMany()
+                        .HasForeignKey("DumpId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Romdex.Core.Data.Title", null)
+                        .WithMany()
+                        .HasForeignKey("TitleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Romdex.Core.Data.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Romdex.Core.Data.CatalogueSystem", b =>

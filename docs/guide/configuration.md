@@ -62,8 +62,9 @@ same times, for failed fetches; nothing is monthly.
 - **The weekly one runs on a day you pick, the monthly one on a day of the month, 1 to 31.** In a month shorter than
   that, it runs on the month's last day: 31 is the last day of every month.
 - **All three are in one time zone**, the server's UTC to start with: **Use this browser's** sets yours.
-- **A window runs its tasks once, in order**: scan, catalogue, then failed fetches. The first two are tasks on
-  **Activity**, one after another; failed fetches wait for them.
+- **A window runs its tasks once, in order**: scan, catalogue, failed fetches, then what's on wishlists. The first two
+  are tasks on **Activity**, one after another; the fetches wait for them. Wishlists are passed over while no retriever
+  that searches is on.
 - **Scheduled fetches go a few at a time**, five to start with (Settings → Fetching): as each finishes, the next is looked for in its place. When the
   window closes, nothing more is looked for; the rest wait for the next window, and those under way carry on.
 - **The windows take turns.** When two open on the same day, daily goes first, then weekly, then monthly, as long as

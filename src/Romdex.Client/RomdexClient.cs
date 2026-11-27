@@ -315,6 +315,24 @@ public sealed class RomdexClient(HttpClient http)
         await EnsureAsync(response, ct);
     }
 
+    public async Task<Wishlist> GetWishlistAsync(CancellationToken ct = default) =>
+        (await http.GetFromJsonAsync<Wishlist>($"{Api}/wishlist", RomdexJson.Options, ct))!;
+
+    public Task AddToWishlistAsync(AddToWishlist add, CancellationToken ct = default) => PostAsync($"{Api}/wishlist", add, ct);
+
+    /// <summary>Puts every game a system is missing on your wishlist.</summary>
+    public Task<AddedToWishlist> WishForMissingAsync(Guid systemId, CancellationToken ct = default) =>
+        PostForAsync<AddedToWishlist>($"{Api}/systems/{systemId}/wishlist", null, ct);
+
+    public async Task RemoveFromWishlistAsync(Guid titleId, CancellationToken ct = default)
+    {
+        using var response = await http.DeleteAsync($"{Api}/wishlist/{titleId}", ct);
+        await EnsureAsync(response, ct);
+    }
+
+    /// <summary>Get them all: asks for everything on your wishlist.</summary>
+    public Task<AskedAgain> GetWishlistItemsAsync(CancellationToken ct = default) => PostForAsync<AskedAgain>($"{Api}/wishlist/get", null, ct);
+
     /// <summary>Retry failed: looks again for every request that ran out of offers.</summary>
     public Task<AskedAgain> RetryFailedAsync(CancellationToken ct = default) => PostForAsync<AskedAgain>($"{Api}/requests/retry-failed", null, ct);
 

@@ -1,6 +1,7 @@
 @page "/titles/{Id:guid}"
 @inject RomdexClient Api
 @inject RequestTracker Tracker
+@inject WishlistStore Wishlist
 @inject AuthState Auth
 @inject Preferences Prefs
 @inject NavigationManager Nav
@@ -123,6 +124,10 @@ else
                 else if (_title.Status != TitleStatus.Owned)
                 {
                     <IconButton Icon="get" Requires="@UserPermissions.Download" Large="true" Label="Get" Title="Find it through the retrievers" OnClick="() => _getting = (null, _title.Name)" />
+                }
+                @if (_title.Status != TitleStatus.Owned || _title.WantedMissing is { Count: > 0 } || Wishlist.Contains(_title.Id))
+                {
+                    <WishButton TitleId="_title.Id" Name="@_title.Name" Large="true" />
                 }
                 @if (_title.Status != TitleStatus.Owned || _title.Ignored)
                 {

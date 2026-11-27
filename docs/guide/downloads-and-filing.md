@@ -35,6 +35,15 @@ rest. The old Downloads page's links go there.
 5. **Filed.** The igir worker moves it into the library, named as the DAT names it, and Romdex checks it's there and
    verified.
 
+## Your wishlist
+
+The star beside **Get** on a game's page puts it on your wishlist, under **Library → Wishlist**, to get later; a
+system's page has **Wish for what's missing**, for every game its Missing list has. Each person has their own. A game
+stays on it until the library has it in every region you want, as **Get** would then have nothing to ask for.
+**Get them all** asks for everything on it at once, as Get does for each, passing over games already being fetched;
+or tick **Get what's on wishlists** under [Scheduled tasks](configuration.md#scheduled-tasks) to have everyone's asked
+for a few at a time.
+
 ## What waits for you
 
 An arrival waits for you, under [Review](review.md), when:

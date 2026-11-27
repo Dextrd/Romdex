@@ -12,8 +12,8 @@ public enum ScheduledTask
     /// <summary>Look again for requests that ran out of offers, a few at a time, until all have been or the window closes.</summary>
     RetryFailed,
 
-    // Romdex's own, as Melodex's are: getting what's wished for and looking for upgrades join these as they're brought
-    // over from Melodex (docs/plans/parity.md).
+    /// <summary>Ask for what's on everyone's wishlists, a few at a time, until all have been or the window closes.</summary>
+    Wishlist,
 }
 
 /// <summary>How often a schedule's window comes round.</summary>

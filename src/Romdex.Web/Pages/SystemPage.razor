@@ -4,6 +4,7 @@
 @inject ServerEvents Events
 @inject AuthState Auth
 @inject GameLayout Layout
+@inject Notices Notices
 
 <PageTitle>@(_system?.Name ?? "System") · Romdex</PageTitle>
 
@@ -36,6 +37,9 @@ else
         </select>
         <input type="search" placeholder="Search games" value="@_query" @oninput="SearchAsync" />
         <LayoutToggle Value="@_layout" OnChange="l => _layout = l" />
+        @* Romdex's own: every game the system is missing on your wishlist at once, to get them all now or on a schedule. *@
+        <IconButton Icon="wish" Label="Wish for what's missing" Disabled="_wishing"
+                    Title="Put every game this system is missing on your wishlist, to get them all from there, now or on a schedule" OnClick="WishForMissingAsync" />
     </div>
 
     @if (_page is null)
@@ -176,6 +180,25 @@ else
     private BiosList? _bios;
     private TitlePage? _page;
     private List<TitleSummary> _titles = [];
+    private bool _wishing;
+
+    private async Task WishForMissingAsync()
+    {
+        _wishing = true;
+        try
+        {
+            var added = (await Api.WishForMissingAsync(Id)).Added;
+            Notices.Show(new Notice($"wish-missing:{Id}", NoticeKind.Action, _system?.Name ?? "This system",
+                added == 0 ? "Everything it's missing is on your wishlist already" : $"{Format.Count(added, "game", "games")} it's missing put on your wishlist",
+                "wishlist", "wished"), always: true);
+        }
+        catch (Exception e) when (e is HttpRequestException or RomdexApiException)
+        {
+            Notices.Show(new Notice($"wish-missing:{Id}", NoticeKind.Action, _system?.Name ?? "This system", e.Message, null, "attention", Failed: true), always: true);
+        }
+        _wishing = false;
+    }
+
     private string _filter = "All";
     private string _query = "";
     private int _search;
