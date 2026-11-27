@@ -26,9 +26,6 @@ public class RomdexOptions
     /// </summary>
     public bool ResetLogin { get; set; }
 
-    /// <summary>How often the catalogue is updated by itself, in hours; 0 turns it off, leaving only the button.</summary>
-    public int CatalogueRefreshHours { get; set; } = 24;
-
     /// <summary>How many files are hashed at once. Hashing big disc images is the heaviest work Romdex does.</summary>
     public int HashThreads { get; set; } = 2;
 
@@ -38,8 +35,15 @@ public class RomdexOptions
     /// </summary>
     public string WorkerUrl { get; set; } = "";
 
-    /// <summary>How often retrievers that hand over what arrived by themselves are asked, in minutes; 0 leaves only the button.</summary>
+    /// <summary>
+    /// Whether retrievers that hand over what arrived by themselves are asked by themselves, every
+    /// <see cref="Romdex.Client.ScheduleSettings.ArrivalCheckMinutes"/> as Settings → Scheduled tasks says; 0 leaves only
+    /// the button, as tests do.
+    /// </summary>
     public int DownloadCheckMinutes { get; set; } = 5;
+
+    /// <summary>Whether scheduled tasks run as their windows open. Off in tests, which move them along themselves.</summary>
+    public bool ScheduledTasks { get; set; } = true;
 
     /// <summary>
     /// The emulatorjs container's address, such as <c>http://emulatorjs:8080</c>, which sets up the EmulatorJS player

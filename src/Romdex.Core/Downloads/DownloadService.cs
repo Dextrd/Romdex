@@ -368,7 +368,9 @@ public sealed class DownloadWatcher(IServiceScopeFactory scopes, DownloadSignal 
                 await downloads.FollowFetchesAsync(stoppingToken);
                 // Requests whose attempt is over go on to their next offer.
                 await scope.ServiceProvider.GetRequiredService<RequestService>().AdvanceAsync(stoppingToken);
-                var every = options.Value.DownloadCheckMinutes;
+                var every = options.Value.DownloadCheckMinutes > 0
+                    ? (await scope.ServiceProvider.GetRequiredService<Settings.SettingsService>().GetScheduleAsync(stoppingToken)).ArrivalCheckMinutes
+                    : 0;
                 if (signal.TakeCheck() || every > 0 && DateTime.UtcNow >= nextCheck)
                 {
                     var added = await downloads.CheckAsync(stoppingToken);

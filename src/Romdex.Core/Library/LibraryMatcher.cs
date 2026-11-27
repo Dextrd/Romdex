@@ -85,4 +85,6 @@ public sealed class LibraryMatcher(RomdexDbContext db, LibraryViews views)
                 AND NOT EXISTS (SELECT 1 FROM LibraryContents c WHERE c.HeaderlessSha1 = PastMatches.Sha1);
             """, ct);
     }
+
+    internal static string Plural(int n, string one, string many) => $"{n} {(n == 1 ? one : many)}";
 }

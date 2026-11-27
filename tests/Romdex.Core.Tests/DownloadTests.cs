@@ -42,7 +42,7 @@ public sealed class DownloadTests : IDisposable
             .UseSetting("Romdex:LibraryPath", _dats.Roms)
             .UseSetting("Romdex:DatPath", _dats.Dats)
             .UseSetting("Romdex:StagingPath", _staging)
-            .UseSetting("Romdex:CatalogueRefreshHours", "0")
+            .UseSetting("Romdex:ScheduledTasks", "false")
             .UseSetting("Romdex:DownloadCheckMinutes", "0")
             .UseSetting("Romdex:WorkerUrl", "http://fake-worker")
             .ConfigureServices(services =>

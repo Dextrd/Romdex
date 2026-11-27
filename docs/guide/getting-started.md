@@ -65,7 +65,7 @@ X's dumps, but Romdex checks and files them like any other.
 
 **Library**, the home page, has two views. **Systems** lists every system you have games for; **Games** lists every
 game in the library together, to filter and search. **Scan**, at the top, reads your library, and
-**Update the catalogue**, in the menu beside it, reads the DATs again (Romdex also does this by itself once a day). A scan hashes each file once; later scans only hash
+**Update the catalogue**, in the menu beside it, reads the DATs again. Both run by themselves each night, as [Scheduled tasks](configuration.md#scheduled-tasks) says. A scan hashes each file once; later scans only hash
 what's new or changed.
 
 A file counts only when its checksums match a dump in the DAT, whatever it's called. Files can be loose, zipped,

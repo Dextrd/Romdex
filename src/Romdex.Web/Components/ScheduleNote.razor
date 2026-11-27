@@ -1,0 +1,29 @@
+@inject Schedules Schedules
+@inject AuthState Auth
+
+@* Says when a task runs on its own, if it's on a schedule, with a link to the Scheduled tasks tab where that's set. *@
+@if (_settings is { } settings)
+{
+    <span class="muted small schedule-note">
+        @if (settings.WhenRuns(Task) is { } repeat)
+        {
+            <text>@Schedules.Name(Task) is on the @Schedules.Name(repeat).ToLowerInvariant() schedule, @Schedules.When(settings, repeat).</text>
+        }
+        else
+        {
+            <text>@Schedules.Name(Task) isn't on a schedule.</text>
+        }
+        @if (Auth.May(UserPermissions.Settings))
+        {
+            <text> </text><a href="settings/schedule">Scheduled tasks</a>
+        }
+    </span>
+}
+
+@code {
+    [Parameter, EditorRequired] public ScheduledTask Task { get; set; }
+
+    private ScheduleSettings? _settings;
+
+    protected override async Task OnInitializedAsync() => _settings = await Schedules.GetAsync();
+}

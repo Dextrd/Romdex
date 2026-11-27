@@ -29,7 +29,7 @@ public sealed class ReviewModelTests : IDisposable
             .UseSetting("Romdex:DataPath", _dats.Data)
             .UseSetting("Romdex:LibraryPath", _dats.Roms)
             .UseSetting("Romdex:DatPath", _dats.Dats)
-            .UseSetting("Romdex:CatalogueRefreshHours", "0"));
+            .UseSetting("Romdex:ScheduledTasks", "false"));
         _api = new RomdexClient(_factory.CreateSignedInClient());
     }
 

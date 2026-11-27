@@ -1,0 +1,257 @@
+@page "/settings/schedule"
+@layout SettingsLayout
+@inject RomdexClient Api
+@inject Schedules Schedules
+@implements IDisposable
+
+<PageTitle>Scheduled tasks · Romdex</PageTitle>
+
+@*
+    When scheduled tasks run: a daily, a weekly and a monthly window, each with its own times and the tasks ticked for
+    it, a task in one at most. Each task's own settings, and its button to run it now, stay where they were.
+*@
+@if (_status is null || _settings is null)
+{
+    @if (_error is not null) { <div class="empty card error">@_error</div> } else { <Loading /> }
+}
+else
+{
+    <p class="muted small">
+        Chores for Romdex to do while you're not using it. When a window opens, the tasks ticked for it run one after another, in the order listed;
+        retrying failed fetches goes last and stops when the window closes. Each task's own settings, and a way to run it now, stay where they were.
+    </p>
+
+    <div class="card settings-card">
+        <div class="setting-line">
+            <span>Times are in <strong>@_settings.TimeZone</strong>@(_settings.TimeZone == BrowserZone ? ", this browser's time zone" : "").</span>
+            @if (_settings.TimeZone != BrowserZone)
+            {
+                <span class="spacer"></span>
+                <button @onclick="() => Set(_settings with { TimeZone = BrowserZone })">Use this browser's (@BrowserZone)</button>
+            }
+        </div>
+        @if (_status.Running is { } running)
+        {
+            <div class="muted small">
+                <span class="spinner"></span> The @Schedules.Name(running.Repeat).ToLowerInvariant() tasks are running now, until @running.Closes.ToLocalTime().ToString("HH:mm").
+                <a href="activity">Follow them in Activity</a>.
+            </div>
+        }
+    </div>
+
+    @foreach (var repeat in Enum.GetValues<ScheduleRepeat>())
+    {
+        var window = _settings.Of(repeat);
+        var status = _status.Windows.FirstOrDefault(w => w.Repeat == repeat);
+        <h2>@Schedules.Name(repeat)</h2>
+        <div class="card settings-card schedule-card">
+            @if (window is WeeklySchedule weekly)
+            {
+                <div class="setting-line" role="radiogroup" aria-label="Day">
+                    On
+                    <span class="day-toggles">
+                        @foreach (var day in Week)
+                        {
+                            var on = weekly.Day == day;
+                            <button type="button" role="radio" class="day-toggle @(on ? "on" : "")" aria-checked="@(on ? "true" : "false")" title="@day"
+                                    @onclick="() => Set(_settings with { Weekly = weekly with { Day = day } })">@day.ToString()[..3]</button>
+                        }
+                    </span>
+                </div>
+            }
+            else if (window is MonthlySchedule monthly)
+            {
+                <div class="setting-line">
+                    On the
+                    <NumberField Value="monthly.Day" Min="1" Max="31" Label="Day of the month"
+                                 ValueChanged="d => Set(_settings with { Monthly = monthly with { Day = d } })" />
+                    of each month
+                </div>
+                @if (monthly.Day > 28)
+                {
+                    <div class="muted small">In a month without a @Schedules.Ordinal(monthly.Day), such as February, it's on the month's last day.</div>
+                }
+            }
+            <div class="setting-line">
+                Between
+                <input type="time" aria-label="@($"{Schedules.Name(repeat)} from")" value="@window.From.ToString("HH:mm")"
+                       @onchange="e => SetTime(repeat, e.Value, (w, t) => w with { From = t })" />
+                and
+                <input type="time" aria-label="@($"{Schedules.Name(repeat)} until")" value="@window.Until.ToString("HH:mm")"
+                       @onchange="e => SetTime(repeat, e.Value, (w, t) => w with { Until = t })" />
+                @if (window.Until <= window.From)
+                {
+                    <span class="muted small">the next day</span>
+                }
+            </div>
+
+            <ul class="schedule-tasks" aria-label="@($"{Schedules.Name(repeat)} tasks")">
+                @foreach (var task in Enum.GetValues<ScheduledTask>())
+                {
+                    var here = window.Tasks.Contains(task);
+                    var elsewhere = _settings.WhenRuns(task) is { } other && other != repeat ? other : (ScheduleRepeat?)null;
+                    var (where, href) = Schedules.RunNow(task);
+                    var why = _status.Unavailable.GetValueOrDefault(task);
+                    <li class="@(why is null ? null : "unavailable")">
+                        <label class="dialog-choice">
+                            @* One that makes no sense can't be ticked; one ticked already stays so, left out of runs until it does. *@
+                            <input type="checkbox" checked="@here" disabled="@(why is not null && !here)" @onchange="e => Tick(repeat, task, (bool)e.Value!)" />
+                            <span>
+                                <strong>@Schedules.Name(task)</strong>
+                                @if (elsewhere is { } on) { <span class="muted small"> · on the @Schedules.Name(on).ToLowerInvariant() schedule</span> }
+                                @if (why is not null)
+                                {
+                                    <span class="muted small">
+                                        @why
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="muted small">@Schedules.Hint(task) Run it now from <a href="@href">@where</a>.</span>
+                                }
+                            </span>
+                        </label>
+                    </li>
+                }
+            </ul>
+
+            <div class="muted small schedule-when">
+                @if (!window.Tasks.Any(t => !_status.Unavailable.ContainsKey(t)))
+                {
+                    <span>Nothing's ticked that can run, so it doesn't.</span>
+                }
+                else if (status?.Next is { } next)
+                {
+                    <span>Next: @next.ToLocalTime().ToString("dddd d MMMM, HH:mm").</span>
+                }
+                @if (status?.Last is { } last)
+                {
+                    <span>
+                        @(last.FinishedAt is null ? "Running now, since" : "Last ran") @last.StartedAt.ToLocalTime().ToString("dddd d MMMM, HH:mm")@(last.FinishedAt is null ? "" : ":")
+                    </span>
+                    <ul class="schedule-steps">
+                        @foreach (var step in last.Steps)
+                        {
+                            <li class="@StepClass(step.State)">
+                                <span aria-hidden="true">@StepMark(step.State)</span>
+                                @if (step.TaskId is { } id)
+                                {
+                                    <a href="activity">@Schedules.Name(step.Task)</a>
+                                }
+                                else
+                                {
+                                    <span>@Schedules.Name(step.Task)</span>
+                                }
+                                @if (step.Detail is { } detail) { <span>: @detail</span> }
+                            </li>
+                        }
+                    </ul>
+                }
+            </div>
+        </div>
+    }
+
+    @* Romdex's own, in place of Melodex's playlist sync: what runs all day rather than in a window. *@
+    <h2>Checking for arrivals</h2>
+    <div class="card settings-card">
+        <div class="setting-line">
+            Ask the retrievers that hand over what arrives, such as the inbox folder, every
+            <NumberField Value="_settings.ArrivalCheckMinutes" Min="1" Max="ScheduleSettings.MostArrivalCheckMinutes" Label="Minutes between checks"
+                         ValueChanged="m => Set(_settings with { ArrivalCheckMinutes = m })" />
+            @(_settings.ArrivalCheckMinutes == 1 ? "minute" : "minutes")
+        </div>
+        <div class="muted small">All day, rather than in a window. <a href="downloads">Downloads</a> can check now.</div>
+    </div>
+
+    <AutoSave @ref="_saver" Save="SaveAsync" />
+}
+
+@code {
+    private ScheduleStatus? _status;
+    private ScheduleSettings? _settings;
+    private AutoSave? _saver;
+    private string? _error;
+    private Timer? _refresh;
+
+    // Monday first.
+    private static readonly DayOfWeek[] Week = [.. Enumerable.Range(1, 7).Select(i => (DayOfWeek)(i % 7))];
+
+    private static string BrowserZone => TimeZoneInfo.Local.Id;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+        _settings = _status?.Settings;
+        // While a run's going, how it's getting on is read again now and then.
+        _refresh = new Timer(_ => InvokeAsync(async () =>
+        {
+            if (_status?.Running is null)
+                return;
+            await LoadAsync();
+            StateHasChanged();
+        }), null, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(10));
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _status = await Api.GetSchedulesAsync();
+            _error = null;
+        }
+        catch (Exception e) when (e is HttpRequestException or RomdexApiException)
+        {
+            _error = e.Message;
+        }
+    }
+
+    // Ticking a task here takes it off any other schedule: it runs on one at most.
+    private void Tick(ScheduleRepeat repeat, ScheduledTask task, bool on)
+    {
+        var settings = _settings!;
+        foreach (var other in Enum.GetValues<ScheduleRepeat>())
+            settings = With(settings, other, w => w with { Tasks = w.Tasks.Where(t => t != task).ToList() });
+        if (on)
+            settings = With(settings, repeat, w => w with { Tasks = w.Tasks.Append(task).Order().ToList() });
+        Set(settings);
+    }
+
+    private void SetTime(ScheduleRepeat repeat, object? value, Func<ScheduleWindow, TimeOnly, ScheduleWindow> with)
+    {
+        if (TimeOnly.TryParse(value?.ToString(), out var time))
+            Set(With(_settings!, repeat, w => with(w, time)));
+    }
+
+    private static ScheduleSettings With(ScheduleSettings settings, ScheduleRepeat repeat, Func<ScheduleWindow, ScheduleWindow> change) => repeat switch
+    {
+        ScheduleRepeat.Daily => settings with { Daily = (DailySchedule)change(settings.Daily) },
+        ScheduleRepeat.Weekly => settings with { Weekly = (WeeklySchedule)change(settings.Weekly) },
+        _ => settings with { Monthly = (MonthlySchedule)change(settings.Monthly) },
+    };
+
+    private void Set(ScheduleSettings value)
+    {
+        _settings = value;
+        _saver?.Changed();
+    }
+
+    private async Task SaveAsync()
+    {
+        await Api.SaveSchedulesAsync(_settings!);
+        Schedules.Saved(_settings!);
+        await LoadAsync();
+    }
+
+    private static string StepMark(ScheduledStepState state) => state switch
+    {
+        ScheduledStepState.Done => "✓",
+        ScheduledStepState.Failed => "✕",
+        ScheduledStepState.Skipped => "–",
+        ScheduledStepState.Running => "…",
+        _ => "·",
+    };
+
+    private static string StepClass(ScheduledStepState state) => state == ScheduledStepState.Failed ? "error" : "";
+
+    public void Dispose() => _refresh?.Dispose();
+}

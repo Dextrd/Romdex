@@ -11,6 +11,7 @@ builder.RootComponents.Add<HeadOutlet>("head::after");
 builder.Services.AddScoped<AuthState>();
 builder.Services.AddScoped<Theme>();
 builder.Services.AddScoped<GameLayout>();
+builder.Services.AddScoped<Schedules>();
 builder.Services.AddScoped(services =>
     new HttpClient(new SignInHandler(services.GetRequiredService<AuthState>())) { BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) });
 builder.Services.AddScoped<RomdexClient>();

@@ -85,7 +85,8 @@ builder.Services.AddHttpClient(CoverCache.HttpClientName, http =>
     foreach (var product in PluginHttp.UserAgent)
         http.DefaultRequestHeaders.UserAgent.Add(product);
 });
-builder.Services.AddHostedService<CatalogueSchedule>();
+builder.Services.AddScoped<ScheduledTasks>();
+builder.Services.AddHostedService<ScheduleRunner>();
 
 // Downloads: what arrives through the retriever plugins, identified here and filed by the igir worker.
 builder.Services.AddHttpClient<IFilingWorker, HttpFilingWorker>(HttpFilingWorker.HttpClientName, http => http.Timeout = TimeSpan.FromHours(2));
@@ -188,6 +189,7 @@ api.MapCatalogueEndpoints();
 api.MapLibraryEndpoints();
 api.MapDownloadEndpoints();
 api.MapReviewEndpoints();
+api.MapScheduleEndpoints();
 api.MapPlayEndpoints();
 api.MapPluginEndpoints();
 api.MapAccessEndpoints();

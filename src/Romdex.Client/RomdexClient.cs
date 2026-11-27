@@ -268,6 +268,20 @@ public sealed class RomdexClient(HttpClient http)
     public Task<DownloadInfo> ReclaimLibraryFileAsync(Guid fileId, CancellationToken ct = default) =>
         PostForAsync<DownloadInfo>($"{Api}/library/files/{fileId}/download", null, ct);
 
+    // ---- Scheduled tasks ----
+
+    public async Task<ScheduleStatus> GetSchedulesAsync(CancellationToken ct = default) =>
+        (await http.GetFromJsonAsync<ScheduleStatus>($"{Api}/schedules", RomdexJson.Options, ct))!;
+
+    public async Task SaveSchedulesAsync(ScheduleSettings settings, CancellationToken ct = default)
+    {
+        using var response = await http.PutAsJsonAsync($"{Api}/schedules", settings, RomdexJson.Options, ct);
+        await EnsureAsync(response, ct);
+    }
+
+    /// <summary>Retry failed: looks again for every request that ran out of offers.</summary>
+    public Task<AskedAgain> RetryFailedAsync(CancellationToken ct = default) => PostForAsync<AskedAgain>($"{Api}/requests/retry-failed", null, ct);
+
     // ---- Review ----
 
     public async Task<ReviewSummary> GetReviewSummaryAsync(CancellationToken ct = default) =>

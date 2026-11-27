@@ -41,7 +41,7 @@ public sealed class PlayTests : IDisposable
             .UseSetting("Romdex:DataPath", _dats.Data)
             .UseSetting("Romdex:LibraryPath", _dats.Roms)
             .UseSetting("Romdex:DatPath", _dats.Dats)
-            .UseSetting("Romdex:CatalogueRefreshHours", "0")
+            .UseSetting("Romdex:ScheduledTasks", "false")
             .UseSetting("Romdex:DownloadCheckMinutes", "0")
             .UseSetting("Romdex:EmulatorUrl", "http://emulatorjs:8080")
             .ConfigureServices(services =>

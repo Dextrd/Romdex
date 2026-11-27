@@ -1884,3 +1884,16 @@ table.slots thead th { height: 32px; box-sizing: border-box; }
 }
 .autosave .spinner { width: .9rem; height: .9rem; }
 .autosave.failed { color: var(--missing); border-color: var(--missing); border-radius: var(--radius); }
+
+/* Scheduled tasks, as Melodex's. */
+.schedule-tasks { list-style: none; margin: .25rem 0 0; padding: 0; display: flex; flex-direction: column; gap: .35rem; }
+.schedule-tasks .dialog-choice { margin: 0; }
+.schedule-tasks .unavailable strong { opacity: .5; }
+.schedule-tasks .unavailable input { opacity: .5; }
+.schedule-when { display: flex; flex-direction: column; gap: .25rem; margin-top: .25rem; }
+.schedule-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .15rem; }
+.schedule-steps li > span:first-child { display: inline-block; width: 1rem; }
+.schedule-note { display: block; }
+.day-toggles { display: inline-flex; gap: .25rem; flex-wrap: wrap; }
+.day-toggle { padding: .15rem .55rem; border-radius: 999px; font-size: .85rem; }
+.day-toggle.on { background: var(--accent); border-color: var(--accent); color: var(--accent-text, #fff); }

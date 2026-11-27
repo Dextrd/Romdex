@@ -10,10 +10,10 @@ when running Romdex outside Docker.
 | `Romdex__DatPath` | `dats` | Your DATs |
 | `Romdex__StagingPath` | `staging` | Where new dumps wait before they're filed |
 | `Romdex__PluginsPath` | `plugins` | Extra in-process plugins, one folder each |
-| `Romdex__CatalogueRefreshHours` | `24` | How often the catalogue is updated by itself; `0` turns it off |
 | `Romdex__HashThreads` | `2` | How many files a scan hashes at once |
 | `Romdex__WorkerUrl` | (none) | The igir worker, such as `http://igir-worker:8080`. Downloads need it to file anything |
-| `Romdex__DownloadCheckMinutes` | `5` | How often plugins that list what arrived are asked; `0` turns it off |
+| `Romdex__DownloadCheckMinutes` | `5` | `0` stops plugins that list what arrived being asked by themselves; how often they are is under [Scheduled tasks](#scheduled-tasks) |
+| `Romdex__ScheduledTasks` | `true` | `false` stops [scheduled tasks](#scheduled-tasks) running by themselves |
 | `Romdex__EmulatorUrl` | (none) | The EmulatorJS container, such as `http://emulatorjs:8080`: the first time Romdex starts, it sets up the EmulatorJS player with it. After that, change it under Settings → Plugins |
 | `Romdex__ChdmanPath` | `chdman` | The `chdman` that reads CHDs, without a worker |
 | `Romdex__DolphinToolPath` | `dolphin-tool` | The `dolphin-tool` that reads RVZs, without a worker |
@@ -27,3 +27,37 @@ The compose file has its own, shorter settings:
 - `ROMDEX_PORT` (default 8788) and `ROMDEX_VERSION`.
 
 Each retriever's README has its own, such as `INBOX_PATH` for the inbox folder.
+
+## Scheduled tasks
+
+**Settings → Scheduled tasks** has three schedules, **Daily**, **Weekly** and **Monthly**, each a window between two
+times, and below each the tasks it runs: tick a task to put it on that schedule. A task is on one schedule at most, so
+ticking it on one takes it off another; one on none only runs when you start it. It's as in Melodex.
+
+- **Scan the library**: hash new and changed files and match them against the DATs.
+- **Update the catalogue**: read the DATs again, and what the catalogue plugins know.
+- **Retry failed fetches**: look again for what you asked for that ran out of offers, passing over what was turned
+  away.
+
+To start with, the daily window is 01:00 to 06:00 and scans and updates the catalogue; the weekly one is Mondays at the
+same times, for failed fetches; nothing is monthly.
+
+- **Each window has its own times.** One that ends earlier than it starts runs past midnight: 22:00 to 04:00 ends the
+  next morning. One that ends when it starts lasts a whole day.
+- **The weekly one runs on a day you pick, the monthly one on a day of the month, 1 to 31.** In a month shorter than
+  that, it runs on the month's last day: 31 is the last day of every month.
+- **All three are in one time zone**, the server's UTC to start with: **Use this browser's** sets yours.
+- **A window runs its tasks once, in order**: scan, catalogue, then failed fetches. The first two are tasks on
+  **Activity**, one after another; failed fetches wait for them.
+- **Fetches go a few at a time**, five to start with: as each finishes, the next is looked for in its place. When the
+  window closes, nothing more is looked for; the rest wait for the next window, and those under way carry on.
+- **The windows take turns.** When two open on the same day, daily goes first, then weekly, then monthly, as long as
+  its window is still open.
+
+Below each schedule are when it next runs, and how its last run went, a line for each task. Every task can still be run
+straight away: **Scan** and **Update the catalogue** from the Scan menu, and failed fetches from **Review → Couldn't
+fetch**, with **Look again for all**.
+
+**Checking for arrivals**, below the schedules, is how often retrievers that hand over what arrives by themselves, such
+as the inbox folder, are asked: every 5 minutes to start with, all day rather than in a window.
+
