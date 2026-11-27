@@ -133,6 +133,9 @@ public sealed record RequestInfo(
     DateTime CreatedAt,
     DateTime UpdatedAt)
 {
+    /// <summary>Still trying the retrievers' offers.</summary>
+    public bool Active => State == RequestState.Active;
+
     /// <summary>An attempt that brought another game, which can be filed as what it is.</summary>
     public DownloadInfo? Acceptable => Attempts.LastOrDefault(a => a.CanAccept);
 }

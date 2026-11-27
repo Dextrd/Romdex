@@ -20,6 +20,7 @@ public sealed class EventFeed : DbCommandInterceptor
 {
     public const string Tasks = "tasks";
     public const string Downloads = "downloads";
+    public const string Requests = "requests";
 
     /// <summary>How long changes of one kind are gathered into one event.</summary>
     public static readonly TimeSpan Coalesce = TimeSpan.FromMilliseconds(250);
@@ -28,6 +29,7 @@ public sealed class EventFeed : DbCommandInterceptor
     [
         ("\"BackgroundTasks\"", [Tasks]),
         ("\"Downloads\"", [Downloads]),
+        ("\"Requests\"", [Requests]),
     ];
 
     private readonly ConcurrentDictionary<Channel<Message>, byte> _subscribers = new();

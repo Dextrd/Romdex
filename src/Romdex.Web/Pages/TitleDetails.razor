@@ -1,5 +1,6 @@
 @page "/titles/{Id:guid}"
 @inject RomdexClient Api
+@inject RequestTracker Tracker
 @inject AuthState Auth
 @inject NavigationManager Nav
 @using Microsoft.JSInterop
@@ -112,7 +113,13 @@ else
                 {
                     <IconButton Icon="open" Large="true" Label="@($"Open in {app}")" Title="Play it there, with its saves and states" OnClick="() => OpenInAppAsync(playable)" />
                 }
-                @if (_title.Status != TitleStatus.Owned)
+                @* As Melodex's fetch button: while it's being fetched, how that's going in place of Get. *@
+                @if (Tracker.Find(_title.Id) is { Count: > 0 } fetching)
+                {
+                    <a class="badge @Format.RequestBadge(RequestState.Active)" href="activity/fetches?open=@fetching[0].Id"
+                       title="@(fetching[0].Message ?? "Follow it in Activity")">@Format.RequestLabel(RequestState.Active)</a>
+                }
+                else if (_title.Status != TitleStatus.Owned)
                 {
                     <IconButton Icon="get" Requires="@UserPermissions.Download" Large="true" Label="Get" Title="Find it through the retrievers" OnClick="() => _getting = (null, _title.Name)" />
                 }
@@ -447,7 +454,29 @@ else
         }
     }
 
-    public void Dispose() => _gone = true;
+    protected override void OnInitialized()
+    {
+        Tracker.Changed += OnRequestsChanged;
+        _ = Tracker.EnsureLoadedAsync();
+    }
+
+    // Requests for this game that finish change what it has: it's read again.
+    private bool _wasFetching;
+
+    private void OnRequestsChanged() => InvokeAsync(async () =>
+    {
+        var fetching = Tracker.Find(Id).Count > 0;
+        if (_wasFetching && !fetching && !_gone && await Api.GetTitleAsync(Id) is { } title && title.Id == Id)
+            _title = title;
+        _wasFetching = fetching;
+        StateHasChanged();
+    });
+
+    public void Dispose()
+    {
+        _gone = true;
+        Tracker.Changed -= OnRequestsChanged;
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {

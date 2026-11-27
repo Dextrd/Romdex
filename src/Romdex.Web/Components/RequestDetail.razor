@@ -1,0 +1,59 @@
+@using Microsoft.JSInterop
+@inject IJSRuntime Js
+
+@* A request's attempts, for the Activity page. *@
+<div class="request-body">
+    @if (Request.Attempts is { Count: 1 } one)
+    {
+        @Attempt(one[0], 1)
+    }
+    else if (Request.Attempts is { Count: > 1 } jobs)
+    {
+        @*
+            One attempt at a time, the latest first: the arrows, or scrolling sideways, go back through the earlier ones
+            (attempts.js).
+        *@
+        <div class="attempts" @ref="_attempts">
+            <div class="attempts-count muted small">Attempt <span>@jobs.Count</span> of @jobs.Count</div>
+            <IconButton Icon="back" Class="small attempts-earlier" Title="Earlier attempt" />
+            <div class="attempts-track">
+                @for (var i = 0; i < jobs.Count; i++)
+                {
+                    <div class="attempt-slide" @key="jobs[i].Id">@Attempt(jobs[i], i + 1)</div>
+                }
+            </div>
+            <IconButton Icon="forward" Class="small attempts-later" Title="Later attempt" />
+        </div>
+    }
+
+    @if (Request.Attempts is { Count: 0 })
+    {
+        <div class="muted small">No attempts yet.</div>
+    }
+</div>
+
+@code {
+    private RenderFragment Attempt(DownloadInfo job, int number) =>
+        @<text>
+    <div class="job">
+        <div class="row small">
+            <strong>Attempt @number</strong>
+            <span>@job.Source</span>
+            <span class="badge @Format.Badge(job.State)">@Format.Label(job.State)</span>
+            @if (job.Message is not null) { <span class="muted">@job.Message</span> }
+        </div>
+        <div class="small">@job.Name</div>
+        <ArrivalDetail Item="job" />
+    </div>
+        </text>;
+
+    [Parameter, EditorRequired] public RequestInfo Request { get; set; } = null!;
+
+    private ElementReference _attempts;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (Request.Attempts is { Count: > 1 })
+            await Js.InvokeVoidAsync("romdexAttempts.update", _attempts);
+    }
+}

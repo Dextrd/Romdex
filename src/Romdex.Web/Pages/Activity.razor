@@ -7,6 +7,7 @@
 @inject NavigationManager Nav
 @inject IJSRuntime Js
 @inject AuthState Auth
+@inject RequestTracker Tracker
 @using Microsoft.JSInterop
 
 <PageTitle>Activity · Romdex</PageTitle>
@@ -157,15 +158,19 @@ else
             }
             @if (item.Request is { } request)
             {
+                var requestOpen = _open.Contains(request.Id);
                 <div class="request" id="request-@request.Id" data-flip="request-@request.Id" @key="request.Id">
                     <div class="request-head">
-                        <span class="request-toggle">
-                            <span aria-hidden="true"></span>
+                        <div class="request-toggle" @onclick="() => Toggle(request.Id)">
+                            <button class="chevron-button" aria-expanded="@(requestOpen ? "true" : "false")" aria-label="@(requestOpen ? "Hide its attempts" : "Show its attempts")"
+                                    @onclick="() => Toggle(request.Id)" @onclick:stopPropagation="true">
+                                <span class="chevron @(requestOpen ? "open" : "")" aria-hidden="true"></span>
+                            </button>
                             <span class="request-title">
-                                <a href="titles/@request.Title.Id">@(request.Dump?.Name ?? request.Title.Name)</a>
+                                <a href="titles/@request.Title.Id" @onclick:stopPropagation="true">@(request.Dump?.Name ?? request.Title.Name)</a>
                                 @if (request.Regions.Count > 0) { <span class="request-by small muted">@string.Join(", ", request.Regions)</span> }
                             </span>
-                        </span>
+                        </div>
                         <span class="muted small request-kind hide-narrow">@Format.Count(request.Attempts.Count, "attempt", "attempts")</span>
                         <span class="request-state"><span class="badge @Format.RequestBadge(request.State)">@Format.RequestLabel(request.State)</span></span>
                         <span class="muted small request-time hide-narrow" title="@request.UpdatedAt.ToLocalTime()">@Format.Ago(request.UpdatedAt)</span>
@@ -180,14 +185,18 @@ else
                         </span>
                     </div>
                     @if (request.Message is not null) { <div class="muted small request-detail">@request.Message</div> }
+                    @if (requestOpen)
+                    {
+                        <RequestDetail Request="request" />
+                    }
                 </div>
                 continue;
             }
             var arrival = item.Arrival!;
-            var open = _openArrivals.Contains(arrival.Id);
+            var open = _open.Contains(arrival.Id);
             <div class="request" id="request-@arrival.Id" data-flip="arrival-@arrival.Id" @key="arrival.Id">
                 <div class="request-head">
-                    <button class="request-toggle" aria-expanded="@(open ? "true" : "false")" @onclick="() => ToggleArrival(arrival.Id)">
+                    <button class="request-toggle" aria-expanded="@(open ? "true" : "false")" @onclick="() => Toggle(arrival.Id)">
                         <span class="chevron @(open ? "open" : "")" aria-hidden="true"></span>
                         <span class="request-title">@arrival.Name</span>
                     </button>
@@ -210,43 +219,7 @@ else
                 @if (arrival.Message is not null) { <div class="muted small request-detail">@arrival.Message</div> }
                 @if (open)
                 {
-                    <div class="request-body small">
-                        @if (arrival.Dumps.Count > 0)
-                        {
-                            <div class="field-label">Dumps</div>
-                            @foreach (var dump in arrival.Dumps)
-                            {
-                                <div class="download-dump">
-                                    <a href="systems/@dump.SystemId">@dump.System</a>: <strong>@dump.Dump.Name</strong>
-                                    @if (dump.Alternative) { <span class="badge neutral">Alternative</span> }
-                                    @foreach (var path in dump.Filed) { <div class="muted">Filed as <code>@path</code></div> }
-                                </div>
-                            }
-                        }
-                        @if (arrival.Files.Count > 0)
-                        {
-                            <div class="field-label">Files</div>
-                            @foreach (var file in arrival.Files)
-                            {
-                                <div class="download-file">
-                                    <span>@file.Path@(file.Entry is null ? "" : $" → {file.Entry}")</span> <span class="muted">@Format.Size(file.Size)</span>
-                                    @if (file.Error is not null) { <div class="error">@file.Error</div> }
-                                    else if (file.Matches.Count == 0) { <div class="muted">Matches nothing</div> }
-                                    @foreach (var match in file.Matches) { <div class="muted">Matches @match</div> }
-                                    @if (file.Crc32 is not null) { <div class="hashes"><code title="CRC32">@file.Crc32</code><code title="SHA-1">@file.Sha1</code></div> }
-                                </div>
-                            }
-                        }
-                        @if (arrival.Notes is not null)
-                        {
-                            <div class="field-label">Notes from @arrival.Source</div>
-                            <pre class="download-notes">@arrival.Notes</pre>
-                        }
-                        @if (arrival.Dumps.Count == 0 && arrival.Files.Count == 0 && arrival.Notes is null)
-                        {
-                            <div class="muted">Nothing more to show until it's identified.</div>
-                        }
-                    </div>
+                    <div class="request-body"><ArrivalDetail Item="arrival" /></div>
                 }
             </div>
         }
@@ -254,7 +227,7 @@ else
     }
     </div>
     @* The rest come as it's scrolled to: those already loaded, then, among earlier fetches, the ones before them. *@
-    _hasEnd = Drawable.Count() > _shown || (Shown == "fetches" && !_recent && _hasEarlier);
+    _hasEnd = Drawable.Count() > _shown || (Shown == "fetches" && !_recent && Tracker.HasEarlier);
     @if (_hasEnd)
     {
         <div class="list-end muted small" @ref="_end"><span class="spinner"></span> Loading more…</div>
@@ -294,7 +267,7 @@ else
     private IEnumerable<(string Tab, string Label, int Count)> Tabs =>
     [
         ("tasks", "Tasks", _tasks.Count(t => t.Active)),
-        ("fetches", "Fetches", _requests.Count(r => r.State == RequestState.Active) + _arrivals.Count(Going)),
+        ("fetches", "Fetches", _requests.Count(r => r.Active) + _arrivals.Count(Going)),
     ];
 
     private bool _loaded;
@@ -327,7 +300,7 @@ else
     {
         if (Drawable.Count() > _shown)
             _shown += Step;
-        else if (Shown == "fetches" && !_recent && _hasEarlier)
+        else if (Shown == "fetches" && !_recent && Tracker.HasEarlier)
         {
             if (!await LoadEarlierAsync())
                 return;
@@ -550,14 +523,15 @@ else
         _descending = await Prefs.GetAsync(DescendingKey, true);
         _closed = [.. await Prefs.GetAsync<List<string>>(ClosedKey, [])];
         Events.Received += OnEvent;
-        await Task.WhenAll(LoadFetchesAsync(), LoadTasksAsync());
+        Tracker.Changed += OnRequestsChanged;
+        await Task.WhenAll(Tracker.EnsureLoadedAsync(), LoadArrivalsAsync(), LoadTasksAsync());
         _loaded = true;
         // Polled too, in case events don't arrive; quicker while something's running.
         _timer = new Timer(_ => InvokeAsync(async () =>
         {
-            if (_tasks.Any(t => t.Active) || _requests.Any(r => r.State == RequestState.Active) || _arrivals.Any(Going) || ++_idlePolls % 5 == 0)
+            if (_tasks.Any(t => t.Active) || _arrivals.Any(Going) || ++_idlePolls % 5 == 0)
             {
-                await Task.WhenAll(LoadTasksAsync(), LoadFetchesAsync());
+                await Task.WhenAll(LoadTasksAsync(), LoadArrivalsAsync());
                 await RedrawAsync();
             }
         }), null, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
@@ -568,10 +542,11 @@ else
     // A scan or a fetch that starts shows at once, not at the next idle poll.
     private void OnEvent(string type)
     {
+        // Requests come through the tracker, which hears of them itself.
         if (type is "tasks" or "downloads" or "connected")
             InvokeAsync(async () =>
             {
-                await (type == "tasks" ? LoadTasksAsync() : type == "downloads" ? LoadFetchesAsync() : Task.WhenAll(LoadTasksAsync(), LoadFetchesAsync()));
+                await (type == "tasks" ? LoadTasksAsync() : type == "downloads" ? LoadArrivalsAsync() : Task.WhenAll(LoadTasksAsync(), LoadArrivalsAsync()));
                 await RedrawAsync();
             });
     }
@@ -588,26 +563,17 @@ else
         }
     }
 
-    // How many finished ones come with each load, and each page of earlier ones.
-    private const int Page = 200;
-
-    // Requests, newest first: those going and the newest of the rest, with earlier ones loaded on top as they're wanted;
-    // and what arrived by itself, no request for it.
-    private IReadOnlyList<RequestInfo> _requests = [];
-    private IReadOnlyList<RequestInfo> _earlier = [];
+    // Requests come from the tracker, shared with every page. Romdex's own: what arrived by itself, no request for it,
+    // the newest few hundred.
+    private IReadOnlyList<RequestInfo> _requests => Tracker.Requests;
     private IReadOnlyList<DownloadInfo> _arrivals = [];
-    private bool _hasEarlier = true;
 
     private async Task LoadFetchesAsync()
     {
         try
         {
-            var going = await Api.ListRequestsAsync(active: true, limit: 10_000);
-            var newest = await Api.ListRequestsAsync(limit: Page);
-            _requests = going.Concat(newest).Concat(_earlier).DistinctBy(r => r.Id).OrderByDescending(r => r.CreatedAt).ToList();
-            if (newest.Count < Page)
-                _hasEarlier = false;
-            _arrivals = (await Api.ListDownloadsAsync(null, 0, Page)).Items.Where(d => d.RequestId is null).ToList();
+            await Tracker.RefreshAsync();
+            await LoadArrivalsAsync();
         }
         catch (Exception e) when (e is HttpRequestException or RomdexApiException)
         {
@@ -615,20 +581,26 @@ else
         }
     }
 
+    private async Task LoadArrivalsAsync()
+    {
+        try
+        {
+            _arrivals = (await Api.ListDownloadsAsync(null, 0, 200)).Items.Where(d => d.RequestId is null).ToList();
+        }
+        catch (Exception e) when (e is HttpRequestException or RomdexApiException)
+        {
+        }
+    }
+
     // The page of requests before the earliest loaded; false when there were none.
     private async Task<bool> LoadEarlierAsync()
     {
-        if (_requests.Count == 0)
-            return _hasEarlier = false;
-        var before = await Api.ListRequestsAsync(limit: Page, before: _requests.Min(r => r.CreatedAt));
-        if (before.Count < Page)
-            _hasEarlier = false;
-        if (before.Count == 0)
-            return false;
-        _earlier = [.. _earlier, .. before];
-        _requests = _requests.Concat(before).DistinctBy(r => r.Id).OrderByDescending(r => r.CreatedAt).ToList();
-        return true;
+        var had = Tracker.Requests.Count;
+        await Tracker.LoadEarlierAsync();
+        return Tracker.Requests.Count > had;
     }
+
+    private void OnRequestsChanged() => InvokeAsync(RedrawAsync);
 
     // Where under Review an arrival waits, if it does.
     private static string? ReviewTab(DownloadInfo item) => item.State switch
@@ -644,12 +616,13 @@ else
         _ => null,
     };
 
-    private readonly HashSet<Guid> _openArrivals = [];
+    // Requests open on their attempts, and what arrived by itself on what it brought.
+    private readonly HashSet<Guid> _open = [];
 
-    private void ToggleArrival(Guid id)
+    private void Toggle(Guid id)
     {
-        if (!_openArrivals.Remove(id))
-            _openArrivals.Add(id);
+        if (!_open.Remove(id))
+            _open.Add(id);
     }
 
     protected override async Task OnParametersSetAsync()
@@ -674,7 +647,8 @@ else
             {
                 if (Tab is null)
                     _remembered = "fetches";
-                _recent = IsRecent(request.State == RequestState.Active, request.UpdatedAt);
+                _recent = IsRecent(request.Active, request.UpdatedAt);
+                _open.Add(id);
                 _landing = $"request-{id}";
                 return;
             }
@@ -686,11 +660,14 @@ else
                 if (arrival.RequestId is { } parent)
                 {
                     _landed = parent;
+                    if (await Api.GetRequestAsync(parent) is { } of)
+                        _recent = IsRecent(of.Active, of.UpdatedAt);
+                    _open.Add(parent);
                     _landing = $"request-{parent}";
                     return;
                 }
                 _recent = IsRecent(Going(arrival), arrival.UpdatedAt);
-                _openArrivals.Add(id);
+                _open.Add(id);
                 _landing = $"request-{id}";
                 return;
             }
@@ -728,7 +705,7 @@ else
                 _shown = Math.Max(_shown, (index / Step + 1) * Step);
                 break;
             }
-            if (Shown != "fetches" || _recent || !_hasEarlier || !await LoadEarlierAsync())
+            if (Shown != "fetches" || _recent || !Tracker.HasEarlier || !await LoadEarlierAsync())
                 break;
         }
         StateHasChanged();
@@ -757,6 +734,7 @@ else
         _disposed = true;
         _self?.Dispose();
         Events.Received -= OnEvent;
+        Tracker.Changed -= OnRequestsChanged;
         _timer?.Dispose();
     }
 }

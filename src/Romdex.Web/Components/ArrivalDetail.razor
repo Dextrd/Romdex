@@ -1,0 +1,47 @@
+@*
+    Romdex's: what a fetch brought, for Activity: the dumps it holds and where each was filed, its files with their
+    hashes and what each matched, and the retriever's notes. Melodex's attempts show a log in its place.
+*@
+<div class="small">
+    @if (Item.Dumps.Count > 0)
+    {
+        <div class="field-label">Dumps</div>
+        @foreach (var dump in Item.Dumps)
+        {
+            <div class="download-dump">
+                <a href="systems/@dump.SystemId">@dump.System</a>: <strong>@dump.Dump.Name</strong>
+                @if (dump.Alternative) { <span class="badge neutral">Alternative</span> }
+                @foreach (var path in dump.Filed) { <div class="muted">Filed as <code>@path</code></div> }
+            </div>
+        }
+    }
+    @if (Item.Files.Count > 0)
+    {
+        <div class="field-label">Files</div>
+        @foreach (var file in Item.Files)
+        {
+            <div class="download-file">
+                <span>@file.Path@(file.Entry is null ? "" : $" → {file.Entry}")</span> <span class="muted">@Format.Size(file.Size)</span>
+                @if (file.Error is not null) { <div class="error">@file.Error</div> }
+                else if (file.Matches.Count == 0) { <div class="muted">Matches nothing</div> }
+                @foreach (var match in file.Matches) { <div class="muted">Matches @match</div> }
+                @if (file.Crc32 is not null) { <div class="hashes"><code title="CRC32">@file.Crc32</code><code title="SHA-1">@file.Sha1</code></div> }
+            </div>
+        }
+    }
+    @if (Item.Notes is not null)
+    {
+        <details>
+            <summary class="small">Notes from @Item.Source</summary>
+            <pre class="job-log">@Item.Notes</pre>
+        </details>
+    }
+    @if (Item.Dumps.Count == 0 && Item.Files.Count == 0 && Item.Notes is null)
+    {
+        <div class="muted">Nothing more to show until it's identified.</div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public DownloadInfo Item { get; set; } = null!;
+}
