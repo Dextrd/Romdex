@@ -3,17 +3,18 @@
 @layout SettingsLayout
 @inject RomdexClient Api
 @inject AuthState Auth
+@inject NavigationManager Nav
 
 <SectionTitle>Users · Romdex</SectionTitle>
 
 @*
-    Everyone who signs in, and what each may do. The admin, made at setup, may do everything and only they can change
-    their account. Nobody can give a permission they don't have.
+    Everyone who signs in, and what each may do. The admin, made at setup, may do everything. Editing someone changes
+    what they may do, and nobody can give a permission they don't have; your own card opens your account.
 *@
 @if (!Auth.May(UserPermissions.Users))
 {
     <div class="empty card">
-        You can't manage users. To change your own username or password, open <a href="account">your account</a>.
+        You can't manage users. To change your own username or password, open <a href="settings/account">your account</a>.
     </div>
 }
 else if (_users is null)
@@ -37,28 +38,21 @@ else
             @foreach (var user in _users)
             {
                 var you = user.Id == Auth.Status?.UserId;
-                <div class="plugin-card user-card">
+                var expanded = _expanded.Contains(user.Id);
+                var permissions = user.IsAdmin ? "Everything"
+                    : user.Permissions.Count == 0 ? "Can't do anything yet"
+                    : string.Join(", ", UserPermissions.All.Where(p => user.Permissions.Contains(p.Id)).Select(p => p.Name));
+                <div class="plugin-card user-card @(expanded ? "open" : "")">
                     <div class="plugin-top">
                         <strong class="ellipsis" title="@user.Username">@user.Username</strong>
                         @if (user.IsAdmin) { <span class="badge owned">Admin</span> }
                         @if (you) { <span class="badge neutral">You</span> }
                     </div>
-                    <div class="scope-list">
-                        @if (user.IsAdmin)
-                        {
-                            <span class="badge neutral" title="The admin may do everything">Everything</span>
-                        }
-                        else if (user.Permissions.Count == 0)
-                        {
-                            <span class="muted small">Can't do anything yet</span>
-                        }
-                        else
-                        {
-                            @foreach (var permission in UserPermissions.All.Where(p => user.Permissions.Contains(p.Id)))
-                            {
-                                <span class="badge neutral" title="@permission.Hint">@permission.Name</span>
-                            }
-                        }
+                    @* Two lines, like plugins' descriptions; a click or tap shows the rest. *@
+                    <div class="muted small plugin-about" title="@(expanded ? null : permissions)" role="button" tabindex="0"
+                         aria-expanded="@(expanded ? "true" : "false")" @onclick="() => ToggleExpanded(user)"
+                         @onkeydown="e => ToggleOnKey(e, user)">
+                        @permissions
                     </div>
                     <div class="muted small">
                         @(user.LastSignInAt is { } signedIn ? $"Signed in {Format.Ago(signedIn)}" : "Never signed in")
@@ -66,9 +60,13 @@ else
                     </div>
                     <div class="plugin-actions">
                         <span class="spacer"></span>
-                        @if (!user.IsAdmin || Auth.Status?.IsAdmin == true)
+                        @if (you)
                         {
-                            <button class="small" @onclick="() => StartEdit(user)">Edit</button>
+                            <IconButton Icon="settings" Title="Your account" OnClick="@(() => Nav.NavigateTo("settings/account"))" />
+                        }
+                        else if (!user.IsAdmin)
+                        {
+                            <IconButton Icon="settings" Title="Permissions" OnClick="() => StartEdit(user)" />
                         }
                         @if (!user.IsAdmin && !you)
                         {
@@ -81,46 +79,10 @@ else
     </section>
 }
 
-@if (_editing is not null)
+@if (_editing is { } editing)
 {
-    var admin = _editing.IsAdmin;
-    <Dialog Title="@(_editing.Id == Guid.Empty ? "Add user" : $"Edit {_editing.Username}")" OnClose="() => _editing = null">
-        <label class="field">
-            <span class="field-label">Username</span>
-            <input type="text" autocomplete="off" @bind="_username" @bind:event="oninput" />
-        </label>
-        <label class="field">
-            <span class="field-label">@(_editing.Id == Guid.Empty ? "Password" : "New password")</span>
-            <input type="password" autocomplete="new-password" placeholder="@(_editing.Id == Guid.Empty ? "" : "Leave empty to keep it")"
-                   @bind="_password" @bind:event="oninput" />
-            <span class="muted small">
-                At least 8 characters.@(_editing.Id == Guid.Empty ? " Tell them it, and they can change it under their account." : " A new one signs them out everywhere.")
-            </span>
-        </label>
-        @if (admin)
-        {
-            <p class="muted small">The admin may do everything; that can't change.</p>
-        }
-        else
-        {
-            <div class="field-label">What they can do</div>
-            @foreach (var permission in UserPermissions.All)
-            {
-                var allowed = Auth.May(permission.Id);
-                <label class="dialog-choice @(allowed ? "" : "dim")" title="@(allowed ? "" : "You can only give permissions you have yourself")">
-                    <input type="checkbox" disabled="@(!allowed)" checked="@_permissions.Contains(permission.Id)" @onchange="e => Toggle(permission.Id, (bool)e.Value!)" />
-                    <span><strong>@permission.Name</strong><span class="muted small">@permission.Hint</span></span>
-                </label>
-            }
-        }
-        @if (_error is not null) { <p class="error small">@_error</p> }
-        <div class="toolbar dialog-buttons">
-            <button @onclick="() => _editing = null">Cancel</button>
-            <button class="primary" disabled="@(_busy || string.IsNullOrWhiteSpace(_username) || _editing.Id == Guid.Empty && _password.Length == 0)" @onclick="SaveAsync">
-                @if (_busy) { <span class="spinner"></span> }
-                @(_editing.Id == Guid.Empty ? "Add" : "Save")
-            </button>
-        </div>
+    <Dialog Title="@(editing.User is null ? "Add user" : $"Edit {editing.User.Username}")" OnClose="() => _editing = null" Class="wide">
+        <UserEditor User="editing.User" PermissionsOnly="editing.User is not null" OnSaved="SavedAsync" OnCancel="() => _editing = null" />
     </Dialog>
 }
 
@@ -141,14 +103,13 @@ else
 
 @code {
     private IReadOnlyList<UserInfo>? _users;
-    private UserInfo? _editing;
+    // The user being edited, or none for a new one.
+    private sealed record Editing(UserInfo? User);
+    private Editing? _editing;
     private UserInfo? _removing;
-    private string _username = "";
-    private string _password = "";
-    private HashSet<string> _permissions = [];
     private bool _busy;
     private string? _error;
-
+    private readonly HashSet<Guid> _expanded = [];
 
     protected override async Task OnInitializedAsync()
     {
@@ -157,53 +118,26 @@ else
         _users = await Api.ListUsersAsync();
     }
 
-    private void StartNew() => Start(new UserInfo(Guid.Empty, "", false, [UserPermissions.Read, UserPermissions.Play], DateTime.UtcNow, null));
+    private void StartNew() => _editing = new Editing(null);
 
-    private void StartEdit(UserInfo user) => Start(user);
+    private void StartEdit(UserInfo user) => _editing = new Editing(user);
 
-    private void Start(UserInfo user)
+    private void ToggleExpanded(UserInfo user)
     {
-        _editing = user;
-        _username = user.Username;
-        _password = "";
-        _permissions = user.Permissions.ToHashSet();
-        _error = null;
+        if (!_expanded.Remove(user.Id))
+            _expanded.Add(user.Id);
     }
 
-    private void Toggle(string permission, bool on)
+    private void ToggleOnKey(KeyboardEventArgs e, UserInfo user)
     {
-        if (on)
-            _permissions.Add(permission);
-        else
-            _permissions.Remove(permission);
+        if (e.Key is "Enter" or " ")
+            ToggleExpanded(user);
     }
 
-    private async Task SaveAsync()
+    private async Task SavedAsync()
     {
-        var editing = _editing!;
-        var permissions = UserPermissions.All.Select(p => p.Id).Where(_permissions.Contains).ToList();
-        _busy = true;
-        _error = null;
-        try
-        {
-            if (editing.Id == Guid.Empty)
-                await Api.CreateUserAsync(new CreateUser(_username, _password, permissions));
-            else
-                await Api.UpdateUserAsync(editing.Id, new UpdateUser(_username, _password.Length > 0 ? _password : null, editing.IsAdmin ? null : permissions));
-            _editing = null;
-            _users = await Api.ListUsersAsync();
-            // Your own name may have changed.
-            if (editing.Id == Auth.Status?.UserId)
-                Auth.Set(await Api.GetAuthStatusAsync());
-        }
-        catch (RomdexApiException e)
-        {
-            _error = e.Message;
-        }
-        finally
-        {
-            _busy = false;
-        }
+        _editing = null;
+        _users = await Api.ListUsersAsync();
     }
 
     private async Task RemoveAsync(UserInfo user)

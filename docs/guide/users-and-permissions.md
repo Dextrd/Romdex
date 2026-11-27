@@ -3,11 +3,12 @@
 ## Users
 
 The admin, made at setup, may do everything. Add other people under **Settings → Users**, giving each only what they
-need. Nobody can give a permission they don't have, and only the admin can change the admin's account. Removing
-someone signs them out and revokes their API keys.
+need. Editing someone changes what they may do, and can set a new password for someone who's forgotten theirs, which
+signs them out everywhere; the rest of their login is theirs. Nobody can give a permission they don't have, and only
+the admin can change the admin's account. Removing someone signs them out and revokes their API keys.
 
-Anyone can change their own username and password from the account menu at the top right. A new password signs them
-out everywhere else.
+Everyone changes their own username and password under **Settings → Your account**, at the top of Settings, giving
+their current password. A new password signs them out everywhere else.
 
 ## What each permission allows
 
