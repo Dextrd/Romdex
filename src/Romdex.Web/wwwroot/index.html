@@ -20,13 +20,22 @@
         <div class="boot loading"><span class="spinner"></span> Loading Romdex…</div>
     </div>
 
-    <div id="blazor-error-ui">
-        Something went wrong.
-        <a href="." class="reload">Reload</a>
-        <span class="dismiss">✕</span>
+    <div id="blazor-error-ui" role="alert">
+        <div class="error-line">
+            <span>Something went wrong<span class="error-says">: <span class="error-message"></span></span>.</span>
+            <button type="button" class="error-toggle link" aria-expanded="false">Details</button>
+            <a href="." class="reload">Reload</a>
+            <button type="button" class="dismiss link" aria-label="Dismiss">✕</button>
+        </div>
+        <div class="error-more">
+            <pre class="error-details"></pre>
+            <p>The app may go on working; reloading starts it afresh. This is in the server's log too.
+                <button type="button" class="error-copy link">Copy</button></p>
+        </div>
     </div>
     <!-- Plain names: the core publishes this page as is, without filling in fingerprint placeholders. -->
     <script src="js/clipboard.js"></script>
+    <script src="js/errors.js"></script>
     <script src="js/scroll.js"></script>
     <script src="js/flip.js"></script>
     <script src="js/attempts.js"></script>

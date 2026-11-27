@@ -296,7 +296,17 @@ details > summary { cursor: pointer; color: var(--muted); margin: 1.5rem 0 .5rem
     display: none; position: fixed; bottom: 0; left: 0; right: 0; padding: .75rem 1rem;
     background: var(--missing-bg); color: var(--missing); z-index: 100;
 }
-#blazor-error-ui .dismiss { cursor: pointer; float: right; }
+#blazor-error-ui .error-line { display: flex; gap: .75rem; align-items: baseline; flex-wrap: wrap; }
+#blazor-error-ui .error-line > span:first-child { flex: 1; min-width: 12rem; overflow-wrap: anywhere; }
+/* Only once there's a message to give. */
+#blazor-error-ui .error-says:has(.error-message:empty) { display: none; }
+#blazor-error-ui button.link { background: none; border: 0; padding: 0; color: inherit; text-decoration: underline; cursor: pointer; font: inherit; }
+#blazor-error-ui .dismiss { text-decoration: none; }
+#blazor-error-ui .error-more { display: none; margin-top: .5rem; }
+#blazor-error-ui.open .error-more { display: block; }
+#blazor-error-ui .error-details { max-height: 12rem; overflow: auto; font-size: .75rem; white-space: pre-wrap; overflow-wrap: anywhere;
+    margin: 0 0 .5rem; padding: .5rem; background: color-mix(in srgb, currentColor 8%, transparent); border-radius: 6px; }
+#blazor-error-ui .error-more p { margin: 0; font-size: .85rem; }
 
 .show-narrow { display: none; }
 @media (max-width: 640px) {

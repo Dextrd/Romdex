@@ -43,6 +43,20 @@ public static class SystemEndpoints
             .WithName("GetVersion")
             .WithSummary("Service version and the plugin contract versions it supports.");
 
+        // The web app runs in the browser, so what goes wrong there is otherwise only in the browser's console.
+        group.MapPost("/client-errors", (ClientError body, ILoggerFactory loggers) =>
+            {
+                if (ClientErrors.Allow())
+                    loggers.CreateLogger("Romdex.Web").LogWarning("The web app hit an error on {Page}: {Message}{Details}",
+                        Clip(body.Page, 200) ?? "a page", Clip(body.Message, 500) ?? "(no message)",
+                        Clip(body.Details, 4000) is { } details ? "\n" + details : "");
+                return Results.NoContent();
+            })
+            .RequireScope(Scopes.Read)
+            .WithName("ReportClientError")
+            .WithSummary("Puts an error the web app couldn't handle in the server's log. A few a minute at most are kept.")
+            .Produces(StatusCodes.Status204NoContent);
+
         group.MapGet("/log", (ActivityLog log, long after = 0, int limit = 1000) =>
                 new LogPage(log.After(after, Math.Clamp(limit, 1, ActivityLog.PageLimit)), log.Latest))
             .RequireScope(Scopes.Settings)
@@ -74,10 +88,33 @@ public static class SystemEndpoints
 
         return api;
     }
+
+    private static string? Clip(string? text, int max) =>
+        text?.Trim() is { Length: > 0 } trimmed ? trimmed.Length > max ? trimmed[..max] + "…" : trimmed : null;
 }
 
 /// <param name="Status"><c>healthy</c> or <c>unhealthy</c>.</param>
 /// <param name="Checks">Each component's status.</param>
+/// <summary>At most a few of the web app's errors a minute go in the log, so a page stuck in a loop can't fill it.</summary>
+internal static class ClientErrors
+{
+    private const int PerMinute = 10;
+    private static readonly object Gate = new();
+    private static DateTime _minute;
+    private static int _count;
+
+    public static bool Allow()
+    {
+        lock (Gate)
+        {
+            var now = DateTime.UtcNow;
+            if (now - _minute > TimeSpan.FromMinutes(1))
+                (_minute, _count) = (now, 0);
+            return ++_count <= PerMinute;
+        }
+    }
+}
+
 public record HealthResponse(string Status, IReadOnlyDictionary<string, string> Checks);
 
 /// <param name="Version">Service version.</param>

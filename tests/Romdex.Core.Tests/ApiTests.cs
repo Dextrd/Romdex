@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Romdex.Core.Api;
 using Romdex.Core.Tests.Support;
+using Romdex.Client;
 
 namespace Romdex.Core.Tests;
 
@@ -35,6 +36,16 @@ public class ApiTests(RomdexFactory factory) : IClassFixture<RomdexFactory>
 
         Assert.Equal("healthy", health!.Status);
         Assert.Equal("healthy", health.Checks["database"]);
+    }
+
+    [Fact]
+    public async Task An_error_the_web_app_hit_goes_in_the_servers_log()
+    {
+        var sent = await _client.PostAsJsonAsync("/api/v1/client-errors", new ClientError("InvalidOperationException: on purpose", "the stack", "/library"));
+        Assert.Equal(System.Net.HttpStatusCode.NoContent, sent.StatusCode);
+
+        var log = await _client.GetFromJsonAsync<LogPage>("/api/v1/log", RomdexJson.Options);
+        Assert.Contains(log!.Entries, e => e.Message.Contains("on purpose") && e.Message.Contains("/library"));
     }
 
     [Fact]

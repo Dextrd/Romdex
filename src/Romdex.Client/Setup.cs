@@ -26,3 +26,6 @@ public sealed record FactoryResetRequest(string? Confirm);
 /// <param name="Version">The server's version, with the commit it was built from after a <c>+</c> where known.</param>
 /// <param name="Contracts">The plugin contract versions it supports, by kind of plugin.</param>
 public sealed record ServerVersion(string Version, string ApiVersion, IReadOnlyDictionary<string, string> Contracts);
+
+/// <summary>Body of <c>POST /client-errors</c>: an error the web app couldn't handle, for the server's log.</summary>
+public sealed record ClientError(string Message, string? Details = null, string? Page = null);
