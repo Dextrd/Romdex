@@ -2,6 +2,7 @@
 @inject RomdexClient Api
 @inject RequestTracker Tracker
 @inject AuthState Auth
+@inject Preferences Prefs
 @inject NavigationManager Nav
 @using Microsoft.JSInterop
 @inject IJSRuntime Js
@@ -241,15 +242,18 @@ else
 
     @if (held.Count > 0)
     {
-        <h2 class="section">@(held.Count == 1 ? "In your library" : $"In your library ({held.Count})")</h2>
-        <div class="card dumps">
-            @foreach (var dump in held) { @Dump(dump) }
-        </div>
+        <h2 class="section"><SectionToggle Open="IsOpen(Held)" OnToggle="() => ToggleAsync(Held)">@(held.Count == 1 ? "In your library" : $"In your library ({held.Count})")</SectionToggle></h2>
+        <Collapsible Open="IsOpen(Held)">
+            <div class="card dumps">
+                @foreach (var dump in held) { @Dump(dump) }
+            </div>
+        </Collapsible>
     }
     @if (_links is { Count: > 0 } linkedFiles)
     {
         @* Files someone said are this game, which no DAT verifies: kept apart from the DAT's own dumps. *@
-        <h2 class="section">Linked by you <span class="muted small">Not verified by the DATs</span></h2>
+        <h2 class="section"><SectionToggle Open="IsOpen(Linked)" OnToggle="() => ToggleAsync(Linked)">Linked by you <span class="muted small">Not verified by the DATs</span></SectionToggle></h2>
+        <Collapsible Open="IsOpen(Linked)">
         <div class="card linked">
             @foreach (var link in linkedFiles)
             {
@@ -270,13 +274,16 @@ else
                 </div>
             }
         </div>
+        </Collapsible>
     }
     @if (others.Count > 0)
     {
-        <h2 class="section">@(held.Count == 0 ? $"ROMs ({others.Count})" : $"Other ROMs ({others.Count})")</h2>
-        <div class="card dumps">
-            @foreach (var dump in others) { @Dump(dump) }
-        </div>
+        <h2 class="section"><SectionToggle Open="IsOpen(Others)" OnToggle="() => ToggleAsync(Others)">@(held.Count == 0 ? $"ROMs ({others.Count})" : $"Other ROMs ({others.Count})")</SectionToggle></h2>
+        <Collapsible Open="IsOpen(Others)">
+            <div class="card dumps">
+                @foreach (var dump in others) { @Dump(dump) }
+            </div>
+        </Collapsible>
     }
     @AddOns("Updates", updates)
     @AddOns("DLC", dlc)
@@ -454,8 +461,9 @@ else
         }
     }
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
+        _sections = await Prefs.GetAsync<Dictionary<string, bool>>(SectionsKey, []);
         Tracker.Changed += OnRequestsChanged;
         _ = Tracker.EnsureLoadedAsync();
     }
@@ -581,17 +589,30 @@ else
     }
 
     // A game's updates or DLC, closed until opened, those in the library first.
+    // The page's sections, each opened and closed by its title, as Melodex's song page's are: what you have and the
+    // rest of the game's ROMs start open, its updates and DLC shut. What you open or close is kept, for every game.
+    private const string SectionsKey = "game.sections", Held = "held", Linked = "linked", Others = "others";
+    private Dictionary<string, bool> _sections = [];
+
+    private bool IsOpen(string section) => _sections.TryGetValue(section, out var open) ? open : section is Held or Linked or Others;
+
+    private Task ToggleAsync(string section)
+    {
+        _sections[section] = !IsOpen(section);
+        return Prefs.SetAsync(SectionsKey, _sections);
+    }
+
     private RenderFragment AddOns(string heading, List<DumpInfo> dumps) => __builder =>
     {
         if (dumps.Count == 0)
             return;
         var have = dumps.Count(d => d.Status != DumpStatus.Missing);
-        <details class="add-ons">
-            <summary class="section">@heading <span class="muted">(@dumps.Count@(have > 0 ? $", {have} in your library" : ""))</span></summary>
+        <h2 class="section"><SectionToggle Open="IsOpen(heading)" OnToggle="() => ToggleAsync(heading)">@heading <span class="muted">(@dumps.Count@(have > 0 ? $", {have} in your library" : ""))</span></SectionToggle></h2>
+        <Collapsible Open="IsOpen(heading)">
             <div class="card dumps">
                 @foreach (var dump in dumps.OrderBy(d => d.Status == DumpStatus.Missing)) { @Dump(dump) }
             </div>
-        </details>
+        </Collapsible>
     };
 
     // A dump: its name, where it came out and in what languages, enough to tell it from the others; its serial, files,

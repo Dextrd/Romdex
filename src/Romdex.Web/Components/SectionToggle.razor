@@ -1,0 +1,16 @@
+@*
+    A section title that opens and closes the section, with a chevron pointing down while it's open. It goes inside the
+    section's h2.
+*@
+<button class="section-toggle" aria-expanded="@(Open ? "true" : "false")" @onclick="() => OnToggle.InvokeAsync()">
+    <span class="chevron @(Open ? "open" : "")" aria-hidden="true"></span>
+    @ChildContent
+</button>
+
+@code {
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter] public EventCallback OnToggle { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

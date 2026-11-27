@@ -429,6 +429,13 @@ h2.section { margin: 1.5rem 0 .5rem; }
 }
 .chevron { width: .5rem; height: .5rem; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(-45deg); transition: transform .15s; }
 .chevron.open { transform: rotate(45deg); }
+/* What's said beside a section's title, such as how many are in it, isn't bold. */
+.section-toggle .muted { font-weight: 400; }
+/* A section sliding open and shut: its rows grow from nothing as it fades in. */
+.collapsible { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows .2s ease-out, opacity .2s ease-out; }
+.collapsible.open { grid-template-rows: 1fr; opacity: 1; }
+.collapsible-inner { min-height: 0; overflow: hidden; }
+@media (prefers-reduced-motion: reduce) { .collapsible { transition: none; } }
 
 /* Album lists start with a small cover. */
 /* A row of a long list still being fetched: a cover's shape, shimmering, as tall as the rows it stands for. */
@@ -1682,17 +1689,6 @@ table.slots thead th { height: 32px; box-sizing: border-box; }
 .hashes dd { margin: 0; }
 .hashes code { font-size: .78rem; overflow-wrap: anywhere; }
 @media (max-width: 640px) { .dump { flex-direction: column; gap: .4rem; } .dump-aside { padding-left: 1.1rem; } }
-/* A game's updates and DLC: each a heading that opens onto its list, with the arrow the dumps in it have. */
-.add-ons > summary.section {
-    margin: 1.5rem 0 .5rem; color: var(--text); font-size: 1.15rem; font-weight: 600; list-style: none; position: relative; padding-left: 1.3rem;
-}
-.add-ons > summary.section::-webkit-details-marker { display: none; }
-.add-ons > summary.section::before {
-    content: ""; position: absolute; left: 0; top: .55rem; width: .5rem; height: .5rem; border: solid var(--muted);
-    border-width: 0 2px 2px 0; transform: rotate(-45deg); transition: transform .15s;
-}
-.add-ons[open] > summary.section::before { transform: rotate(45deg); top: .35rem; }
-.add-ons > summary.section .muted { font-weight: 400; }
 .toolbar .search-box { flex: 1; min-width: 12rem; }
 
 /* What arrived: its dumps, files and the retriever's notes, in Activity → Fetches. */

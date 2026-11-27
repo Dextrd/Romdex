@@ -1,0 +1,22 @@
+@*
+    What a section's title opens and closes, sliding open and shut rather than jumping. What's in it is only drawn once
+    it's first opened, and kept after, so a shut section costs nothing and closes as smoothly as it opens.
+*@
+<div class="collapsible @(Open ? "open" : "")" inert="@(!Open)">
+    <div class="collapsible-inner">
+        @if (_drawn)
+        {
+            @ChildContent
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public bool Open { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private bool _drawn;
+
+    protected override void OnParametersSet() => _drawn |= Open;
+}
