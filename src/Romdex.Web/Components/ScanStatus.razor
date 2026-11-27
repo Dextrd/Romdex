@@ -1,5 +1,6 @@
 @implements IDisposable
 @inject RomdexClient Api
+@inject TaskNotices Tasks
 @inject AuthState Auth
 @inject ServerEvents Events
 
@@ -101,7 +102,9 @@
         _error = null;
         try
         {
-            _active = [.. _active, await start()];
+            var task = await start();
+            Tasks.Started(task);
+            _active = [.. _active, task];
         }
         catch (RomdexApiException e)
         {

@@ -1,0 +1,80 @@
+@implements IDisposable
+@inject Notices Notices
+@inject TaskNotices Tasks
+@inject NavigationManager Nav
+
+@*
+    The notifications at the bottom right; full width on a phone. The newest is at the bottom, and past
+    a few the oldest are grouped into one line. Each shows the cover of what it's about, or an icon for it, and closes
+    itself after a few seconds unless the pointer is over them. Screen readers hear each as it comes.
+*@
+<div class="toasts" role="status" aria-live="polite" aria-label="Notifications" @onmouseenter="Notices.Hold" @onmouseleave="Notices.Release">
+    @if (Hidden > 0)
+    {
+        <div class="toast toast-more">
+            <a href="activity" class="toast-body">
+                <span class="toast-title">@Format.Count(Hidden, "more notification", "more notifications")</span>
+                <span class="toast-text muted small">See everything in Activity</span>
+            </a>
+            <button type="button" class="link small toast-close" title="Dismiss them all" aria-label="Dismiss them all" @onclick="CloseGrouped">✕</button>
+        </div>
+    }
+    @foreach (var notice in Notices.Shown.Skip(Hidden))
+    {
+        <div class="toast @(notice.Failed ? "failed" : null)" @key="notice.Key">
+            @if (notice.Art is { } art)
+            {
+                <img class="toast-art" src="@art" alt="" loading="lazy" />
+            }
+            else
+            {
+                <span class="toast-glyph" aria-hidden="true"><Icon Name="@notice.Icon" /></span>
+            }
+            @if (notice.Href is { } href)
+            {
+                <a href="@href" class="toast-body" @onclick="() => Go(notice)" @onclick:preventDefault="true">
+                    <span class="toast-title">@notice.Title</span>
+                    @if (notice.Text is { } text) { <span class="toast-text muted small">@text</span> }
+                </a>
+            }
+            else
+            {
+                <span class="toast-body">
+                    <span class="toast-title">@notice.Title</span>
+                    @if (notice.Text is { } text) { <span class="toast-text muted small">@text</span> }
+                </span>
+            }
+            <button type="button" class="link small toast-close" title="Dismiss" aria-label="Dismiss" @onclick="() => Notices.Close(notice.Key)">✕</button>
+        </div>
+    }
+</div>
+
+@code {
+    // How many show before the oldest are grouped.
+    private const int Most = 4;
+
+    private int Hidden => Math.Max(0, Notices.Shown.Count - Most + (Notices.Shown.Count > Most ? 1 : 0));
+
+    protected override void OnInitialized()
+    {
+        Notices.Changed += Redraw;
+        Tasks.EnsureStarted();
+    }
+
+    private void Redraw() => InvokeAsync(StateHasChanged);
+
+    // Going to it closes it.
+    private void Go(Notice notice)
+    {
+        Notices.Close(notice.Key);
+        Nav.NavigateTo(notice.Href!);
+    }
+
+    private void CloseGrouped()
+    {
+        foreach (var notice in Notices.Shown.Take(Hidden).ToList())
+            Notices.Close(notice.Key);
+    }
+
+    public void Dispose() => Notices.Changed -= Redraw;
+}

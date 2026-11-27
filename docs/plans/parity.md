@@ -26,7 +26,7 @@ same, or nearly, are what the foundation holds; the rest stay with their app.
 |---|---|---|---|
 | 1 | Settings in sections: your account first, then Library, Web app, Server and the app; no General page | 2.0 (#238) | Done. Fetching, Scheduled tasks and Notifications join their sections as they come; the log's "Keep tasks' lists" waits for Activity's task archive (4) |
 | 2 | Scheduled tasks: daily, weekly and monthly windows, each ticking what it runs; the catalogue update its own task, not after a scan | 2.0 (#112, #238) | Done: scan, catalogue update, retry failed fetches; Romdex's arrival check in place of playlist sync. Wishlist and upgrades join with B1 and B4; Retry failed moves to Activity → Fetches with 4, and the scheduled fetches setting to Fetching with 8 |
-| 3 | Notifications at the bottom right, and which kinds you see under Settings → Notifications | 1.6 (#178) | |
+| 3 | Notifications at the bottom right, and which kinds you see under Settings → Notifications | 1.6 (#178) | Done: long tasks, and fetches asked for here (RequestTracker's notifications; the rest of it comes with 4). Appearance is one panel with a You / Everyone switch, as in 1.6 (#197) |
 | 4 | Activity in Running, Queued and Completed sections; Pause all and Cancel all; a Fetches tab of requests and their attempts, replacing the Downloads page | 1.5.2–2.0 (#175, #176, #238) | |
 | 5 | Users: editing someone changes what they may do and can set a new password; the rest is theirs on their account | 2.0 (#238) | |
 | 6 | API keys: everyone makes their own; the admin sees other people's and can revoke them; the permission that was API keys and webhooks is Webhooks | 2.0 (#7, #238) | |
@@ -49,6 +49,12 @@ same, or nearly, are what the foundation holds; the rest stay with their app.
 Subsonic players, radio, For you and its mixes, discovery plugins and similar artists, albums and songs, gapless
 playback, even volume, lyrics, the visualiser and spectra, scrobbling, genres from MusicBrainz, and Listen now.
 For you and similar games were considered and left out.
+
+## Found in Melodex along the way
+
+Bugs noticed in Melodex while porting, fixed in Romdex; Melodex gets the fix when the foundation is shared.
+
+- Notifications' icons have no stroke style, so they draw filled rather than in lines (`.toast-glyph svg`).
 
 ## Keeping up
 

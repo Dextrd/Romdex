@@ -32,8 +32,11 @@ public enum RatingBoard { Auto, Esrb, Pegi, Usk, Cero, Acb, None }
 /// <summary>How the web app looks for someone, kept with their account: <c>PUT /auth/appearance</c>.</summary>
 /// <param name="HighContrast">Stronger text and borders, and status colours that colour-blind people can tell apart.</param>
 /// <param name="Ratings">Whose age ratings games' pages show; where a game has none from them, another board's.</param>
+/// <param name="TaskNotices">Notifications when long tasks, such as scans, finish or fail.</param>
+/// <param name="DownloadNotices">Notifications when you ask for something, and when it's in the library or failed.</param>
+/// <param name="ActionNotices">Notifications for what you do from a menu, as Melodex has them.</param>
 public sealed record Appearance(ThemeColor Color = ThemeColor.Blue, ThemeMode Mode = ThemeMode.Auto, bool HighContrast = false,
-    RatingBoard Ratings = RatingBoard.Auto);
+    RatingBoard Ratings = RatingBoard.Auto, bool TaskNotices = true, bool DownloadNotices = true, bool ActionNotices = true);
 
 /// <summary>Body of <c>POST /auth/setup</c>: the admin account, made the first time Romdex runs.</summary>
 public sealed record SetUpLogin(string Username, string Password);

@@ -8,6 +8,7 @@
 @inject RomdexClient Api
 @inject AuthState Auth
 @inject NavigationManager Nav
+@inject RequestTracker Tracker
 @using Microsoft.JSInterop
 @inject IJSRuntime JS
 
@@ -209,7 +210,7 @@ else
                     </div>
                     <div class="review-actions">
                         <IconButton Icon="get" Primary="true" Requires="@UserPermissions.Download" Title="Get: fetch the whole dump" Disabled="@(_busy || _fetching.Contains(dump.Dump.Id))"
-                                    OnClick="() => FetchAsync(dump.Dump.Id, dump.TitleId, dump.Dump.Id, dump.Have.Select(h => h.FileId).Distinct().ToList())" />
+                                    OnClick="@(() => FetchAsync(dump.Dump.Id, dump.TitleId, dump.Dump.Id, dump.Have.Select(h => h.FileId).Distinct().ToList(), dump.Dump.Name, "what you had of it"))" />
                         <IconButton Icon="approve" Requires="@UserPermissions.Review" Title="Keep as it is: count it as whole while only these files are missing" Disabled="_busy" OnClick="() => KeepIncompleteAsync(dump)" />
                         <IconButton Icon="discard" Requires="@UserPermissions.Review" Title="Delete: take what the library has of it out, if those files hold nothing else" Disabled="_busy"
                                     OnClick="() => DeleteIncompleteAsync(dump)" />
@@ -324,11 +325,11 @@ else
                                 <IconButton Icon="approve" Primary="true" Requires="@UserPermissions.Review" Title="Approve: count it as the dump it's named as" Disabled="_busy"
                                             OnClick="() => LinkAsync(new LinkFile(file.FileId, file.Entry, DumpId: file.LooksLike!.Id))" />
                                 <IconButton Icon="get" Requires="@UserPermissions.Download" Title="Replace: fetch a good copy of the dump" Disabled="@(_busy || _fetching.Contains(file.LooksLike!.Id))"
-                                            OnClick="() => FetchAsync(file.LooksLike!.Id, file.LooksLike.TitleId!.Value, file.LooksLike.Id, [file.FileId])" />
+                                            OnClick="() => FetchAsync(file.LooksLike!.Id, file.LooksLike.TitleId!.Value, file.LooksLike.Id, [file.FileId], file.LooksLike.Name, System.IO.Path.GetFileName(file.Path))" />
                                 break;
                             case Outdated when file.Was?.Now is { } now:
                                 <IconButton Icon="get" Primary="true" Requires="@UserPermissions.Download" Title="Upgrade: fetch the dump as the DAT has it now" Disabled="@(_busy || _fetching.Contains(now.Id))"
-                                            OnClick="() => FetchAsync(now.Id, now.TitleId!.Value, now.Id, [file.FileId])" />
+                                            OnClick="() => FetchAsync(now.Id, now.TitleId!.Value, now.Id, [file.FileId], now.Name, System.IO.Path.GetFileName(file.Path))" />
                                 <IconButton Icon="approve" Requires="@UserPermissions.Review" Title="Keep: count it as the dump it was" Disabled="_busy"
                                             OnClick="() => LinkAsync(new LinkFile(file.FileId, file.Entry, DumpId: now.Id))" />
                                 break;
@@ -337,7 +338,7 @@ else
                                 break;
                             case Corrupted when file.LooksLike is { } looks:
                                 <IconButton Icon="get" Primary="true" Requires="@UserPermissions.Download" Title="Replace: fetch the dump its name says it was" Disabled="@(_busy || _fetching.Contains(looks.Id))"
-                                            OnClick="() => FetchAsync(looks.Id, looks.TitleId!.Value, looks.Id, [file.FileId])" />
+                                            OnClick="() => FetchAsync(looks.Id, looks.TitleId!.Value, looks.Id, [file.FileId], looks.Name, System.IO.Path.GetFileName(file.Path))" />
                                 break;
                             case Matching:
                                 <IconButton Icon="search" Primary="true" Requires="@UserPermissions.Review" Title="Search for what it is" OnClick="() => _linking = file" />
@@ -728,13 +729,14 @@ else
         DoAsync(() => Api.DeleteIncompleteAsync(dump.Dump.Id), $"What the library had of {dump.Dump.Name} was deleted.");
 
     // What's fetched from Review replaces the files it's for: they're deleted once it's filed and verifies.
-    private async Task FetchAsync(Guid key, Guid titleId, Guid dumpId, IReadOnlyList<Guid> replaces)
+    private async Task FetchAsync(Guid key, Guid titleId, Guid dumpId, IReadOnlyList<Guid> replaces, string name, string replaced)
     {
         _fetching.Add(key);
         _notice = null;
         try
         {
             var fetch = await Api.FetchTitleAsync(titleId, dumpId, replaces);
+            Tracker.Asked(name, fetch, replaced);
             if (fetch.Download is { } started)
                 Say($"{started.Source} is fetching {started.Name}. It's checked against the DAT and filed once it arrives, and what it replaces is deleted then.");
             else

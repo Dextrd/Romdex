@@ -1,4 +1,5 @@
 @inject RomdexClient Api
+@inject TaskNotices Tasks
 @inject AuthState Auth
 
 @*
@@ -116,6 +117,7 @@
         try
         {
             _started = await Api.FormatLibraryAsync(SystemId);
+            Tasks.Started(_started);
             _confirming = false;
             _report = null;
         }

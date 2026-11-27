@@ -1,0 +1,32 @@
+@inject AuthState Auth
+
+@*
+    Your own look, or which notifications you see, and for whoever may change settings, everyone's too: what people see
+    until they choose their own. It's the one panel, with a switch at its top right between the two. Appearance and
+    Notifications each have a page of their own with it, as one page for both isn't drawn again going between them.
+*@
+@if (Auth.May(UserPermissions.Settings))
+{
+    <AppearancePanel ForEveryone="_everyone" Notifications="Notifications">
+        <Switch>
+            <Segmented T="bool" Value="_everyone" Options="Whose" OnChange="v => _everyone = v" Label="Whose" Class="panel-switch" />
+        </Switch>
+    </AppearancePanel>
+}
+else
+{
+    <AppearancePanel Notifications="Notifications" />
+}
+
+@code {
+    /// <summary>Which notifications show, rather than the look.</summary>
+    [Parameter] public bool Notifications { get; set; }
+
+    private bool _everyone;
+
+    private static readonly IReadOnlyList<(bool, string, string?)> Whose =
+    [
+        (false, "You", "For you"),
+        (true, "Everyone", "For everyone who hasn't chosen their own"),
+    ];
+}

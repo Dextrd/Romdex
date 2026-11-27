@@ -1,0 +1,207 @@
+@* An icon, drawn in the text's colour, for buttons and menus. *@
+<svg class="glyph @Class" viewBox="0 0 24 24" aria-hidden="true">
+    @switch (Name)
+    {
+        case "play-next":
+            <path d="M4 7h10M4 12h7M4 17h7M15 21v-8M12 16l3-3 3 3" />
+            break;
+        case "play-last":
+            <path d="M4 7h10M4 12h10M4 17h7M17 13v8M14 18l3 3 3-3" />
+            break;
+        case "star":
+            <path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z" />
+            break;
+        case "starred":
+            <path class="fill" d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z" />
+            break;
+        case "album":
+            <circle cx="12" cy="12" r="8.5" /><circle cx="12" cy="12" r="2.5" />
+            break;
+        case "artist":
+            <circle cx="12" cy="8" r="4" /><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0" />
+            break;
+        case "upgrade":
+            <path d="M12 20V6M6 12l6-6 6 6M5 3h14" />
+            break;
+        case "play":
+            <path class="fill" d="M8 5v14l11-7z" />
+            break;
+        case "listen":
+            <path d="M4 15v-3a8 8 0 0 1 16 0v3" /><rect x="3" y="14" width="4" height="6" rx="1.5" /><rect x="17" y="14" width="4" height="6" rx="1.5" />
+            break;
+        case "radio":
+            <circle class="fill" cx="12" cy="12" r="2" /><path d="M8.5 8.5a5 5 0 0 0 0 7M15.5 8.5a5 5 0 0 1 0 7M5.6 5.6a9 9 0 0 0 0 12.8M18.4 5.6a9 9 0 0 1 0 12.8" />
+            break;
+        case "get":
+            <path d="M12 4v11M7 10l5 5 5-5M5 20h14" />
+            break;
+        case "queue":
+            <path d="M4 6h12M4 11h12M4 16h7M17 14v6M14 17h6" />
+            break;
+        case "ignore":
+            <path d="M3 3l18 18M10.6 6.1A9.6 9.6 0 0 1 12 6c5 0 8.5 4 9.5 6a13 13 0 0 1-2.9 3.6M6.4 7.6A13.4 13.4 0 0 0 2.5 12c1 2 4.5 6 9.5 6a9.5 9.5 0 0 0 4.2-1M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+            break;
+        case "unignore":
+            <path d="M2.5 12c1-2 4.5-6 9.5-6s8.5 4 9.5 6c-1 2-4.5 6-9.5 6s-8.5-4-9.5-6z" /><circle cx="12" cy="12" r="3" />
+            break;
+        case "retry":
+            <path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6" />
+            break;
+        case "add":
+            <path d="M3 8h18v12H3zM5 8l2-4h10l2 4M12 11v6M9 14h6" />
+            break;
+        case "discard":
+            <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
+            break;
+        case "remove":
+            <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
+            break;
+        case "cancel":
+            <path d="M6 6l12 12M18 6L6 18" />
+            break;
+        case "up":
+            <path d="M12 19V5M6 11l6-6 6 6" />
+            break;
+        case "down":
+            <path d="M12 5v14M6 13l6 6 6-6" />
+            break;
+        case "back":
+            <path d="M15 5l-7 7 7 7" />
+            break;
+        case "forward":
+            <path d="M9 5l7 7-7 7" />
+            break;
+        case "test":
+            <path d="M3 12h4l3-7 4 14 3-7h4" />
+            break;
+        case "settings":
+            <path d="M4 7h10M18 7h2M4 17h2M10 17h10" /><circle cx="16" cy="7" r="2" /><circle cx="8" cy="17" r="2" />
+            break;
+        case "power":
+            <path d="M12 3v8M7.1 6.1a8 8 0 1 0 9.8 0" />
+            break;
+        case "approve":
+            <path d="M5 12.5l4.5 4.5L19 7.5" />
+            break;
+        case "exclude":
+            <circle cx="12" cy="12" r="8" /><path d="M6.4 6.4l11.2 11.2" />
+            break;
+        case "defer":
+            <circle cx="12" cy="12" r="8" /><path d="M12 8v4l3 2" />
+            break;
+        case "quality":
+            <path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2" />
+            break;
+        case "hide":
+            <path d="M3 3l18 18M10.6 6.1A9.6 9.6 0 0 1 12 6c5 0 8.5 4 9.5 6a13 13 0 0 1-2.9 3.6M6.4 7.6A13.4 13.4 0 0 0 2.5 12c1 2 4.5 6 9.5 6a9.5 9.5 0 0 0 4.2-1M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+            break;
+        case "putback":
+            <path d="M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
+            break;
+        case "search":
+            <circle cx="11" cy="11" r="6" /><path d="M20 20l-4.5-4.5" />
+            break;
+        case "pause":
+            <path class="fill" d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" />
+            break;
+        case "top":
+            <path d="M5 4h14M12 20V9M6 14l6-6 6 6" />
+            break;
+        case "bottom":
+            <path d="M5 20h14M12 4v11M6 10l6 6 6-6" />
+            break;
+        case "copy":
+            <rect x="8" y="8" width="12" height="12" rx="2" /><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3" />
+            break;
+        case "key":
+            <circle cx="8" cy="15" r="4" /><path d="M11 12l9-9M16 7l3 3M14 9l2 2" />
+            break;
+        case "show":
+            <path d="M2.5 12c1-2 4.5-6 9.5-6s8.5 4 9.5 6c-1 2-4.5 6-9.5 6s-8.5-4-9.5-6z" /><circle cx="12" cy="12" r="3" />
+            break;
+        case "history":
+            <path d="M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4M12 8v4l3 2" />
+            break;
+        case "image":
+            <rect x="3.5" y="3.5" width="17" height="17" rx="2" /><circle cx="9" cy="9" r="1.6" /><path d="M20.5 15.5l-5-5-9 10" />
+            break;
+        case "visualiser":
+            <path d="M5 20v-6M9.5 20V8M14 20v-9M18.5 20V4" />
+            break;
+        case "volume":
+            <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" /><path d="M15.5 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11" />
+            break;
+        case "lyrics":
+            <path d="M5 4h14v12H9l-4 4z" /><path d="M9 8.5h6M9 11.5h4" />
+            break;
+        case "format":
+            <path d="M3.5 12.5V4h8.5l9 9-8.5 8.5z" /><circle cx="8" cy="8.5" r="1.4" />
+            break;
+        case "import":
+            <path d="M12 3v12M7 10l5 5 5-5" /><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4" />
+            break;
+        case "attention":
+            <path d="M12 4 21 20H3z" /><path d="M12 10v4.5M12 17.5v.01" />
+            break;
+        // The services' own marks, in one colour, for importing from them.
+        case "spotify":
+            <path class="fill" d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z" />
+            break;
+        case "youtube-music":
+            <path class="fill" d="M12 0C5.376 0 0 5.376 0 12s5.376 12 12 12 12-5.376 12-12S18.624 0 12 0zm0 19.104c-3.924 0-7.104-3.18-7.104-7.104S8.076 4.896 12 4.896s7.104 3.18 7.104 7.104-3.18 7.104-7.104 7.104zm0-13.332c-3.432 0-6.228 2.796-6.228 6.228S8.568 18.228 12 18.228s6.228-2.796 6.228-6.228S15.432 5.772 12 5.772zM9.684 15.54V8.46L15.816 12l-6.132 3.54z" />
+            break;
+        case "deezer":
+            <path class="fill" d="M.693 10.024c.381 0 .693-1.256.693-2.807 0-1.55-.312-2.807-.693-2.807C.312 4.41 0 5.666 0 7.217s.312 2.808.693 2.808ZM21.038 1.56c-.364 0-.684.805-.91 2.096C19.765 1.446 19.184 0 18.526 0c-.78 0-1.464 2.036-1.784 5-.312-2.158-.788-3.536-1.325-3.536-.745 0-1.386 2.704-1.62 6.472-.442-1.932-1.083-3.145-1.793-3.145s-1.35 1.213-1.793 3.145c-.242-3.76-.874-6.463-1.628-6.463-.537 0-1.013 1.378-1.325 3.535C6.938 2.036 6.262 0 5.474 0c-.658 0-1.247 1.447-1.602 3.665-.217-1.291-.546-2.105-.91-2.105-.675 0-1.221 2.807-1.221 6.272 0 3.466.546 6.273 1.221 6.273.277 0 .537-.476.736-1.273.32 2.928.996 4.938 1.776 4.938.606 0 1.143-1.204 1.507-3.11.251 3.622.875 6.195 1.602 6.195.46 0 .875-1.023 1.187-2.677C10.142 21.6 11 24 12.004 24c1.005 0 1.863-2.4 2.235-5.822.312 1.654.727 2.677 1.186 2.677.728 0 1.352-2.573 1.603-6.195.364 1.906.9 3.11 1.507 3.11.78 0 1.455-2.01 1.775-4.938.208.797.46 1.273.737 1.273.675 0 1.22-2.807 1.22-6.273-.008-3.457-.553-6.272-1.23-6.272ZM23.307 10.024c.381 0 .693-1.256.693-2.807 0-1.55-.312-2.807-.693-2.807-.381 0-.693 1.256-.693 2.807s.312 2.808.693 2.808Z" />
+            break;
+        // Not Apple's mark, which isn't theirs to lend: a note in a rounded square, as an app's icon is.
+        case "apple-music":
+            <rect x="2.5" y="2.5" width="19" height="19" rx="5" /><path d="M10 16.5V8l6-1.5v8" /><circle cx="8.5" cy="16.5" r="1.5" /><circle cx="14.5" cy="14.5" r="1.5" />
+            break;
+        case "export":
+            <path d="M12 15V3M7 8l5-5 5 5" /><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4" />
+            break;
+        case "plus":
+            <path d="M12 5v14M5 12h14" />
+            break;
+        case "playlist":
+            <path d="M4 6h11M4 11h11M4 16h6" /><circle cx="16.5" cy="17.5" r="2.5" /><path d="M19 17.5V9l2.5 1" />
+            break;
+        case "more":
+            <circle class="fill" cx="12" cy="5" r="1.6" /><circle class="fill" cx="12" cy="12" r="1.6" /><circle class="fill" cx="12" cy="19" r="1.6" />
+            break;
+        case "repeat":
+            <path d="M17 3l3 3-3 3M4 11V9a3 3 0 0 1 3-3h13M7 21l-3-3 3-3M20 13v2a3 3 0 0 1-3 3H4" />
+            break;
+        case "repeat-one":
+            <path d="M17 3l3 3-3 3M4 11V9a3 3 0 0 1 3-3h13M7 21l-3-3 3-3M20 13v2a3 3 0 0 1-3 3H4M11 10.5l1.5-1v5" />
+            break;
+        case "shuffle":
+            <path d="M4 7h3.5c4.5 0 4.5 10 9 10H20M4 17h3.5c1.6 0 2.6-1.3 3.4-3M13.1 10c.8-1.7 1.8-3 3.4-3H20M17.5 4.5 20 7l-2.5 2.5M17.5 14.5 20 17l-2.5 2.5" />
+            break;
+        case "rename":
+            <path d="M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4" />
+            break;
+        case "done":
+            <path d="M5 12.5l4.5 4.5L19 7.5" />
+            break;
+        case "open":
+            <path d="M14 4h6v6M20 4l-8 8M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
+            break;
+        case "pin":
+            <path d="M9 4h6l-1 6 3.5 3.5h-11L10 10zM12 13.5V20" />
+            break;
+        case "wish":
+            <path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z" />
+            break;
+        case "wished":
+            <path class="fill" d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z" />
+            break;
+    }
+</svg>
+
+@code {
+    /// <summary>play, listen, get, queue, play-next, play-last, album, artist, upgrade, playlist, more and the rest below.</summary>
+    [Parameter, EditorRequired] public string Name { get; set; } = "";
+
+    [Parameter] public string? Class { get; set; }
+}

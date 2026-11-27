@@ -34,6 +34,7 @@
         <div class="settings-group" role="group" aria-labelledby="settings-web-app">
             <h2 id="settings-web-app">Web app</h2>
             <NavLink href="settings/appearance">Appearance</NavLink>
+            <NavLink href="settings/notifications">Notifications</NavLink>
         </div>
         <div class="settings-group" role="group" aria-labelledby="settings-server">
             <h2 id="settings-server">Server</h2>
@@ -89,7 +90,7 @@
         "settings/webhooks" => UserPermissions.Keys,
         "settings/api" => UserPermissions.Keys,
         "settings/regions" => UserPermissions.Download,
-        "settings/account" or "account" or "settings/appearance" or "settings/about" => null,
+        "settings/account" or "account" or "settings/appearance" or "settings/notifications" or "settings/about" => null,
         var help when help == "settings/help" || help.StartsWith("settings/help/") => null,
         _ => UserPermissions.Settings,
     };

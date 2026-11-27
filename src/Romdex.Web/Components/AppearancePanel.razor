@@ -4,8 +4,9 @@
 @implements IDisposable
 
 @*
-    How the web app looks: for whoever's signed in, kept with their account, or for everyone who hasn't chosen their own.
-    Each choice shows at once where it's what you see.
+    How the web app looks, or which notifications it shows: for whoever's signed in, kept with their account, or for
+    everyone who hasn't chosen their own. Each choice shows at once where it's what you see. Both are kept together, so
+    choosing either makes them your own.
 *@
 <section class="panel" aria-label="@Title">
     <header class="panel-head">
@@ -14,22 +15,36 @@
             <p class="muted small">
                 @if (ForEveryone)
                 {
-                    <span>How Romdex looks and behaves for everyone who hasn't chosen their own look. Each person can choose their own under Settings → Appearance.</span>
+                    <span>@(Notifications ? "The notifications" : "How Romdex looks") for everyone who hasn't chosen their own. Each person can choose their own under Settings → Web app.</span>
                 }
                 else if (Auth.Status?.OwnAppearance == true)
                 {
-                    <span>How Romdex looks and behaves for you, on every device you sign in on. </span>
-                    <button class="link" disabled="@_saving" @onclick="FollowEveryoneAsync">Use everyone's look instead</button>
+                    <span>@(Notifications ? "The notifications you see" : "How Romdex looks for you"), on every device you sign in on. </span>
+                    <button class="link" disabled="@_saving" @onclick="FollowEveryoneAsync">Use everyone's instead</button>
                 }
                 else
                 {
-                    <span>You're following the look chosen for everyone. Change anything here to make it your own, on every device you sign in on.</span>
+                    <span>You're following the @(Notifications ? "notifications" : "look") chosen for everyone. Change anything here to make @(Notifications ? "them" : "it") your own, on every device you sign in on.</span>
                 }
             </p>
         </div>
         @if (_saving) { <span class="spinner"></span> }
+        @Switch
     </header>
     <div class="appearance">
+        @if (Notifications)
+        {
+            <p class="muted small">They slide in at the bottom right while you use Romdex.</p>
+            @foreach (var (name, hint, on, set) in NoticeKinds)
+            {
+                <label class="dialog-choice">
+                    <input type="checkbox" checked="@on(_appearance)" @onchange="e => SaveAsync(set(_appearance, (bool)e.Value!))" />
+                    <span><strong>@name</strong><span class="muted small">@hint</span></span>
+                </label>
+            }
+        }
+        else
+        {
         <div class="field-label">Colour</div>
         <div class="swatches" role="radiogroup" aria-label="Colour">
             @foreach (var (color, name, light, dark) in Theme.Colors)
@@ -84,6 +99,7 @@
                 <span><strong>Don't show them</strong></span>
             </label>
         </div>
+        }
         @if (_error is not null) { <p class="error small">@_error</p> }
     </div>
 </section>
@@ -92,11 +108,27 @@
     /// <summary>Everyone's look, rather than your own.</summary>
     [Parameter] public bool ForEveryone { get; set; }
 
+    /// <summary>Which notifications show, rather than the look.</summary>
+    [Parameter] public bool Notifications { get; set; }
+
+    /// <summary>Shown at the top right, such as the switch between your own look and everyone's.</summary>
+    [Parameter] public RenderFragment? Switch { get; set; }
+
+    private static readonly IReadOnlyList<(string Name, string Hint, Func<Appearance, bool> On, Func<Appearance, bool, Appearance> Set)> NoticeKinds =
+    [
+        ("Long tasks", "When a scan, catalogue update or formatting finishes or fails, and when a scan leaves something to review",
+            a => a.TaskNotices, (a, on) => a with { TaskNotices = on }),
+        ("Fetches", "When you ask for something, and when it's in your library or failed",
+            a => a.DownloadNotices, (a, on) => a with { DownloadNotices = on }),
+        ("Menus", "When what you do from a menu goes on elsewhere, and when it's done",
+            a => a.ActionNotices, (a, on) => a with { ActionNotices = on }),
+    ];
+
     private Appearance _appearance = new();
     private bool _saving;
     private string? _error;
 
-    private string Title => ForEveryone ? "Appearance for everyone" : "Appearance";
+    private string Title => (Notifications ? "Notifications" : "Appearance") + (ForEveryone ? " for everyone" : "");
 
     // Everyone's look shows as you change it only while you follow it.
     private bool Shown => !ForEveryone || Auth.Status?.OwnAppearance != true;

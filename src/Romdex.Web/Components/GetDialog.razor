@@ -1,4 +1,5 @@
 @inject RomdexClient Api
+@inject RequestTracker Tracker
 
 @*
     Gets a title through the retrievers that search, as Melodex does: a request for each wanted region it's missing, or
@@ -78,6 +79,7 @@
         try
         {
             _result = await Api.FetchTitleAsync(_titleId, _titleId == TitleId ? DumpId : null);
+            Tracker.Asked(Name, _result);
         }
         catch (Exception e) when (e is RomdexApiException or HttpRequestException)
         {
