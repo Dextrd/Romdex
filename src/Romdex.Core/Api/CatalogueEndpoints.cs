@@ -98,17 +98,20 @@ public static class CatalogueEndpoints
 
         var titles = api.MapGroup("/titles").WithTags("Catalogue");
 
-        titles.MapGet("", async (LibraryViewBuilder views, TitleStatus? status, string? q, bool? ignored, bool? hidden, bool? have, RegionFit? fit, int? skip, int? take,
-                CancellationToken ct) =>
+        titles.MapGet("", async (LibraryViewBuilder views, HttpContext http, Marks.MarkService marks, TitleStatus? status, string? q, bool? ignored,
+                bool? hidden, bool? have, RegionFit? fit, bool? starred, int? skip, int? take, CancellationToken ct) =>
             {
+                // Only what you've starred, as Melodex's Library star shows.
+                var stars = starred == true && Access.Caller.Of(http).UserId is { } user ? await marks.StarredAsync(user, ct) : null;
                 var found = new List<TitleSummary>();
                 foreach (var view in await views.GetAllAsync(ct))
                     found.AddRange(Filter(view.Titles, status, q, have == true ? null : ignored ?? false, hidden ?? false, have ?? false, fit)
+                        .Where(t => starred != true || stars?.Contains(t.Id) == true)
                         .Select(t => Summary(view.Summary.Id, t)));
                 return Page(found.OrderBy(t => DumpNames.SortKey(t.Name), StringComparer.OrdinalIgnoreCase), skip, take);
             })
             .WithName("ListAllTitles")
-            .WithSummary("Every system's titles together, by name, filtered as a system's are.");
+            .WithSummary("Every system's titles together, by name, filtered as a system's are; with starred, only those you've starred.");
 
         titles.MapGet("/{id:guid}", async (Guid id, RomdexDbContext db, LibraryViewBuilder views, Games games, CancellationToken ct) =>
                 await DetailAsync(id, db, views, ct, games) is { } detail ? Results.Ok(detail) : Results.NotFound())

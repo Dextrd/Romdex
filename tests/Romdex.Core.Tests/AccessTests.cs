@@ -303,6 +303,41 @@ public sealed class AccessTests : IDisposable
     }
 
     [Fact]
+    public async Task Each_user_stars_and_rates_games_of_their_own()
+    {
+        var admin = new RomdexClient(_factory.CreateSignedInClient());
+        var game = Guid.NewGuid();
+        // There's no such game.
+        Assert.Equal(HttpStatusCode.NotFound, (await Assert.ThrowsAsync<RomdexApiException>(() => admin.SetMarkAsync(MarkKind.Game, game, new SetMark(true)))).Status);
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<RomdexDbContext>();
+            var system = new CatalogueSystem { Name = "Test - Starred", Source = "other", DatVersion = "1", PluginSystemId = "starred" };
+            db.Systems.Add(system);
+            db.Titles.Add(new Title { Id = game, SystemId = system.Id, Name = "Star Fox Hunt", Key = "star fox hunt" });
+            await db.SaveChangesAsync();
+        }
+
+        var starred = await admin.SetMarkAsync(MarkKind.Game, game, new SetMark(Starred: true));
+        Assert.NotNull(starred!.StarredAt);
+        var rated = await admin.SetMarkAsync(MarkKind.Game, game, new SetMark(Rating: 4));
+        Assert.Equal((4, starred.StarredAt), (rated!.Rating, rated.StarredAt));
+        var tooMany = await Assert.ThrowsAsync<RomdexApiException>(() => admin.SetMarkAsync(MarkKind.Game, game, new SetMark(Rating: 6)));
+        Assert.Equal(HttpStatusCode.BadRequest, tooMany.Status);
+
+        // Someone else's are their own.
+        await admin.CreateUserAsync(new CreateUser("rater", "rating password", [Scopes.Read]));
+        var rater = new RomdexClient(await SignInAsync("rater", "rating password"));
+        Assert.Empty(await rater.ListMarksAsync());
+        Assert.Equal(game, Assert.Single(await admin.ListMarksAsync()).Id);
+
+        // Unstarred and unrated, it has no mark.
+        await admin.SetMarkAsync(MarkKind.Game, game, new SetMark(Starred: false));
+        Assert.Null(await admin.SetMarkAsync(MarkKind.Game, game, new SetMark(Rating: 0)));
+        Assert.Empty(await admin.ListMarksAsync());
+    }
+
+    [Fact]
     public async Task Each_user_keeps_their_own_appearance()
     {
         var admin = new RomdexClient(_factory.CreateSignedInClient());

@@ -56,6 +56,9 @@ else if (_view == "games")
             }
         </select>
         <input type="search" placeholder="Search games" value="@_query" @oninput="SearchAsync" />
+        @* Only what you've starred, as Melodex's Library star shows. *@
+        <IconButton Icon="@(_starred ? "starred" : "star")" On="_starred" Title="@(_starred ? "Show everything, starred or not" : "Only what you've starred")"
+                    OnClick="StarredAsync" />
         <LayoutToggle Value="@_layout" OnChange="l => _layout = l" />
     </div>
     @if (_games is null)
@@ -64,7 +67,7 @@ else if (_view == "games")
     }
     else if (_games.Total == 0)
     {
-        <div class="empty card">@(_query.Length > 0 ? "Nothing matches." : _filter == "All" ? NothingYet : "Nothing here.")</div>
+        <div class="empty card">@(_query.Length > 0 ? "Nothing matches." : NothingHere)</div>
     }
     else
     {
@@ -131,6 +134,13 @@ else
     private string _query = "";
     private int _search;
     private string _layout = GameLayout.Grid;
+    private bool _starred;
+
+    private async Task StarredAsync()
+    {
+        _starred = !_starred;
+        await LoadGamesAsync(PageSize);
+    }
 
     // Systems the library has any game of.
     private List<SystemSummary> Held => _systems.Where(s => s.Owned + s.Partial + s.Bad > 0).ToList();
@@ -138,6 +148,9 @@ else
     private string NothingYet => _status?.ScannedAt is null
         ? "Nothing yet. Scan, at the top, reads your games."
         : "None of your files match the catalogue yet. Review lists what they are.";
+
+    // What an empty list says: nothing starred, or nothing at all yet.
+    private string NothingHere => _starred ? "Nothing starred yet. Star a game you have on its page." : _filter == "All" ? NothingYet : "Nothing here.";
 
     protected override void OnInitialized() => Events.Received += OnEvent;
 
@@ -181,7 +194,7 @@ else
 
     private async Task LoadGamesAsync(int take, int skip = 0)
     {
-        var page = await Api.ListAllTitlesAsync(GameFilters.StatusOf(_filter), _query, skip: skip, take: take, have: true, fit: _fit);
+        var page = await Api.ListAllTitlesAsync(GameFilters.StatusOf(_filter), _query, skip: skip, take: take, have: true, fit: _fit, starred: _starred);
         _games = page;
         _titles = skip == 0 ? [.. page.Items] : [.. _titles, .. page.Items];
     }

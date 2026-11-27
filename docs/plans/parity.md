@@ -39,7 +39,7 @@ same, or nearly, are what the foundation holds; the rest stay with their app.
 | | Feature | In Romdex | Status |
 |---|---|---|---|
 | 1 | Wishlist, with a scheduled **Get them all** | Games you'd like; also where "get everything missing" for a system lives | Done: a star on a game's page, **Wish for what's missing** on a system's, a Wishlist view in the Library, Get them all by hand and as a scheduled task. Melodex's star stands in for Listen now; Romdex's is always beside Get |
-| 2 | Stars and ratings | Favourite and rate games | |
+| 2 | Stars and ratings | Favourite and rate games | Done: a star and a rating on the page of a game you have (one you haven't has the wishlist's star instead), Starred in the Library's Games, `GET /marks` and `PUT /marks/game/{id}`. Melodex's sort by rating isn't brought over, as Romdex's game lists aren't sorted but by name |
 
 ## C. Not brought over
 
@@ -57,6 +57,8 @@ For you and similar games were considered and left out too.
 Bugs noticed in Melodex while porting, fixed in Romdex; Melodex gets the fix when the foundation is shared.
 
 - Notifications' icons have no stroke style, so they draw filled rather than in lines (`.toast-glyph svg`).
+- Setting a star and a rating on something with neither, a moment apart, can fail: both requests make its first mark,
+  and the second breaks the unique index (`MarkService.SetAsync`). Romdex retries once against the mark the other made.
 - The scheduled-task note loses the space before its **Scheduled tasks** link: `<text> </text>` renders nothing (`ScheduleNote.razor`).
 
 ## Keeping up

@@ -63,8 +63,9 @@ X's dumps, but Romdex checks and files them like any other.
 
 ## Your library
 
-**Library**, the home page, has two views. **Systems** lists every system you have games for; **Games** lists every
-game in the library together, to filter and search. **Scan**, at the top, reads your library, and
+**Library**, the home page, has three views. **Systems** lists every system you have games for; **Games** lists every
+game in the library together, to filter and search; **Wishlist** lists games you'd like, as
+[Your wishlist](downloads-and-filing.md#your-wishlist) says. **Scan**, at the top, reads your library, and
 **Update the catalogue**, in the menu beside it, reads the DATs again. Both run by themselves each night, as [Scheduled tasks](configuration.md#scheduled-tasks) says. A scan hashes each file once; later scans only hash
 what's new or changed.
 
@@ -75,6 +76,9 @@ A file counts only when its checksums match a dump in the DAT, whatever it's cal
 - **Partial**: you have some discs of it, but not all.
 - **Bad**: you have files of it that don't verify, such as a disc with a track missing, or a file named like a dump
   but with other checksums.
+
+A game you have can be starred and rated 1 to 5 on its page; each person has their own. The star beside the search in
+**Games** shows only what you've starred. The API has them at `GET /marks` and `PUT /marks/game/{id}`.
 
 ## Regions
 

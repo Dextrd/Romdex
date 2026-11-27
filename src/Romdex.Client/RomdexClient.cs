@@ -116,8 +116,20 @@ public sealed class RomdexClient(HttpClient http)
 
     /// <summary>Titles by name; with <c>have</c>, only those the library has some of: owned, partial or bad, ignored or not.</summary>
     public async Task<TitlePage> ListAllTitlesAsync(TitleStatus? status = null, string? q = null, bool ignored = false, int skip = 0, int take = 100,
-        bool have = false, RegionFit? fit = null, CancellationToken ct = default) =>
-        (await http.GetFromJsonAsync<TitlePage>($"{Api}/titles?{TitleQuery(status, q, ignored, false, have, skip, take, fit)}", RomdexJson.Options, ct))!;
+        bool have = false, RegionFit? fit = null, bool starred = false, CancellationToken ct = default) =>
+        (await http.GetFromJsonAsync<TitlePage>($"{Api}/titles?{TitleQuery(status, q, ignored, false, have, skip, take, fit)}{(starred ? "&starred=true" : "")}",
+            RomdexJson.Options, ct))!;
+
+    public async Task<IReadOnlyList<ItemMark>> ListMarksAsync(CancellationToken ct = default) =>
+        await http.GetFromJsonAsync<List<ItemMark>>($"{Api}/marks", RomdexJson.Options, ct) ?? [];
+
+    /// <summary>Stars, unstars or rates a game; what's left of its mark, or null once it has neither.</summary>
+    public async Task<ItemMark?> SetMarkAsync(MarkKind kind, Guid id, SetMark change, CancellationToken ct = default)
+    {
+        using var response = await http.PutAsJsonAsync($"{Api}/marks/{kind.ToString().ToLowerInvariant()}/{id}", change, RomdexJson.Options, ct);
+        await EnsureAsync(response, ct);
+        return response.StatusCode == System.Net.HttpStatusCode.NoContent ? null : await response.Content.ReadFromJsonAsync<ItemMark>(RomdexJson.Options, ct);
+    }
 
     public async Task<BiosList> ListBiosAsync(Guid systemId, CancellationToken ct = default) =>
         (await http.GetFromJsonAsync<BiosList>($"{Api}/systems/{systemId}/bios", RomdexJson.Options, ct))!;

@@ -1,0 +1,29 @@
+@implements IDisposable
+@inject MarkStore Marks
+
+@* A rating, 1 to 5, for a game you have, as Melodex's for songs and albums. Choosing the rating it has takes it away. *@
+@{ var rating = Marks.RatingOf(Kind, Id); }
+<span class="rating" role="group" aria-label="@(rating > 0 ? $"Rated {rating} of 5" : "Not rated")">
+    @for (var i = 1; i <= 5; i++)
+    {
+        var stars = i;
+        <button type="button" class="rating-star @(stars <= rating ? "on" : "")" title="@(stars == rating ? "Take the rating away" : $"Rate it {stars} of 5")"
+                aria-pressed="@(stars <= rating ? "true" : "false")" @onclick="() => Marks.RateAsync(Kind, Id, stars)">
+            <Icon Name="@(stars <= rating ? "starred" : "star")" />
+        </button>
+    }
+</span>
+
+@code {
+    [Parameter, EditorRequired] public MarkKind Kind { get; set; }
+
+    [Parameter, EditorRequired] public Guid Id { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Marks.Changed += StateHasChanged;
+        await Marks.EnsureLoadedAsync();
+    }
+
+    public void Dispose() => Marks.Changed -= StateHasChanged;
+}

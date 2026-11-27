@@ -91,6 +91,7 @@ public partial class RomdexDbContext(DbContextOptions<RomdexDbContext> options) 
     public DbSet<DownloadDump> DownloadDumps => Set<DownloadDump>();
     public DbSet<Request> Requests => Set<Request>();
     public DbSet<WishlistEntry> WishlistEntries => Set<WishlistEntry>();
+    public DbSet<Mark> Marks => Set<Mark>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -223,6 +224,13 @@ public partial class RomdexDbContext(DbContextOptions<RomdexDbContext> options) 
             e.HasIndex(i => new { i.PluginInstanceId, i.CandidateId });
             e.HasOne<Request>().WithMany(r => r.Attempts).HasForeignKey(i => i.RequestId).OnDelete(DeleteBehavior.SetNull);
             e.HasIndex(i => i.RequestId);
+        });
+
+        modelBuilder.Entity<Mark>(e =>
+        {
+            e.HasOne<User>().WithMany().HasForeignKey(m => m.UserId).OnDelete(DeleteBehavior.Cascade);
+            e.Property(m => m.Kind).HasConversion<string>();
+            e.HasIndex(m => new { m.UserId, m.Kind, m.ItemId }).IsUnique();
         });
 
         modelBuilder.Entity<WishlistEntry>(e =>

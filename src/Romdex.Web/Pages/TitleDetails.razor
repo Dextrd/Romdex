@@ -125,7 +125,13 @@ else
                 {
                     <IconButton Icon="get" Requires="@UserPermissions.Download" Large="true" Label="Get" Title="Find it through the retrievers" OnClick="() => _getting = (null, _title.Name)" />
                 }
-                @if (_title.Status != TitleStatus.Owned || _title.WantedMissing is { Count: > 0 } || Wishlist.Contains(_title.Id))
+                @* A game you have gets a star and a rating, as Melodex's songs and albums do; one you haven't, the wishlist's star. *@
+                @if (_title.Status == TitleStatus.Owned)
+                {
+                    <StarButton Kind="MarkKind.Game" Id="_title.Id" Large="true" />
+                    <RatingStars Kind="MarkKind.Game" Id="_title.Id" />
+                }
+                else
                 {
                     <WishButton TitleId="_title.Id" Name="@_title.Name" Large="true" />
                 }

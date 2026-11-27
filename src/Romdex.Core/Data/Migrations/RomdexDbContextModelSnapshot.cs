@@ -588,6 +588,39 @@ namespace Romdex.Core.Data.Migrations
                     b.ToTable("ManualMatches");
                 });
 
+            modelBuilder.Entity("Romdex.Core.Data.Mark", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("ChangedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ItemId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("Rating")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("StarredAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Kind", "ItemId")
+                        .IsUnique();
+
+                    b.ToTable("Marks");
+                });
+
             modelBuilder.Entity("Romdex.Core.Data.PastMatch", b =>
                 {
                     b.Property<string>("Sha1")
@@ -1099,6 +1132,15 @@ namespace Romdex.Core.Data.Migrations
                     b.Navigation("DumpFile");
 
                     b.Navigation("Title");
+                });
+
+            modelBuilder.Entity("Romdex.Core.Data.Mark", b =>
+                {
+                    b.HasOne("Romdex.Core.Data.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Romdex.Core.Data.Request", b =>
