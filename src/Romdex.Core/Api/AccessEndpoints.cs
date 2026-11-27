@@ -273,7 +273,7 @@ public static class AccessEndpoints
 
     private static void MapKeys(RouteGroupBuilder api)
     {
-        var keys = api.MapGroup("/keys").WithTags("Access").RequireScope(Scopes.Keys);
+        var keys = api.MapGroup("/keys").WithTags("Access").RequireScope(Scopes.OwnKeys);
 
         keys.MapGet("", async (HttpContext http, RomdexDbContext db, CancellationToken ct) =>
             {

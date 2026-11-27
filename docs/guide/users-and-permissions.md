@@ -21,16 +21,18 @@ their current password. A new password signs them out everywhere else.
 | **Tidy files** | Renaming, moving and converting files in the library |
 | **Scan** | Scanning the library, and pausing, cancelling and reordering tasks |
 | **Settings and plugins** | Changing settings and plugins, and reading the log |
-| **API keys and webhooks** | Making API keys for apps, and managing webhooks |
+| **Webhooks** | Managing webhooks. On a key, it lets the app make and revoke its owner's keys |
 | **Manage users** | Adding, changing and removing other users |
 
 Someone who just plays needs Browse and Play. Buttons for what someone may not do don't show.
 
 ## API keys
 
-Apps use a key from **Settings → API keys**, sent in the `X-Api-Key` header. A key belongs to whoever made it and can never
-do more than they may: if their permissions shrink, or they're removed, so does the key. **Everything you may do**
-gives a key all its owner's permissions, now and later. The API reference is at `/api/docs`.
+Apps use a key from **Settings → API keys**, sent in the `X-Api-Key` header. Everyone makes their own, whatever else
+they may do. A key belongs to whoever made it and can never do more than they may: if their permissions shrink, or
+they're removed, so does the key. **Everything you may do** gives a key all its owner's permissions, now and later. A
+key can make and revoke keys only if it has **Webhooks**. The admin also sees everyone else's keys, under **Other
+people's keys**, and can revoke any of them. The API reference is at `/api/docs`.
 
 ## A lost admin password
 

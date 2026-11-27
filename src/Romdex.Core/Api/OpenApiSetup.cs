@@ -49,7 +49,12 @@ public static class OpenApiSetup
             {
                 var scope = AccessEndpointExtensions.ScopeFor(metadata);
                 operation.Description = Append(operation.Description,
-                    scope == Scopes.SignedIn ? "For someone signed in to the web app, not for keys." : $"Needs the `{scope}` scope.");
+                    scope switch
+                    {
+                        Scopes.SignedIn => "For someone signed in to the web app, not for keys.",
+                        Scopes.OwnKeys => "For anyone signed in, about their own keys; a key needs the `keys` scope.",
+                        _ => $"Needs the `{scope}` scope.",
+                    });
             }
             return Task.CompletedTask;
         });

@@ -8,14 +8,10 @@
 <SectionTitle>API · Romdex</SectionTitle>
 
 @*
-    API keys. Each belongs to whoever made it and can do no more than they may; the admin sees everyone's. Webhooks
-    have a tab of their own.
+    API keys. Each belongs to whoever made it and can do no more than they may. Yours first; the admin also sees
+    everyone else's, in a section of their own, and can revoke any of them. Webhooks have a page of their own.
 *@
-@if (!Auth.May(UserPermissions.Keys))
-{
-    <div class="empty card">You can't make API keys. The admin can give you that under Settings → Users.</div>
-}
-else if (_keys is null)
+@if (_keys is null)
 {
     <Loading />
 }
@@ -24,7 +20,7 @@ else
     <section class="panel" aria-label="API keys">
         <header class="panel-head">
             <div class="panel-title">
-                <h2>API keys</h2>
+                <h2>Your keys</h2>
                 <p class="muted small">
                     Apps use a key to call Romdex, sent in the <code>X-Api-Key</code> header. A key is yours: it can do only what you may, and goes if
                     you're removed. Give each app its own, with only what it needs, so you can revoke one without the others. See the
@@ -33,40 +29,35 @@ else
             </div>
             <button class="primary small" @onclick="StartNewKey">New key</button>
         </header>
-        @if (_keys.Count == 0)
+        @if (Mine.Count == 0)
         {
             <div class="panel-empty muted small">No keys yet. Make one for each app you connect.</div>
         }
         else
         {
-            <div class="plugin-grid">
-                @foreach (var key in _keys)
-                {
-                    <div class="plugin-card">
-                        <div class="plugin-top">
-                            <strong class="ellipsis" title="@key.Name">@key.Name</strong>
-                            <span class="spacer"></span>
-                            <code class="small muted">@key.Prefix…</code>
-                        </div>
-                        <div class="scope-list">
-                            @foreach (var scope in key.Scopes)
-                            {
-                                <span class="badge neutral" title="@Hint(scope)">@Name(scope)</span>
-                            }
-                        </div>
-                        <div class="muted small">
-                            @if (key.UserId != Auth.Status?.UserId) { <span>@(key.Owner ?? "Someone")'s · </span> }
-                            Made @Format.Ago(key.CreatedAt) · @(key.LastUsedAt is { } used ? $"last used {Format.Ago(used)}" : "never used")
-                        </div>
-                        <div class="plugin-actions">
-                            <span class="spacer"></span>
-                            <IconButton Icon="remove" Class="remove" Title="Revoke" OnClick="() => _revoking = key" />
-                        </div>
-                    </div>
-                }
-            </div>
+            @Cards(Mine)
         }
     </section>
+
+    @if (Auth.Status?.IsAdmin == true)
+    {
+        <section class="panel others-keys" aria-label="Other people's keys">
+            <header class="panel-head">
+                <div class="panel-title">
+                    <h2>Other people's keys</h2>
+                    <p class="muted small">Everyone else's keys, which only you, as the admin, see. Revoke any that shouldn't be in use.</p>
+                </div>
+            </header>
+            @if (Others.Count == 0)
+            {
+                <div class="panel-empty muted small">Nobody else has made a key.</div>
+            }
+            else
+            {
+                @Cards(Others)
+            }
+        </section>
+    }
 
     @if (_making)
     {
@@ -113,8 +104,11 @@ else
 
     @if (_revoking is { } revoking)
     {
-        <Dialog Title="@($"Revoke {revoking.Name}?")" OnClose="() => _revoking = null" Alert="true">
-            <p>Anything using this key is refused from now on. This can't be undone, but you can make a new key.</p>
+        <Dialog Title="@(revoking.UserId == Auth.Status?.UserId ? $"Revoke {revoking.Name}?" : $"Revoke {revoking.Owner ?? "their"}'s {revoking.Name}?")" OnClose="() => _revoking = null" Alert="true">
+            <p>
+                Anything using this key is refused from now on. This can't be undone, but
+                @(revoking.UserId == Auth.Status?.UserId ? "you can make a new key." : "they can make a new one.")
+            </p>
             <div class="toolbar dialog-buttons">
                 <button @onclick="() => _revoking = null">Cancel</button>
                 <button class="danger" disabled="@_busy" @onclick="() => RevokeAsync(revoking)">Revoke</button>
@@ -134,6 +128,40 @@ else
     private CreatedApiKey? _made;
     private ApiKeyInfo? _revoking;
 
+    private IReadOnlyList<ApiKeyInfo> Mine => _keys!.Where(k => k.UserId == Auth.Status?.UserId).ToList();
+
+    // Everyone else's, by whose they are.
+    private IReadOnlyList<ApiKeyInfo> Others => _keys!.Where(k => k.UserId != Auth.Status?.UserId)
+        .OrderBy(k => k.Owner, StringComparer.OrdinalIgnoreCase).ThenBy(k => k.Name, StringComparer.OrdinalIgnoreCase).ToList();
+
+    private RenderFragment Cards(IReadOnlyList<ApiKeyInfo> keys) =>
+        @<div class="plugin-grid">
+            @foreach (var key in keys)
+            {
+                <div class="plugin-card">
+                    <div class="plugin-top">
+                        <strong class="ellipsis" title="@key.Name">@key.Name</strong>
+                        <span class="spacer"></span>
+                        <code class="small muted">@key.Prefix…</code>
+                    </div>
+                    <div class="scope-list">
+                        @foreach (var scope in key.Scopes)
+                        {
+                            <span class="badge neutral" title="@Hint(scope)">@Name(scope)</span>
+                        }
+                    </div>
+                    <div class="muted small">
+                        @if (key.UserId != Auth.Status?.UserId) { <span>@(key.Owner ?? "Someone")'s · </span> }
+                        Made @Format.Ago(key.CreatedAt) · @(key.LastUsedAt is { } used ? $"last used {Format.Ago(used)}" : "never used")
+                    </div>
+                    <div class="plugin-actions">
+                        <span class="spacer"></span>
+                        <IconButton Icon="remove" Class="remove" Title="Revoke" OnClick="() => _revoking = key" />
+                    </div>
+                </div>
+            }
+        </div>;
+
     private static string Name(string scope) =>
         scope == UserPermissions.Admin ? "Everything" : UserPermissions.All.FirstOrDefault(p => p.Id == scope)?.Name ?? scope;
 
@@ -142,8 +170,7 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        if (Auth.May(UserPermissions.Keys))
-            _keys = await Api.ListApiKeysAsync();
+        _keys = await Api.ListApiKeysAsync();
     }
 
     private void StartNewKey()
@@ -198,5 +225,6 @@ else
         }
     }
 
+    // Melodex's copies over plain http too (romdexCopy), which comes with the polish (docs/plans/parity.md, 9).
     private async Task CopyAsync(string text) => await Js.InvokeVoidAsync("navigator.clipboard.writeText", text);
 }

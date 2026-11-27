@@ -27,7 +27,7 @@ public static class Scopes
     /// <summary>Change settings and plugins, and read the log.</summary>
     public const string Settings = "settings";
 
-    /// <summary>Make API keys and manage webhooks.</summary>
+    /// <summary>Manage webhooks. On a key, it also lets the app make and revoke its owner's keys.</summary>
     public const string Keys = "keys";
 
     /// <summary>Add, change and remove users, other than the admin.</summary>
@@ -44,6 +44,12 @@ public static class Scopes
     /// looks to them. Keys never have it.
     /// </summary>
     public const string SignedIn = "signed-in";
+
+    /// <summary>
+    /// Not a permission: anyone signed in, for their own API keys, each no more than they may do. A key needs the keys
+    /// scope, so an app can't make itself more keys unless it was given that.
+    /// </summary>
+    public const string OwnKeys = "own-keys";
 
     /// <summary>The permissions a user can be given, in the order they're listed.</summary>
     public static readonly IReadOnlyList<string> Permissions = [Read, Download, Play, Review, Files, Scan, Settings, Keys, Users];
@@ -114,7 +120,12 @@ public enum CallerKind
 public sealed record Caller(CallerKind Kind, string Name, IReadOnlySet<string> Scopes, Guid? UserId = null, Guid? KeyId = null, bool IsAdmin = false)
 {
     public bool May(string scope) =>
-        scope == Access.Scopes.SignedIn ? Kind == CallerKind.User : Scopes.Contains(scope) || Scopes.Contains(Access.Scopes.Admin);
+        scope switch
+        {
+            Access.Scopes.SignedIn => Kind == CallerKind.User,
+            Access.Scopes.OwnKeys => Kind == CallerKind.User || May(Access.Scopes.Keys),
+            _ => Scopes.Contains(scope) || Scopes.Contains(Access.Scopes.Admin),
+        };
 
     public static Caller Of(HttpContext http) => http.Items[typeof(Caller)] as Caller ?? Unknown;
 

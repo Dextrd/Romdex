@@ -75,7 +75,7 @@ public static class UserPermissions
         new(Files, "Tidy files", "Rename, move and convert files in the library"),
         new(Scan, "Scan", "Scan the library, and pause, cancel and reorder tasks"),
         new(Settings, "Settings and plugins", "Change settings and plugins, and read the log"),
-        new(Keys, "API keys and webhooks", "Make API keys for apps, and manage webhooks"),
+        new(Keys, "Webhooks", "Manage webhooks, and on a key, let the app make and revoke keys"),
         new(Users, "Manage users", "Add, change and remove other users"),
     ];
 }

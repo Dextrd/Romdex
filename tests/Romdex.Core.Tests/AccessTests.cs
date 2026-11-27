@@ -275,6 +275,34 @@ public sealed class AccessTests : IDisposable
     }
 
     [Fact]
+    public async Task Everyone_makes_their_own_keys_and_the_admin_can_revoke_anyones()
+    {
+        var admin = new RomdexClient(_factory.CreateSignedInClient());
+        // Browse only: no Webhooks, yet their own keys are theirs to make.
+        await admin.CreateUserAsync(new CreateUser("player", "playing password", [Scopes.Read, Scopes.Play]));
+        var player = new RomdexClient(await SignInAsync("player", "playing password"));
+        var made = await player.CreateApiKeyAsync(new CreateApiKey("Handheld", [Scopes.Read]));
+        Assert.Equal(["Handheld"], (await player.ListApiKeysAsync()).Select(k => k.Name));
+
+        // A key without Webhooks can't make or list keys; one with it can, as far as its owner may.
+        var app = _factory.CreateClient();
+        app.DefaultRequestHeaders.Add(AccessService.KeyHeader, made.Key);
+        Assert.Equal(HttpStatusCode.Forbidden, (await app.GetAsync("api/v1/keys")).StatusCode);
+        var keyMaker = await admin.CreateApiKeyAsync(new CreateApiKey("Key maker", [Scopes.Read, Scopes.Keys]));
+        var withKeys = _factory.CreateClient();
+        withKeys.DefaultRequestHeaders.Add(AccessService.KeyHeader, keyMaker.Key);
+        Assert.Equal(2, (await new RomdexClient(withKeys).ListApiKeysAsync()).Count);
+
+        // Nobody else's are theirs to revoke; the admin may revoke anyone's.
+        var adminsOwn = (await admin.ListApiKeysAsync()).Single(k => k.Name == "Key maker");
+        var notTheirs = await Assert.ThrowsAsync<RomdexApiException>(() => player.RevokeApiKeyAsync(adminsOwn.Id));
+        Assert.Equal(HttpStatusCode.NotFound, notTheirs.Status);
+        await admin.RevokeApiKeyAsync(made.Info.Id);
+        Assert.Empty(await player.ListApiKeysAsync());
+        Assert.Equal(HttpStatusCode.Unauthorized, (await app.GetAsync("api/v1/tasks")).StatusCode);
+    }
+
+    [Fact]
     public async Task Each_user_keeps_their_own_appearance()
     {
         var admin = new RomdexClient(_factory.CreateSignedInClient());

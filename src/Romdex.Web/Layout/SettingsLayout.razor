@@ -47,10 +47,7 @@
             {
                 <NavLink href="settings/users">Users</NavLink>
             }
-            @if (Auth.May(UserPermissions.Keys))
-            {
-                <NavLink href="settings/api">API keys</NavLink>
-            }
+            <NavLink href="settings/api">API keys</NavLink>
             @if (Auth.May(UserPermissions.Keys))
             {
                 <NavLink href="settings/webhooks">Webhooks</NavLink>
@@ -84,14 +81,13 @@
     private bool OnAccount => Path is "settings/account" or "account";
 
     // What the open page needs: users and webhooks have pages of their own, everyone has their own account and look,
-    // regions are for who may get games, and the rest are settings. (Everyone's own API keys come over from Melodex next.)
+    // regions are for who may get games, and the rest are settings. Everyone makes their own API keys.
     private string? Needed => Path switch
     {
         "settings/users" or "settings/security" => UserPermissions.Users,
         "settings/webhooks" => UserPermissions.Keys,
-        "settings/api" => UserPermissions.Keys,
         "settings/regions" => UserPermissions.Download,
-        "settings/account" or "account" or "settings/appearance" or "settings/notifications" or "settings/about" => null,
+        "settings/account" or "account" or "settings/api" or "settings/appearance" or "settings/notifications" or "settings/about" => null,
         var help when help == "settings/help" || help.StartsWith("settings/help/") => null,
         _ => UserPermissions.Settings,
     };
