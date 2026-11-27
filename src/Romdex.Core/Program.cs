@@ -60,6 +60,8 @@ builder.Services.AddScoped<SettingsService>();
 builder.Services.AddSingleton<TaskSignal>();
 builder.Services.AddSingleton<TaskCancellations>();
 builder.Services.AddScoped<TaskQueue>();
+builder.Services.AddSingleton<Romdex.Core.Tasks.TaskArchive>();
+builder.Services.AddSingleton<Romdex.Core.Tasks.TaskFeed>();
 builder.Services.AddScoped<TaskTitles>();
 builder.Services.AddHostedService<TaskWorker>();
 

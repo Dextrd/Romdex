@@ -76,7 +76,53 @@ public sealed record LogSettings
 
     /// <summary>Days the backup files under <c>data/logs</c> are kept, from 1 to 3650; at least <see cref="MemoryDays"/>.</summary>
     public int FileDays { get; init; } = 30;
+
+    /// <summary>Days a finished task's list (what a scan, format or catalogue update did, row by row) is kept, from 1 to 3650.</summary>
+    public int TaskDays { get; init; } = 30;
 }
 
 /// <param name="Latest">The newest entry's sequence number, even when no entries are returned.</param>
 public sealed record LogPage(IReadOnlyList<LogEntry> Entries, long Latest);
+
+/// <summary>Where a row of a task is.</summary>
+public enum TaskRowState
+{
+    /// <summary>Waiting its turn.</summary>
+    Waiting,
+
+    /// <summary>Being worked on.</summary>
+    Working,
+
+    /// <summary>Done, and it changed something.</summary>
+    Done,
+
+    /// <summary>Done with nothing to change, or left alone.</summary>
+    Skipped,
+
+    /// <summary>It couldn't be done; the detail says why.</summary>
+    Failed,
+}
+
+/// <summary>Something a task has done or is doing, such as a file it formatted, from <c>GET /tasks/{id}/rows</c>.</summary>
+/// <param name="Seq">When it last changed: pass the highest seen as <c>since</c> to get only later changes.</param>
+/// <param name="Order">Its place in the list, which it keeps as it changes.</param>
+/// <param name="Key">What it's about, such as a file's path, unique within the task.</param>
+/// <param name="Subtitle">A line under the title, such as where a file went.</param>
+/// <param name="Detail">What happened, such as the game a file matched, or why it couldn't be done.</param>
+/// <param name="Href">A page in the web app about it, relative to the app's base.</param>
+public sealed record TaskRow(
+    long Seq,
+    long Order,
+    string Key,
+    TaskRowState State,
+    string Title,
+    string? Subtitle,
+    string? Detail,
+    string? Href,
+    string? CoverUrl,
+    DateTime At);
+
+/// <summary>A task's rows that changed since a sequence number, from <c>GET /tasks/{id}/rows</c>.</summary>
+/// <param name="Latest">The newest change's sequence number, to pass as <c>since</c> next time.</param>
+/// <param name="Rows">In list order.</param>
+public sealed record TaskRowsPage(Guid Task, long Latest, IReadOnlyList<TaskRow> Rows);

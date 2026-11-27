@@ -35,6 +35,14 @@ get is a request of its own; the rest wait their turn, in the order asked for, u
 each can be moved to the front, up or down, paused, resumed or cancelled, and **Pause all** and **Cancel all** act on
 everything shown. Pausing one that's fetching stops that fetch; resumed, it fetches that offer again from the start.
 
+## Activity's task lists
+
+Under **Activity → Tasks**, a scan, a format, a catalogue update and a cover lookup each open on a list of what they
+did, row by row, which fills in as they go: each file hashed and the game it matched, or that it waits under Review;
+each file moved and where to; each system's DAT imported; each game's cover looked up. A task's list is written under
+`data/tasks` when it finishes, and kept for as long as **Settings → Log → How long it's kept** says, 30 days to start
+with.
+
 ## Scheduled tasks
 
 **Settings → Scheduled tasks** has three schedules, **Daily**, **Weekly** and **Monthly**, each a window between two

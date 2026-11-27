@@ -239,7 +239,8 @@ public sealed class CoverCache(IServiceScopeFactory scopes, IHttpClientFactory c
 /// a time, each kept as it's done, so a lookup that stops, for a restart or a busy source, carries on where it left off
 /// next time. Games the library hasn't are looked up when they're first shown (<see cref="CoverCache"/>).
 /// </summary>
-public sealed class ArtLookupTask(RomdexDbContext db, CoverCache covers, LibraryViewBuilder views, ILogger<ArtLookupTask> logger) : ITaskHandler
+public sealed class ArtLookupTask(RomdexDbContext db, CoverCache covers, LibraryViewBuilder views, TaskFeed feed, ILogger<ArtLookupTask> logger)
+    : ITaskHandler
 {
     public const string TaskKind = "art-lookup";
 
@@ -266,19 +267,41 @@ public sealed class ArtLookupTask(RomdexDbContext db, CoverCache covers, Library
         var done = await db.DumpArt.AsNoTracking().Where(CoverCache.Fresh(DateTime.UtcNow)).Select(a => a.DumpId).ToListAsync(ct);
         var todo = owned.Except(done).ToList();
 
+        // Each game on Activity, by its dump's name.
+        var rows = feed.Start(task);
+        var names = new Dictionary<Guid, (string Name, Guid TitleId)>();
+        foreach (var chunk in todo.Chunk(500))
+            foreach (var dump in await db.Dumps.AsNoTracking().Where(d => chunk.Contains(d.Id)).Select(d => new { d.Id, d.Name, d.TitleId }).ToListAsync(ct))
+                names[dump.Id] = (dump.Name, dump.TitleId);
+        void Row(Guid id, TaskRowState state, string? detail = null)
+        {
+            if (names.TryGetValue(id, out var dump))
+                rows.Put(id.ToString(), state, dump.Name, null, detail, $"titles/{dump.TitleId}");
+        }
+        foreach (var id in todo)
+            Row(id, TaskRowState.Waiting);
+
         var found = 0;
         for (var i = 0; i < todo.Count; i++)
         {
             progress.Report($"Looking up {i + 1:N0} of {todo.Count:N0}");
+            Row(todo[i], TaskRowState.Working, "Looking up");
             try
             {
                 if (await covers.LookUpAsync(todo[i], ct))
+                {
                     found++;
+                    Row(todo[i], TaskRowState.Done, "Found a cover");
+                }
+                else
+                    Row(todo[i], TaskRowState.Skipped, "No cover found");
             }
             catch (MetadataUnavailableException e)
             {
                 // Busy: this one and the rest wait for the next lookup.
                 logger.LogInformation("Stopped looking up covers for now: {Message}", e.Message);
+                for (var rest = i; rest < todo.Count; rest++)
+                    Row(todo[rest], TaskRowState.Skipped, "Left for the next lookup: the metadata source is busy");
                 break;
             }
         }

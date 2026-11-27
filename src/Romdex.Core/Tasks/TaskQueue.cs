@@ -18,7 +18,7 @@ public interface ITaskHandler
 }
 
 /// <summary>Queues internal work in the database, so it survives restarts, and wakes the worker.</summary>
-public sealed class TaskQueue(RomdexDbContext db, TaskSignal signal, TaskCancellations cancellations)
+public sealed class TaskQueue(RomdexDbContext db, TaskSignal signal, TaskCancellations cancellations, TaskFeed rows)
 {
     /// <summary>
     /// Queues a task, or returns the queued or running one of the same kind and payload. Asking again for a paused
@@ -53,6 +53,8 @@ public sealed class TaskQueue(RomdexDbContext db, TaskSignal signal, TaskCancell
         task.FinishedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
         cancellations.Cancel(task.Id);
+        // What it did before it was cancelled is kept, as it would be had it finished.
+        rows.Finish(task.Id);
         signal.Wake();
         return true;
     }
@@ -229,6 +231,8 @@ public sealed class TaskWorker(IServiceScopeFactory scopes, TaskSignal signal, T
     private async Task FinishAsync(Guid id, BackgroundTaskStatus status, string? error)
     {
         using var scope = scopes.CreateScope();
+        // Its rows go to the archive, kept with the log.
+        scope.ServiceProvider.GetRequiredService<TaskFeed>().Finish(id);
         var db = scope.ServiceProvider.GetRequiredService<RomdexDbContext>();
         await db.BackgroundTasks.Where(t => t.Id == id).ExecuteUpdateAsync(s => s
             .SetProperty(t => t.Status, status)

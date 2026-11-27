@@ -11,7 +11,7 @@ namespace Romdex.Core.Diagnostics;
 /// happens, so nothing is lost on a restart. Memory keeps the newest entries for the Log page; the files are kept
 /// longer and deleted once older than the backup retention. Both ages are in <see cref="LogSettings"/>.
 /// </summary>
-public sealed class LogArchive(ActivityLog log, IServiceScopeFactory scopes, IOptions<RomdexOptions> options, ILogger<LogArchive> logger)
+public sealed class LogArchive(ActivityLog log, Tasks.TaskArchive tasks, IServiceScopeFactory scopes, IOptions<RomdexOptions> options, ILogger<LogArchive> logger)
     : BackgroundService
 {
     private static readonly TimeSpan TidyEvery = TimeSpan.FromHours(1);
@@ -62,6 +62,7 @@ public sealed class LogArchive(ActivityLog log, IServiceScopeFactory scopes, IOp
         foreach (var file in System.IO.Directory.EnumerateFiles(Directory, "activity-*.jsonl"))
             if (DayOf(file) is { } day && day < oldest)
                 File.Delete(file);
+        tasks.Tidy(settings.TaskDays);
     }
 
     private async Task WriteAsync(CancellationToken ct)

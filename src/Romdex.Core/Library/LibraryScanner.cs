@@ -23,11 +23,13 @@ public sealed class LibraryScanner(RomdexDbContext db, ContainerReader reader, I
 
     /// <param name="Hashed">New and changed files hashed this time.</param>
     /// <param name="Unreadable">Files that couldn't be read, kept to try again next scan.</param>
-    public sealed record Result(int Files, int Hashed, int Removed, int Unreadable, long HashedBytes);
+    /// <param name="Read">The files hashed this time, readable or not, relative to the library folder.</param>
+    public sealed record Result(int Files, int Hashed, int Removed, int Unreadable, long HashedBytes, IReadOnlyList<string> Read);
 
     private sealed record Hashed(string Path, long Size, DateTime ModifiedAt, IReadOnlyList<ContentHashes>? Contents, string? Error, ReadFailure? Failure = null);
 
-    public async Task<Result> ScanAsync(IProgress<string> progress, CancellationToken ct)
+    /// <param name="rows">The scan's list on Activity: each file to hash, then how it went.</param>
+    public async Task<Result> ScanAsync(IProgress<string> progress, CancellationToken ct, Tasks.TaskRows? rows = null)
     {
         var root = Path.GetFullPath(options.Value.LibraryPath);
         if (!Directory.Exists(root))
@@ -64,6 +66,10 @@ public sealed class LibraryScanner(RomdexDbContext db, ContainerReader reader, I
             .ToList();
         var totalBytes = wanted.Sum(f => f.Value.Length);
         logger.LogInformation("Found {Count} files in {Root}: {Wanted} to hash, {Removed} gone", found.Count, root, wanted.Count, removed.Count);
+        foreach (var path in removed)
+            rows?.Put(path, TaskRowState.Skipped, Path.GetFileName(path), Folder(path), "Gone from the library");
+        foreach (var (path, _) in wanted)
+            rows?.Put(path, TaskRowState.Waiting, Path.GetFileName(path), Folder(path));
 
         // Hashed on several threads, and saved by this one, a few at a time.
         var results = Channel.CreateBounded<Hashed>(new BoundedChannelOptions(32) { SingleReader = true });
@@ -75,6 +81,7 @@ public sealed class LibraryScanner(RomdexDbContext db, ContainerReader reader, I
                     async (file, token) =>
                     {
                         Hashed result;
+                        rows?.Put(file.Key, TaskRowState.Working, Path.GetFileName(file.Key), Folder(file.Key), "Hashing");
                         try
                         {
                             result = new Hashed(file.Key, file.Value.Length, file.Value.LastWriteTimeUtc, await reader.ReadAsync(file.Value.FullName, token), null);
@@ -97,6 +104,7 @@ public sealed class LibraryScanner(RomdexDbContext db, ContainerReader reader, I
         int done = 0, unreadable = 0;
         long bytes = 0;
         var batch = new List<Hashed>();
+        var read = new List<string>();
         await foreach (var result in results.Reader.ReadAllAsync(ct))
         {
             batch.Add(result);
@@ -106,7 +114,11 @@ public sealed class LibraryScanner(RomdexDbContext db, ContainerReader reader, I
             {
                 unreadable++;
                 logger.LogWarning("Couldn't read {Path}: {Error}", result.Path, result.Error);
+                rows?.Put(result.Path, TaskRowState.Failed, Path.GetFileName(result.Path), Folder(result.Path), result.Error);
             }
+            else
+                rows?.Put(result.Path, TaskRowState.Done, Path.GetFileName(result.Path), Folder(result.Path), $"Hashed, {Size(result.Size)}");
+            read.Add(result.Path);
             if (batch.Count >= 25)
             {
                 await SaveAsync(batch, ids, ct);
@@ -117,7 +129,7 @@ public sealed class LibraryScanner(RomdexDbContext db, ContainerReader reader, I
         }
         await hashing;
         await SaveAsync(batch, ids, ct);
-        return new Result(found.Count, done - unreadable, removed.Count, unreadable, bytes);
+        return new Result(found.Count, done - unreadable, removed.Count, unreadable, bytes, read);
     }
 
     /// <summary>Hashes some files that were just put in the library, such as by filing, without walking the rest.</summary>
@@ -192,6 +204,9 @@ public sealed class LibraryScanner(RomdexDbContext db, ContainerReader reader, I
     }
 
     private static ReadFailure FailureOf(Exception e) => e is UnreadableFileException unreadable ? unreadable.Failure : ReadFailure.Inaccessible;
+
+    // The folder a file's in, under the library, for its row; null at the top.
+    private static string? Folder(string path) => Path.GetDirectoryName(path)?.Replace('\\', '/') is { Length: > 0 } folder ? folder : null;
 
     public static string Relative(string root, string path) => Path.GetRelativePath(root, path).Replace('\\', '/');
 

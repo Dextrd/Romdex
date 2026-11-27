@@ -1,0 +1,201 @@
+@implements IDisposable
+@inject RomdexClient Api
+@inject Preferences Prefs
+@using Microsoft.JSInterop
+@inject IJSRuntime Js
+@using Microsoft.AspNetCore.Components.Web.Virtualization
+
+@*
+    What a task is doing, row by row, such as each file a format moves: waiting, then being worked on, then what came
+    of it. Each row keeps its place, so the list can be watched filling in. It opens where the task is, and keeps up
+    with it while it's left alone. Scans use it too, where Melodex's have their own, ScanFiles.
+*@
+@if (_rows is null)
+{
+    <Loading Inline="true" />
+}
+else if (_rows.Count == 0)
+{
+    <div class="muted small">@(_kept ? "Nothing to do." : NotKept)</div>
+}
+else
+{
+    <div class="row scan-files-head">
+        <span class="muted small">@Summary</span>
+        <button class="link small" title="Reverse the list" @onclick="FlipAsync">
+            <svg class="sort-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v16M3 16l4 4 4-4M17 20V4M13 8l4-4 4 4" /></svg>
+            @(_newestFirst ? "Latest at the top" : "Latest at the bottom")
+        </button>
+    </div>
+    <div class="scan-files" @ref="_list">
+        <Virtualize Items="Shown" Context="row" ItemSize="52" OverscanCount="10">
+            <div @key="row.Key" class="scan-file task-row @row.State.ToString().ToLowerInvariant() @(row.Seq > _freshAfter ? "fresh" : "")">
+                @if (row.CoverUrl is not null)
+                {
+                    <Cover Url="@row.CoverUrl" />
+                }
+                else
+                {
+                    <div class="scan-file-icon">
+                        @if (row.State == TaskRowState.Working) { <span class="spinner"></span> }
+                        else
+                        {
+                            <svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z" /><path d="M14 3v4h4" /></svg>
+                        }
+                    </div>
+                }
+                <div class="scan-file-text">
+                    <div class="ellipsis" title="@row.Title">
+                        @if (row.Href is not null) { <a href="@row.Href">@row.Title</a> } else { @row.Title }
+                    </div>
+                    <div class="muted small ellipsis" title="@(row.Subtitle ?? row.Detail)">
+                        @(row.Subtitle is null ? row.Detail : row.Detail is null ? row.Subtitle : $"{row.Detail} · {row.Subtitle}")
+                    </div>
+                </div>
+                @switch (row.State)
+                {
+                    case TaskRowState.Working:
+                        <span class="badge active">Working</span>
+                        break;
+                    case TaskRowState.Done:
+                        <span class="badge owned">Done</span>
+                        break;
+                    case TaskRowState.Skipped:
+                        <span class="badge neutral">Nothing to do</span>
+                        break;
+                    case TaskRowState.Failed:
+                        <span class="badge partial">Couldn't</span>
+                        break;
+                    default:
+                        <span class="badge neutral">Waiting</span>
+                        break;
+                }
+            </div>
+        </Virtualize>
+    </div>
+}
+
+@code {
+    /// <summary>What a task without a list says: one from before lists were kept, or kept past the log settings.</summary>
+    public const string NotKept = "Its list isn't kept any more. How long lists are kept is under Settings → Log.";
+
+    /// <summary>The task whose rows to show.</summary>
+    [Parameter, EditorRequired] public Guid Task { get; set; }
+
+    /// <summary>Whether the task is still running, so the list keeps updating.</summary>
+    [Parameter] public bool Active { get; set; }
+
+    private const string NewestFirstKey = "scanNewestFirst";
+
+    // In the order the task first gave them; a change replaces the row in its place.
+    private List<TaskRow>? _rows;
+    private readonly Dictionary<string, int> _index = new(StringComparer.Ordinal);
+    private List<TaskRow> _reversed = [];
+    private long _latest;
+    private bool _kept = true;
+
+    // Changes after this arrived in the last poll; a row done in it gets a moment's highlight.
+    private long _freshAfter = long.MaxValue;
+
+    private bool _newestFirst;
+    private Timer? _timer;
+
+    private ElementReference _list;
+    // Whether the list has been taken to where the task is since it opened; after that it follows only when left alone.
+    private bool _placed;
+    private bool _follow;
+
+    private ICollection<TaskRow> Shown => _newestFirst ? _reversed : _rows!;
+
+    private string Summary
+    {
+        get
+        {
+            var done = _rows!.Count(r => r.State is TaskRowState.Done or TaskRowState.Skipped);
+            var failed = _rows!.Count(r => r.State == TaskRowState.Failed);
+            return $"{done:N0} of {_rows!.Count:N0} done" + (failed > 0 ? $" · {failed:N0} couldn't be" : "");
+        }
+    }
+
+    // Where the task is: the first row it's working on, in the order shown.
+    private int? Current
+    {
+        get
+        {
+            var i = _rows!.FindIndex(r => r.State == TaskRowState.Working);
+            return i < 0 ? null : _newestFirst ? _rows.Count - 1 - i : i;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_rows is not { Count: > 0 } || (_placed && !_follow))
+            return;
+        _follow = false;
+        if (Current is not { } at)
+            return;
+        await Js.InvokeVoidAsync("romdexScanList.show", _list, at, !_placed);
+        _placed = true;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _newestFirst = await Prefs.GetAsync(NewestFirstKey, false);
+        await LoadAsync();
+        _timer = new Timer(_ => InvokeAsync(async () =>
+        {
+            if (!Active)
+                return;
+            await LoadAsync();
+            _follow = true;
+            StateHasChanged();
+        }), null, TimeSpan.FromSeconds(1.5), TimeSpan.FromSeconds(1.5));
+    }
+
+    private async Task LoadAsync()
+    {
+        TaskRowsPage? page;
+        try
+        {
+            page = await Api.GetTaskRowsAsync(Task, _rows is null ? 0 : _latest);
+        }
+        catch (HttpRequestException)
+        {
+            _rows ??= [];
+            return;
+        }
+        _kept = page is not null;
+        if (page is null)
+        {
+            _rows ??= [];
+            return;
+        }
+        if (_rows is null)
+            _rows = [];
+        else
+            _freshAfter = _latest;
+        foreach (var row in page.Rows)
+        {
+            if (_index.TryGetValue(row.Key, out var i))
+                _rows[i] = row;
+            else
+            {
+                _index[row.Key] = _rows.Count;
+                _rows.Add(row);
+            }
+        }
+        _latest = page.Latest;
+        if (_newestFirst && page.Rows.Count > 0)
+            _reversed = Enumerable.Reverse(_rows).ToList();
+    }
+
+    private async Task FlipAsync()
+    {
+        _newestFirst = !_newestFirst;
+        if (_newestFirst)
+            _reversed = Enumerable.Reverse(_rows!).ToList();
+        await Prefs.SetAsync(NewestFirstKey, _newestFirst);
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}

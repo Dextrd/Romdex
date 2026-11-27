@@ -61,6 +61,8 @@ public static class SystemEndpoints
                     errors["fileDays"] = ["Must be between 1 and 3650."];
                 else if (value.FileDays < value.MemoryDays)
                     errors["fileDays"] = ["Must be at least as long as the Log page keeps entries."];
+                if (value.TaskDays is < 1 or > 3650)
+                    errors["taskDays"] = ["Must be between 1 and 3650."];
                 if (errors.Count > 0)
                     return Results.ValidationProblem(errors);
                 await s.SaveLogAsync(value, ct);

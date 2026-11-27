@@ -14,7 +14,7 @@ namespace Romdex.Core.Downloads;
 /// again, and the connected app is asked to scan for them where they are now.
 /// </summary>
 public sealed class LibraryFormatTask(Adoption adoption, IFilingWorker worker, RomdexDbContext db, ConnectorPlugins connectors, AppSync appSync,
-    ILogger<LibraryFormatTask> logger) : ITaskHandler
+    TaskFeed feed, ILogger<LibraryFormatTask> logger) : ITaskHandler
 {
     public const string TaskKind = "library-format";
 
@@ -45,14 +45,24 @@ public sealed class LibraryFormatTask(Adoption adoption, IFilingWorker worker, R
         var games = report.Moves.Where(m => m.Blocked is null).ToList();
         var moves = games.SelectMany(m => m.From.Zip(m.To, (from, to) => new LibraryMove(from, to))).Where(m => m.From != m.To).ToList();
 
+        // Each file on Activity: waiting, being moved, then where it went or why it couldn't.
+        var rows = feed.Start(task);
+        foreach (var move in moves)
+            rows.Put(move.From, TaskRowState.Waiting, Path.GetFileName(move.To), move.From, $"To {move.To}");
         var moved = new List<LibraryMove>();
         var failed = new List<FailedMove>();
         foreach (var batch in moves.Chunk(Batch))
         {
             ct.ThrowIfCancellationRequested();
             progress.Report($"Moving files: {moved.Count + failed.Count:N0} of {moves.Count:N0}");
+            foreach (var move in batch)
+                rows.Put(move.From, TaskRowState.Working, Path.GetFileName(move.To), move.From, $"Moving to {move.To}");
             var result = await worker.MoveAsync(new MoveRequest(batch), ct);
             await RecordAsync(result.Moved, ct);
+            foreach (var move in result.Moved)
+                rows.Put(move.From, TaskRowState.Done, Path.GetFileName(move.To), move.To, $"Moved from {move.From}");
+            foreach (var move in result.Failed)
+                rows.Put(move.From, TaskRowState.Failed, Path.GetFileName(move.To), move.From, move.Error);
             moved.AddRange(result.Moved);
             failed.AddRange(result.Failed);
         }

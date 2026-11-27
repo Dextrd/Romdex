@@ -140,12 +140,24 @@ else
             }
             @if (item.Task is { } task)
             {
+                var canOpen = Opens.Contains(task.Kind);
+                var taskOpen = canOpen && (_openTasks.TryGetValue(task.Id, out var opened) ? opened : task.Active);
                 <div class="request" id="task-@task.Id" data-flip="task-@task.Id" @key="task.Id">
                     <div class="request-head">
-                        <span class="request-toggle">
-                            <span aria-hidden="true"></span>
-                            <span class="request-title">@(task.Title ?? task.Kind)</span>
-                        </span>
+                        @if (canOpen)
+                        {
+                            <button class="request-toggle" aria-expanded="@(taskOpen ? "true" : "false")" @onclick="() => _openTasks[task.Id] = !taskOpen">
+                                <span class="chevron @(taskOpen ? "open" : "")" aria-hidden="true"></span>
+                                <span class="request-title">@(task.Title ?? task.Kind)</span>
+                            </button>
+                        }
+                        else
+                        {
+                            <span class="request-toggle">
+                                <span aria-hidden="true"></span>
+                                <span class="request-title">@(task.Title ?? task.Kind)</span>
+                            </span>
+                        }
                         <span class="muted small request-kind hide-narrow">@KindLabel(task.Kind)</span>
                         <span class="request-state"><span class="badge @Format.TaskBadge(task)">@Format.TaskLabel(task)</span></span>
                         <span class="muted small request-time hide-narrow" title="@task.UpdatedAt.ToLocalTime()">@Format.Ago(task.UpdatedAt)</span>
@@ -153,6 +165,12 @@ else
                     </div>
                     @if (task.Error is not null) { <div class="small request-detail error">@task.Error</div> }
                     else if (task.Progress is not null) { <div class="muted small request-detail">@task.Progress</div> }
+                    @if (taskOpen)
+                    {
+                        <div class="request-body">
+                            <TaskRowList Task="task.Id" Active="task.Active" />
+                        </div>
+                    }
                 </div>
                 continue;
             }
@@ -301,6 +319,12 @@ else
             return;
         StateHasChanged();
     }
+
+    // The tasks that keep a list of what they did, row by row; filing what's fetched shows under Fetches instead.
+    private static readonly HashSet<string> Opens = ["library-scan", "library-format", "catalogue-refresh", "art-lookup"];
+
+    // Tasks opened or closed by hand; the rest are open while they run.
+    private readonly Dictionary<Guid, bool> _openTasks = [];
 
     private static readonly IReadOnlyList<(bool Value, string Label, string? Hint)> Times =
         [(true, "Recent", "Still going, or changed in the last hour"), (false, "Earlier", "Everything before that")];
@@ -687,6 +711,8 @@ else
                 if (Tab is null)
                     _remembered = "tasks";
                 _recent = IsRecent(task.Active, task.UpdatedAt);
+                if (Opens.Contains(task.Kind))
+                    _openTasks[id] = true;
                 _landing = $"task-{id}";
             }
         }

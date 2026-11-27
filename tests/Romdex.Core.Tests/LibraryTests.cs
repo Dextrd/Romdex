@@ -248,8 +248,19 @@ public sealed class LibraryTests : IDisposable
         var leftOut = Assert.Single((await _api.ListTitlesAsync(system.Id, TitleStatus.Missing)).Items);
         await _api.IgnoreTitleAsync(leftOut.Id);
 
+        // The scan's list on Activity: the file, then the game it matched; kept once it's done.
+        var first = (await _api.ListTasksAsync()).First(t => t.Kind == "library-scan");
+        var row = Assert.Single((await _api.GetTaskRowsAsync(first.Id))!.Rows);
+        Assert.Equal((TaskRowState.Done, "Cache Runner (USA)", "Handheld/cache.gb"), (row.State, row.Title, row.Subtitle));
+        Assert.StartsWith("titles/", row.Href);
+        var catalogue = (await _api.ListTasksAsync()).First(t => t.Kind == "catalogue-refresh");
+        Assert.Equal(TaskRowState.Done, Assert.Single((await _api.GetTaskRowsAsync(catalogue.Id))!.Rows).State);
+
         var again = await RunAsync(await _api.ScanLibraryAsync());
         Assert.Contains("0 hashed", again.Progress);
+        // Nothing changed, so nothing to list; and a task that never was has no list.
+        Assert.Empty((await _api.GetTaskRowsAsync(again.Id))!.Rows);
+        Assert.Null(await _api.GetTaskRowsAsync(Guid.NewGuid()));
 
         // A new version of the DAT: same entries, so the same IDs, and the ignore stays.
         _dats.WriteDats("20261108-000000");

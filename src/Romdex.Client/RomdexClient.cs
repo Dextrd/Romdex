@@ -16,6 +16,10 @@ public sealed class RomdexClient(HttpClient http)
         return await http.GetFromJsonAsync<List<TaskInfo>>($"{Api}/tasks{(query.Length > 0 ? "?" + query : "")}", RomdexJson.Options, ct) ?? [];
     }
 
+    /// <summary>What a task has done, row by row, changed after <paramref name="since"/>; null when its list isn't kept.</summary>
+    public Task<TaskRowsPage?> GetTaskRowsAsync(Guid id, long since = 0, CancellationToken ct = default) =>
+        GetOrNullAsync<TaskRowsPage>($"{Api}/tasks/{id}/rows?since={since}", ct);
+
     public Task<TaskInfo?> GetTaskAsync(Guid id, CancellationToken ct = default) =>
         http.GetFromJsonAsync<TaskInfo>($"{Api}/tasks/{id}", RomdexJson.Options, ct);
 

@@ -1,3 +1,4 @@
+using Romdex.Client;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Romdex.Contracts.Plugins.Index;
@@ -18,6 +19,7 @@ public sealed class CatalogueRefreshTask(
     CatalogueImporter importer,
     LibraryMatcher matcher,
     RomdexDbContext db,
+    TaskFeed feed,
     ILogger<CatalogueRefreshTask> logger) : ITaskHandler
 {
     public const string TaskKind = "catalogue-refresh";
@@ -79,24 +81,39 @@ public sealed class CatalogueRefreshTask(
                     older.System.Name, older.System.Version, older.Instance.Name, ranked[0].System.Name, ranked[0].System.Version, ranked[0].Instance.Name);
         }
 
+        // Each system on Activity, with the DAT it's imported from, or why it couldn't be.
+        var rows = feed.Start(task);
+        foreach (var (instance, _, _, system) in winners.OrderBy(w => w.Order))
+            rows.Put(system.Name, TaskRowState.Waiting, system.Name, $"{instance.Name}, {system.Version}");
         foreach (var (instance, plugin, _, system) in winners.OrderBy(w => w.Order))
         {
             if (!claimed.Add(system.Name))
+            {
+                rows.Put(system.Name, TaskRowState.Skipped, system.Name, $"{instance.Name}, {system.Version}", "Another catalogue lists it");
                 continue;
+            }
             var known = await db.Systems.AsNoTracking().FirstOrDefaultAsync(s => s.Name == system.Name, ct);
             if (known is not null && known.PluginInstanceId == instance.Id && known.PluginSystemId == system.Id && known.DatVersion == system.Version
                 && known.CloneList == system.CloneList)
             {
                 unchanged++;
+                rows.Put(system.Name, TaskRowState.Skipped, system.Name, $"{instance.Name}, {system.Version}", "Unchanged", $"systems/{known.Id}");
                 continue;
             }
             progress.Report($"Importing {system.Name} ({system.Version})");
+            rows.Put(system.Name, TaskRowState.Working, system.Name, $"{instance.Name}, {system.Version}", "Importing");
             try
             {
                 if (await plugin.GetSystemAsync(system.Id, ct) is not { } detail)
+                {
+                    rows.Put(system.Name, TaskRowState.Skipped, system.Name, $"{instance.Name}, {system.Version}", "The catalogue no longer has it");
                     continue;
+                }
                 var result = await importer.ImportAsync(instance.Id, detail, ct);
                 imported++;
+                var id = await db.Systems.AsNoTracking().Where(s => s.Name == system.Name).Select(s => (Guid?)s.Id).FirstOrDefaultAsync(ct);
+                rows.Put(system.Name, TaskRowState.Done, system.Name, $"{instance.Name}, {system.Version}",
+                    $"{result.Dumps:N0} dumps in {result.Titles:N0} titles: {result.Added:N0} new, {result.Removed:N0} gone", id is null ? null : $"systems/{id}");
                 logger.LogInformation("Imported {System} {Version} from {Plugin}: {Dumps} dumps in {Titles} titles ({Added} new, {Removed} gone)",
                     system.Name, system.Version, instance.Name, result.Dumps, result.Titles, result.Added, result.Removed);
             }
@@ -104,6 +121,7 @@ public sealed class CatalogueRefreshTask(
             {
                 logger.LogWarning(e, "Couldn't import {System} from {Plugin}", system.Name, instance.Name);
                 notes.Add($"{system.Name} couldn't be imported: {e.Message}");
+                rows.Put(system.Name, TaskRowState.Failed, system.Name, $"{instance.Name}, {system.Version}", e.Message);
             }
         }
 

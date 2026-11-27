@@ -1,6 +1,6 @@
 @inject RomdexClient Api
 
-@* How far back the Log page goes, and how long its files are kept: at the top of the Log page, as Melodex's (#238). *@
+@* How far back the Log page goes, and how long its files and tasks' lists are kept: at the top of the Log page, as Melodex's (#238). *@
 @if (_log is not null)
 {
     <div class="card settings-card">
@@ -15,6 +15,12 @@
             days
         </div>
         <div class="muted small">Every entry is written to a file per day under <code>data/logs</code> as it happens, so a restart loses nothing. Older files are deleted.</div>
+        <div class="setting-line">
+            Keep tasks' lists for
+            <NumberField Min="1" Max="3650" Label="Days" Value="_log.TaskDays" ValueChanged="n => SetLog(_log with { TaskDays = n })" />
+            days
+        </div>
+        <div class="muted small">What each scan, format, catalogue update and cover lookup did, row by row, as Activity shows it. A task's list is written under <code>data/tasks</code> when it finishes.</div>
     </div>
 
     <AutoSave @ref="_saver" Save="() => Api.SaveLogSettingsAsync(_log!)" />

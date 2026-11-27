@@ -34,6 +34,13 @@ public static class TaskEndpoints
             .WithName("GetTask").WithSummary("Status of a background task.")
             .Produces<TaskInfo>().Produces(StatusCodes.Status404NotFound);
 
+        tasks.MapGet("/{id:guid}/rows", (Guid id, TaskFeed feed, long? since) =>
+                feed.Since(id, since ?? 0) is { } page ? Results.Ok(page) : Results.NotFound())
+            .WithName("GetTaskRows")
+            .WithSummary("What a task has done, row by row: a file scanned or moved, a system's DAT imported, a game's cover looked up. "
+                         + "Kept for as long as the log settings keep task lists; pass since to get only what changed.")
+            .Produces<TaskRowsPage>().Produces(StatusCodes.Status404NotFound);
+
         // Stopping and ordering background work. Each answers 409 when the task is past it, such as cancelling a finished one.
         tasks.MapPost("/{id:guid}/cancel", (Guid id, RomdexDbContext db, TaskQueue queue, TaskTitles titles, CancellationToken ct) =>
                 ActAsync(id, db, titles, task => queue.CancelAsync(task, ct), ct))
