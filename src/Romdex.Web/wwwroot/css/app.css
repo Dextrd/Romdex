@@ -1962,3 +1962,12 @@ a.toast-body:hover .toast-title { text-decoration: underline; }
 .activity-section:first-child { margin-top: .5rem; }
 .activity-section .request-toggle { display: inline-flex; align-items: center; gap: .5rem; padding: 0; border: none; background: none; color: var(--text); font: inherit; font-weight: 600; cursor: pointer; }
 .activity-list .request { position: relative; background: var(--surface); }
+
+/* Tools: a card for each, in sections, as Melodex's. */
+.tool-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); gap: .75rem; margin: 1rem 0; }
+button.card.tool-card { font: inherit; text-align: left; width: 100%; cursor: pointer; }
+:is(a, button).card.tool-card { display: flex; gap: .85rem; align-items: flex-start; padding: 1rem; color: var(--text); text-decoration: none; transition: border-color .15s; }
+:is(a, button).card.tool-card:hover { border-color: var(--accent); text-decoration: none; }
+.tool-card > .glyph { flex: none; width: 1.6rem; height: 1.6rem; color: var(--accent); fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.tool-card > span { display: flex; flex-direction: column; gap: .3rem; }
+.tool-card > .glyph .fill { fill: currentColor; stroke: none; }

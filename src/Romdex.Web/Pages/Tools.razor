@@ -1,0 +1,98 @@
+@page "/tools"
+@inject AuthState Auth
+@inject RomdexClient Api
+@inject TaskNotices Tasks
+
+<PageTitle>Tools · Romdex</PageTitle>
+
+@*
+    Things you run to build your library, not settings: a card for each, in sections, as Melodex's (#23, #237): looking
+    after what's there, and what moves the files themselves. Melodex's first section, Import / Export, comes with lists
+    of games to bring in and take out (docs/plans/parity.md, B5). What they're doing shows in Activity.
+*@
+<h1>Tools</h1>
+<p class="muted">Things you run now and then to build your library. What each does shows in Activity as it goes.</p>
+
+@if (!Auth.May(UserPermissions.Scan) && !Auth.May(UserPermissions.Files))
+{
+    <div class="empty card">There's nothing here you may run. The admin can give you Scan or Tidy files under Settings → Users.</div>
+}
+
+@if (Auth.May(UserPermissions.Scan))
+{
+    <h2>Maintenance</h2>
+    <p class="muted small">
+        Looking after what's in the library. New games get these as they come; run them here for games that were there before Romdex, or to go
+        over the whole library again.
+    </p>
+    <div class="tool-cards">
+        <button class="card tool-card" disabled="@_busy" @onclick="LookUpCoversAsync">
+            <Icon Name="image" />
+            <span>
+                <strong>Look up missing covers</strong>
+                <span class="muted small">
+                    Ask the metadata plugins for a cover, title screen and screenshots for every game you have without them, as each scan does when
+                    it finds new games. A game no source had anything for is asked about again after a month.
+                </span>
+            </span>
+        </button>
+    </div>
+}
+
+@if (Auth.May(UserPermissions.Files))
+{
+    <h2>Formatting</h2>
+    <p class="muted small">This moves your game files themselves, every one that matches a DAT. You see every move before it starts.</p>
+    <div class="tool-cards">
+        <button class="card tool-card" @onclick="() => _formatting = true">
+            <Icon Name="format" />
+            <span>
+                <strong>Format the whole library</strong>
+                <span class="muted small">
+                    Move the games you have to where the library format, under Settings → Library, puts them, renamed as the DATs
+                    name them. Also on each system's page, for its games alone.
+                </span>
+            </span>
+        </button>
+    </div>
+}
+
+@if (_formatting)
+{
+    <Dialog Title="Format the whole library" OnClose="() => _formatting = false" Class="wide">
+        <FormatPreview />
+        <div class="toolbar dialog-buttons">
+            <button @onclick="() => _formatting = false">Close</button>
+        </div>
+    </Dialog>
+}
+
+@if (_coversError is not null)
+{
+    <Dialog Title="Look up missing covers" OnClose="() => _coversError = null">
+        <p class="error">@_coversError</p>
+        <div class="toolbar dialog-buttons">
+            <button @onclick="() => _coversError = null">Close</button>
+        </div>
+    </Dialog>
+}
+
+@code {
+    private bool _formatting, _busy;
+    private string? _coversError;
+
+    // Started straight away, as there's nothing to choose; it shows in Activity.
+    private async Task LookUpCoversAsync()
+    {
+        _busy = true;
+        try
+        {
+            Tasks.Started(await Api.LookUpCoversAsync());
+        }
+        catch (Exception e) when (e is HttpRequestException or RomdexApiException)
+        {
+            _coversError = e.Message;
+        }
+        _busy = false;
+    }
+}

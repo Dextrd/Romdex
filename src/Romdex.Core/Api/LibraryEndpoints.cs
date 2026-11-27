@@ -35,6 +35,16 @@ public static class LibraryEndpoints
             .RequireScope(Scopes.Scan).WithName("ScanLibrary")
             .WithSummary("Hashes what's new or changed in the library and matches it. Asking while a scan is queued returns that one.");
 
+        library.MapPost("/covers", async (TaskQueue queue, TaskTitles titles, RomdexDbContext db, CancellationToken ct) =>
+                await db.PluginInstances.AnyAsync(p => p.Type == Romdex.Contracts.Plugins.PluginType.Metadata && p.Enabled, ct)
+                    ? Results.Ok(titles.ToInfo(await queue.EnqueueAsync(ArtLookupTask.TaskKind, null, ct)))
+                    : Results.Problem("Turn on a metadata plugin, such as ScreenScraper, under Settings → Plugins: covers come from there.",
+                        statusCode: StatusCodes.Status409Conflict, title: "Nothing to look covers up with"))
+            .RequireScope(Scopes.Scan).WithName("LookUpCovers")
+            .WithSummary("Looks up covers for every game the library has that hasn't had one looked up lately, as each scan does. "
+                         + "409 without a metadata plugin. Asking while a lookup is queued returns that one.")
+            .Produces<TaskInfo>().Produces(StatusCodes.Status409Conflict);
+
         library.MapGet("/missing", async (LibraryViewBuilder views, int? skip, int? take, CancellationToken ct) =>
             {
                 var missing = new List<TitleSummary>();

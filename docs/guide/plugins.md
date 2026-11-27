@@ -44,7 +44,8 @@ Metadata plugins look up games by their checksums, for the names people know the
 they're known, such as IGDB and Wikipedia. Then, by those, what each game is, for its page. They're asked about
 games in your library, and any other game shown, and only change how those are shown. The IGDB IDs they find also
 make one game of titles on other systems whose names differ. Romdex asks them in order; the first that knows each
-thing is used.
+thing is used. Each scan that finds new games looks up their covers; **Tools → Look up missing covers** does it for
+every game in the library without one.
 
 - **Hasheous** (built in, off until you add it) looks games up at hasheous.org, for their names, covers, a short
   description (which Hasheous has written by AI, and says so), and links to IGDB, Wikipedia and other sites. See

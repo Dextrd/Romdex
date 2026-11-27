@@ -265,6 +265,10 @@ public sealed class LibraryTests : IDisposable
 
         var again = await RunAsync(await _api.ScanLibraryAsync());
         Assert.Contains("0 hashed", again.Progress);
+        // Covers come from metadata plugins: without one, there's nothing to look them up with.
+        var noCovers = await Assert.ThrowsAsync<RomdexApiException>(() => _api.LookUpCoversAsync());
+        Assert.Equal(System.Net.HttpStatusCode.Conflict, noCovers.Status);
+
         // Nothing changed, so nothing to list; and a task that never was has no list.
         Assert.Empty((await _api.GetTaskRowsAsync(again.Id))!.Rows);
         Assert.Null(await _api.GetTaskRowsAsync(Guid.NewGuid()));

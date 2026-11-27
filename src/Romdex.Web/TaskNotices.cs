@@ -15,7 +15,7 @@ public sealed partial class TaskNotices : IDisposable
 
     // The kinds that get one.
     // Romdex's: its catalogue update is "catalogue-refresh".
-    private static readonly HashSet<string> Shown = ["library-scan", "catalogue-refresh", "library-format"];
+    private static readonly HashSet<string> Shown = ["library-scan", "catalogue-refresh", "library-format", "art-lookup"];
 
     private readonly RomdexClient _api;
     private readonly Notices _notices;
@@ -113,6 +113,7 @@ public sealed partial class TaskNotices : IDisposable
         "library-scan" => "search",
         "catalogue-refresh" => "import",
         "library-format" => "format",
+        "art-lookup" => "image",
         _ => "done",
     };
 

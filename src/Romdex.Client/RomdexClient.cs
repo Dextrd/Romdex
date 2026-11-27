@@ -216,6 +216,9 @@ public sealed class RomdexClient(HttpClient http)
     public async Task<LibraryStatus> GetLibraryStatusAsync(CancellationToken ct = default) =>
         (await http.GetFromJsonAsync<LibraryStatus>($"{Api}/library", RomdexJson.Options, ct))!;
 
+    /// <summary>Looks up covers for every game in the library without a fresh one, as a task.</summary>
+    public Task<TaskInfo> LookUpCoversAsync(CancellationToken ct = default) => PostForAsync<TaskInfo>($"{Api}/library/covers", null, ct);
+
     public async Task<TaskInfo> ScanLibraryAsync(CancellationToken ct = default)
     {
         using var response = await http.PostAsync($"{Api}/library/scan", null, ct);

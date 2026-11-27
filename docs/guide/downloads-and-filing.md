@@ -96,7 +96,7 @@ These apply to what arrives from then on. Games already in the library move only
 
 ## Formatting the library you have
 
-**Preview formatting**, under **Settings → Library → Library format**, compares the games in the library with where the layout
+**Tools → Format the whole library** opens **Preview formatting**, which compares the games in the library with where the layout
 puts them, and lists every one that would move, and where. On a system's page, **Check the library** does the same for
 its games. Nothing moves until you choose **Move** and confirm.
 
