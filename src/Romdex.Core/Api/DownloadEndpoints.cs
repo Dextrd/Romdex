@@ -128,13 +128,64 @@ public static class DownloadEndpoints
         api.MapGet("/requests", async (RequestService requests, RomdexDbContext db, bool? active, int? limit, DateTime? before, CancellationToken ct) =>
             {
                 var take = Math.Clamp(limit ?? 100, 1, active == true ? 10_000 : 500);
-                var list = db.Requests.AsNoTracking().Where(r => active != true || r.State == Client.RequestState.Active);
+                var list = db.Requests.AsNoTracking().Where(r => active != true || r.State == Client.RequestState.Active || r.State == Client.RequestState.Queued);
                 if (before?.ToUniversalTime() is { } then)
                     list = list.Where(r => r.CreatedAt < then);
                 return await requests.InfoAsync(await list.OrderByDescending(r => r.CreatedAt).Take(take).ToListAsync(ct), ct);
             })
             .WithTags("Downloads").WithName("ListRequests")
             .WithSummary("Requests, newest first, each with its attempts. Up to 500 at a time, or 10,000 of those still going; `before` (the oldest one's createdAt) pages back.");
+
+        api.MapPost("/requests/bulk", async (BulkChange body, RomdexDbContext db, RequestService service, CancellationToken ct) =>
+            {
+                var changed = 0;
+                foreach (var request in await db.Requests.Where(r => body.Ids.Contains(r.Id)).ToListAsync(ct))
+                    if (await (body.Action switch
+                        {
+                            BulkAction.Pause => service.PauseAsync(request, ct),
+                            BulkAction.Resume => service.ResumeAsync(request, ct),
+                            _ => service.CancelAsync(request, ct),
+                        }))
+                        changed++;
+                return new BulkChanged(changed);
+            })
+            .RequireScope(Scopes.Download).WithTags("Downloads").WithName("ChangeRequests")
+            .WithSummary("Pause, resume or cancel many requests at once, as each one's own action does. Finished ones are left as they are.");
+
+        api.MapPost("/requests/{id:guid}/pause", (Guid id, RomdexDbContext db, RequestService service, CancellationToken ct) =>
+                ActAsync(id, db, service, request => service.PauseAsync(request, ct), ct))
+            .RequireScope(Scopes.Download).WithTags("Downloads").WithName("PauseRequest")
+            .WithSummary("Hold a request back until resumed. An offer it was fetching is stopped, and fetched again from the start when resumed. 409 if it's finished.")
+            .Produces<RequestInfo>().Produces(StatusCodes.Status404NotFound).Produces(StatusCodes.Status409Conflict);
+        api.MapPost("/requests/{id:guid}/resume", (Guid id, RomdexDbContext db, RequestService service, CancellationToken ct) =>
+                ActAsync(id, db, service, request => service.ResumeAsync(request, ct), ct))
+            .RequireScope(Scopes.Download).WithTags("Downloads").WithName("ResumeRequest")
+            .WithSummary("Let a paused request go again, in its place in the queue. 409 if it isn't paused.")
+            .Produces<RequestInfo>().Produces(StatusCodes.Status404NotFound).Produces(StatusCodes.Status409Conflict);
+        api.MapPost("/requests/{id:guid}/move", (Guid id, MoveInQueue body, RomdexDbContext db, RequestService service, CancellationToken ct) =>
+                ActAsync(id, db, service, request => service.MoveAsync(request, body.Before, ct), ct))
+            .RequireScope(Scopes.Download).WithTags("Downloads").WithName("MoveRequest")
+            .WithSummary("Move an unfinished request to just before another in the queue, or to the end. 409 for a finished request, or a before that isn't queued.")
+            .Produces<RequestInfo>().Produces(StatusCodes.Status404NotFound).Produces(StatusCodes.Status409Conflict);
+        api.MapPost("/requests/{id:guid}/cancel", (Guid id, RomdexDbContext db, RequestService service, CancellationToken ct) =>
+                ActAsync(id, db, service, request => service.CancelAsync(request, ct), ct))
+            .RequireScope(Scopes.Download).WithTags("Downloads").WithName("CancelRequest")
+            .WithSummary("Cancel a request: what it's fetching is stopped and thrown away. One that ran out of offers is dismissed. 409 if it's done or dismissed.")
+            .Produces<RequestInfo>().Produces(StatusCodes.Status404NotFound).Produces(StatusCodes.Status409Conflict);
+
+        var fetchSettings = api.MapGroup("/settings").WithTags("Settings").RequireScope(Scopes.Settings);
+        fetchSettings.MapGet("/fetch", (Settings.SettingsService s, CancellationToken ct) => s.GetFetchAsync(ct)).WithName("GetFetchSettings")
+            .WithSummary("How games are fetched: how many requests fetch at once.");
+        fetchSettings.MapPut("/fetch", async (FetchSettings value, Settings.SettingsService s, RequestService requests, CancellationToken ct) =>
+            {
+                if (value.ParallelFetches is < 1 or > FetchSettings.MostParallelFetches)
+                    return Results.ValidationProblem(new Dictionary<string, string[]> { ["parallelFetches"] = [$"Must be between 1 and {FetchSettings.MostParallelFetches}."] });
+                await s.SaveFetchAsync(value, ct);
+                // More room starts more straight away; less lets those going finish.
+                await requests.PumpAsync(ct);
+                return Results.NoContent();
+            })
+            .WithName("SaveFetchSettings").WithSummary("Applies straight away: with more fetches at once, more start; with fewer, those going finish.");
 
         api.MapGet("/requests/{id:guid}", async (Guid id, RequestService requests, RomdexDbContext db, CancellationToken ct) =>
                 await db.Requests.AsNoTracking().FirstOrDefaultAsync(r => r.Id == id, ct) is { } request
@@ -283,5 +334,15 @@ public static class DownloadEndpoints
                 }).ToList(),
                 files, candidate?.Notes, item.CreatedAt, item.UpdatedAt, item.State == DownloadState.NeedsReview ? item.HeldFor : null, item.RequestId);
         }).ToList();
+    }
+
+    // A request's own action: its state after, 404 for no such request, 409 if it couldn't be done.
+    private static async Task<IResult> ActAsync(Guid id, RomdexDbContext db, RequestService service, Func<Request, Task<bool>> act, CancellationToken ct)
+    {
+        if (await db.Requests.FirstOrDefaultAsync(r => r.Id == id, ct) is not { } request)
+            return Results.NotFound();
+        if (!await act(request))
+            return Results.Conflict();
+        return Results.Ok((await service.InfoAsync([await db.Requests.AsNoTracking().FirstAsync(r => r.Id == id, ct)], ct))[0]);
     }
 }

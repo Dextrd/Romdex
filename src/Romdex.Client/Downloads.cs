@@ -105,6 +105,9 @@ public sealed record TitleFetch(DownloadInfo? Download, IReadOnlyList<string> Pr
 /// <summary>Where a request is.</summary>
 public enum RequestState
 {
+    /// <summary>Waiting its turn, or paused: only so many fetch at once (Settings → Fetching).</summary>
+    Queued,
+
     /// <summary>Trying the retrievers' offers, one after another.</summary>
     Active,
 
@@ -131,10 +134,12 @@ public sealed record RequestInfo(
     string? Message,
     IReadOnlyList<DownloadInfo> Attempts,
     DateTime CreatedAt,
-    DateTime UpdatedAt)
+    DateTime UpdatedAt,
+    bool Paused = false,
+    double QueueOrder = 0)
 {
-    /// <summary>Still trying the retrievers' offers.</summary>
-    public bool Active => State == RequestState.Active;
+    /// <summary>Not finished: waiting its turn, or trying the retrievers' offers.</summary>
+    public bool Active => State is RequestState.Queued or RequestState.Active;
 
     /// <summary>An attempt that brought another game, which can be filed as what it is.</summary>
     public DownloadInfo? Acceptable => Attempts.LastOrDefault(a => a.CanAccept);
@@ -259,3 +264,12 @@ public sealed record AdoptionReport(int Checked, int InPlace, IReadOnlyList<Adop
 /// <summary>Body of <c>POST /library/format/apply</c>: moves the library's games to where the layout puts them, as a task.</summary>
 /// <param name="SystemId">Just this system's; null for every system.</param>
 public sealed record FormatLibrary(Guid? SystemId = null);
+
+/// <summary>How games are fetched (Settings → Fetching).</summary>
+/// <param name="ParallelFetches">How many requests fetch at once; the rest wait their turn.</param>
+public sealed record FetchSettings
+{
+    public const int MostParallelFetches = 8;
+
+    public int ParallelFetches { get; init; } = 2;
+}

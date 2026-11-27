@@ -1939,6 +1939,7 @@ a.toast-body:hover .toast-title { text-decoration: underline; }
 @media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
 @media (max-width: 760px) {
     .toasts { left: .5rem; right: .5rem; bottom: .5rem; width: auto; }
+}
 
 /* What a link landed on flashes, then fades back. */
 .landed { animation: landed 2s ease-out; }

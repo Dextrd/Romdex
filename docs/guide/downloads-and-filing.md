@@ -13,7 +13,8 @@ Each arrival goes through the same steps. **Activity → Fetches** shows them, a
 with its regions and how many offers it has tried, and what arrived by itself, such as through the inbox folder. Open
 a game to step through its attempts, newest first, each with its files' hashes, what each matched, and the
 retriever's notes; open one that arrived by itself to see the same. While a game is being fetched, its page shows
-**Fetching** in place of **Get**. **Recent** shows what's still
+**Fetching** in place of **Get**. Only so many fetch at once, as [Settings → Fetching](configuration.md#fetching)
+says; the rest wait their turn, and can be moved, paused or cancelled. **Recent** shows what's still
 going, or changed in the last hour, in Running, Queued and Completed sections you can close; **Earlier** shows the
 rest. The old Downloads page's links go there.
 

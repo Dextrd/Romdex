@@ -146,7 +146,7 @@ public sealed class ScheduledTasks(
 
     // Those asked for that haven't finished.
     private Task<int> GoingAsync(IReadOnlyList<Guid> asked, CancellationToken ct) =>
-        db.Requests.CountAsync(r => asked.Contains(r.Id) && r.State == RequestState.Active, ct);
+        db.Requests.CountAsync(r => asked.Contains(r.Id) && (r.State == RequestState.Active || r.State == RequestState.Queued), ct);
 
     private IQueryable<Request> Failed() => db.Requests.Where(r => r.State == RequestState.Failed);
 

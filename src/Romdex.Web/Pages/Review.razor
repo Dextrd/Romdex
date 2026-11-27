@@ -766,7 +766,7 @@ else
     {
         var started = 0;
         foreach (var request in VisibleRequests.ToList())
-            if ((await Api.TryRequestAgainAsync(request.Id)).State == RequestState.Active)
+            if ((await Api.TryRequestAgainAsync(request.Id)).Active)
                 started++;
         foreach (var arrival in VisibleArrivals.ToList())
             if ((await Api.TryDownloadAgainAsync(arrival.Id)).Download is not null)
@@ -777,7 +777,7 @@ else
     private Task TryRequestAgainAsync(RequestInfo request) => DoAsync(async () =>
     {
         var again = await Api.TryRequestAgainAsync(request.Id);
-        Say(again.State == RequestState.Active ? $"{again.Message}." : $"Nothing else to fetch: {again.Message}", error: again.State != RequestState.Active);
+        Say(again.Active ? $"{again.Message}." : $"Nothing else to fetch: {again.Message}", error: !again.Active);
     });
 
     private Task DismissAsync(RequestInfo request) => DoAsync(() => Api.DismissRequestAsync(request.Id));

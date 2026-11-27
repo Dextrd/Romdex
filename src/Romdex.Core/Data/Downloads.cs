@@ -132,6 +132,12 @@ public class Request
 
     public List<Download> Attempts { get; set; } = [];
 
+    /// <summary>Where it is in the queue: lower goes first.</summary>
+    public double QueueOrder { get; set; } = QueueOrders.Now();
+
+    /// <summary>Held back by the user. One paused mid-fetch fetches that offer again from the start when resumed.</summary>
+    public bool Paused { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 }

@@ -84,7 +84,7 @@
 @if (_confirmCancel)
 {
     <Dialog Title="@($"Cancel {Format.Count(Changeable.Count, Noun, Nouns)}?")" OnClose="() => _confirmCancel = false" Alert="true">
-        <p>Each stops for good. What a task has done already stays done.</p>
+        <p>@(Shown == "tasks" ? "Each stops for good. What a task has done already stays done." : "Each stops for good, and what it's fetching is thrown away. What's in your library stays.")</p>
         <div class="toolbar dialog-buttons">
             <button @onclick="() => _confirmCancel = false">Keep them</button>
             <button class="danger" disabled="@_busy" @onclick="() => ChangeAsync(BulkAction.Cancel)">@if (_busy) { <span class="spinner"></span> }Cancel them</button>
@@ -172,17 +172,9 @@ else
                             </span>
                         </div>
                         <span class="muted small request-kind hide-narrow">@Format.Count(request.Attempts.Count, "attempt", "attempts")</span>
-                        <span class="request-state"><span class="badge @Format.RequestBadge(request.State)">@Format.RequestLabel(request.State)</span></span>
+                        <span class="request-state"><span class="badge @Format.RequestBadge(request)">@Format.RequestLabel(request)</span></span>
                         <span class="muted small request-time hide-narrow" title="@request.UpdatedAt.ToLocalTime()">@Format.Ago(request.UpdatedAt)</span>
-                        <span class="request-actions">
-                            @if (request.State == RequestState.Failed && Auth.May(UserPermissions.Download))
-                            {
-                                <IconButton Icon="retry" Class="small" Title="Look again: search every retriever again, passing over what was turned away" Disabled="_busy"
-                                            OnClick="() => RequestActionAsync(() => Api.TryRequestAgainAsync(request.Id))" />
-                                <IconButton Icon="cancel" Class="small" Title="Dismiss: take it off Review, without fetching anything" Disabled="_busy"
-                                            OnClick="() => RequestActionAsync(() => Api.DismissRequestAsync(request.Id))" />
-                            }
-                        </span>
+                        <span class="request-actions"><Actions Request="request" Queue="RequestQueue" OnChanged="ChangedAsync" /></span>
                     </div>
                     @if (request.Message is not null) { <div class="muted small request-detail">@request.Message</div> }
                     @if (requestOpen)
@@ -338,11 +330,11 @@ else
 
     private bool _busy, _confirmCancel, _checking;
 
-    // Pause all and Cancel all act on the tasks shown and still going. Fetches get theirs with the request queue (docs/plans/parity.md).
-    private bool MayChange => Shown == "tasks" && Auth.May(UserPermissions.Scan);
-    private List<Item> Changeable => Visible.Where(i => i.Active && i.Task is not null).ToList();
-    private string Noun => "task";
-    private string Nouns => "tasks";
+    // Pause all and Cancel all act on the tasks or requests shown and still going; what arrived by itself is left alone.
+    private bool MayChange => Auth.May(Shown == "tasks" ? UserPermissions.Scan : UserPermissions.Download);
+    private List<Item> Changeable => Visible.Where(i => i.Active && (i.Task ?? (object?)i.Request) is not null).ToList();
+    private string Noun => Shown == "tasks" ? "task" : "fetch";
+    private string Nouns => Shown == "tasks" ? "tasks" : "fetches";
 
     // Requests out of offers, which Retry failed looks for again.
     private int FailedCount => _requests.Count(r => r.State == RequestState.Failed);
@@ -385,8 +377,16 @@ else
         _busy = true;
         try
         {
-            await Api.ChangeTasksAsync(new BulkChange(action, Changeable.Select(i => i.Task!.Id).ToList()));
-            await LoadTasksAsync();
+            if (Shown == "tasks")
+            {
+                await Api.ChangeTasksAsync(new BulkChange(action, Changeable.Select(i => i.Task!.Id).ToList()));
+                await LoadTasksAsync();
+            }
+            else
+            {
+                await Api.ChangeRequestsAsync(new BulkChange(action, Changeable.Select(i => i.Request!.Id).ToList()));
+                await Tracker.RefreshAsync();
+            }
         }
         finally
         {
@@ -418,14 +418,14 @@ else
     /// <summary>A task, a request, or something that arrived by itself, in one list.</summary>
     private sealed record Item(DateTime UpdatedAt, RequestInfo? Request = null, TaskInfo? Task = null, DownloadInfo? Arrival = null)
     {
-        public bool Active => Request is { } r ? r.State == RequestState.Active : Arrival is { } a ? Going(a) : Task!.Active;
-        public bool Paused => Task?.Paused ?? false;
+        public bool Active => Request is { } r ? r.Active : Arrival is { } a ? Going(a) : Task!.Active;
+        public bool Paused => Task?.Paused ?? Request?.Paused ?? false;
         public string Title => Request is { } r ? r.Dump?.Name ?? r.Title.Name : Arrival?.Name ?? Task!.Title ?? Task.Kind;
 
         /// <summary>Working on it now, rather than waiting its turn or paused.</summary>
-        public bool Running => Task is { } t ? t.State == TaskState.Running : Arrival is { } a ? a.State != DownloadState.Queued : true;
+        public bool Running => Task is { } t ? t.State == TaskState.Running : Arrival is { } a ? a.State != DownloadState.Queued : Request!.State == RequestState.Active;
 
-        public double QueueOrder => Task?.QueueOrder ?? 0;
+        public double QueueOrder => Task?.QueueOrder ?? Request?.QueueOrder ?? 0;
 
         public bool Matches(string text) =>
             new[] { Title, Request?.Title.Name, Arrival?.Source }.Any(s => s?.Contains(text, StringComparison.CurrentCultureIgnoreCase) == true);
@@ -434,6 +434,16 @@ else
     private static bool Going(DownloadInfo item) => item.State is DownloadState.Fetching or DownloadState.Queued or DownloadState.Working;
 
     /// <summary>Tasks waiting their turn, in the order they'll run.</summary>
+    /// <summary>Requests waiting their turn, in the order they'll fetch.</summary>
+    private IReadOnlyList<RequestInfo> RequestQueue =>
+        _requests.Where(r => r.State == RequestState.Queued).OrderBy(r => r.QueueOrder).ThenBy(r => r.CreatedAt).ToList();
+
+    private async Task ChangedAsync()
+    {
+        await Tracker.RefreshAsync();
+        await RedrawAsync();
+    }
+
     private IReadOnlyList<TaskInfo> TaskQueue =>
         _tasks.Where(t => t.State == TaskState.Queued).OrderBy(t => t.QueueOrder).ThenBy(t => t.CreatedAt).ToList();
 

@@ -198,6 +198,12 @@ public sealed class FakeRetriever(string staging) : HttpMessageHandler
 
     public IReadOnlyList<SearchRequest> Searches => _searches;
 
+    /// <summary>Dropped items, by name, whose fetch keeps running until they're taken out of this.</summary>
+    public HashSet<string> Held { get; } = [];
+
+    // The item each fetch is of, by its job.
+    private readonly Dictionary<string, string> _jobs = [];
+
     private readonly List<SearchRequest> _searches = [];
 
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
@@ -218,7 +224,7 @@ public sealed class FakeRetriever(string staging) : HttpMessageHandler
             "v1/list" => Json(new ListResponse(_items.Values.Select(i => i.Candidate).ToList())),
             "v1/search" => Search(await Read<SearchRequest>(request, ct)),
             "v1/fetch" => Fetch(await Read<FetchRequest>(request, ct)),
-            _ when path.StartsWith("v1/fetch/") => Json(new FetchStatus(path["v1/fetch/".Length..], FetchState.Completed)),
+            _ when path.StartsWith("v1/fetch/") => Status(path["v1/fetch/".Length..].Split('/')[0]),
             _ => new HttpResponseMessage(HttpStatusCode.NotFound),
         };
     }
@@ -243,8 +249,12 @@ public sealed class FakeRetriever(string staging) : HttpMessageHandler
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             File.WriteAllBytes(path, data);
         }
-        return Json(new FetchStatus(fetch.JobId, FetchState.Completed));
+        _jobs[fetch.JobId] = fetch.Candidate.CandidateId;
+        return Status(fetch.JobId);
     }
+
+    private HttpResponseMessage Status(string job) =>
+        Json(new FetchStatus(job, _jobs.TryGetValue(job, out var name) && Held.Contains(name) ? FetchState.Running : FetchState.Completed));
 
     private static async Task<T> Read<T>(HttpRequestMessage request, CancellationToken ct) =>
         (await request.Content!.ReadFromJsonAsync<T>(RetrievalJson.Options, ct))!;

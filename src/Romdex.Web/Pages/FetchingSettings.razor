@@ -1,0 +1,92 @@
+@page "/settings/fetching"
+@layout SettingsLayout
+@inject RomdexClient Api
+
+<PageTitle>Fetching · Romdex</PageTitle>
+
+@*
+    How games are fetched, as Melodex's (#238): how many fetches go at once, scheduled or not. Which dumps are wanted is
+    Regions; where they go is the library format, under Library.
+*@
+@if (_fetch is null || _schedules is null)
+{
+    <Loading />
+}
+else
+{
+    <h2>Fetching</h2>
+    <div class="card settings-card">
+        <div class="setting-line">
+            Fetch
+            <NumberField Min="1" Max="FetchSettings.MostParallelFetches" Label="Fetches at once" Value="_fetch.ParallelFetches"
+                         ValueChanged="n => SetFetch(_fetch with { ParallelFetches = n })" />
+            at once
+        </div>
+        <div class="muted small">
+            The rest wait their turn under <a href="activity/fetches">Activity → Fetches</a>, where they can be moved up the queue, paused or cancelled.
+            Which dumps are wanted is under <a href="settings/regions">Regions</a>; where fetched games go is the <a href="settings#format">library format</a>,
+            under Library.
+        </div>
+    </div>
+
+    <h2>Scheduled fetches</h2>
+    <div class="card settings-card">
+        <div class="setting-line">
+            Keep
+            <NumberField Value="_schedules.DownloadsAtATime" Min="1" Max="ScheduleSettings.MostDownloadsAtATime" Label="Fetches at a time"
+                         ValueChanged="n => SetSchedules(_schedules with { DownloadsAtATime = n })" />
+            @(_schedules.DownloadsAtATime == 1 ? "fetch" : "fetches") going at a time when retrying failed fetches
+        </div>
+        <div class="muted small">
+            On the <a href="settings/schedule">schedule</a>: as each finishes, the next is asked for in its place, until all have been or the window
+            closes. <strong>Retry failed</strong> by hand asks for them all at once.
+        </div>
+    </div>
+
+    <AutoSave @ref="_saver" Save="SaveAsync" />
+}
+
+@code {
+    private FetchSettings? _fetch;
+    private ScheduleSettings? _schedules;
+    // What's changed since it was last saved; each is kept with settings of its own.
+    private bool _fetchChanged, _schedulesChanged;
+    private AutoSave? _saver;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var fetch = Api.GetFetchSettingsAsync();
+        var schedules = Api.GetSchedulesAsync();
+        (_fetch, _schedules) = (await fetch, (await schedules).Settings);
+    }
+
+    // Each change is saved in a moment, with whatever else changes meanwhile.
+    private void SetFetch(FetchSettings fetch)
+    {
+        _fetch = fetch;
+        _fetchChanged = true;
+        _saver?.Changed();
+    }
+
+    private void SetSchedules(ScheduleSettings schedules)
+    {
+        _schedules = schedules;
+        _schedulesChanged = true;
+        _saver?.Changed();
+    }
+
+    // The schedules keep their windows as Scheduled tasks last saved them: only what's set here is changed.
+    private async Task SaveAsync()
+    {
+        if (_fetchChanged)
+        {
+            _fetchChanged = false;
+            await Api.SaveFetchSettingsAsync(_fetch!);
+        }
+        if (_schedulesChanged)
+        {
+            _schedulesChanged = false;
+            await Api.SaveSchedulesAsync((await Api.GetSchedulesAsync()).Settings with { DownloadsAtATime = _schedules!.DownloadsAtATime });
+        }
+    }
+}

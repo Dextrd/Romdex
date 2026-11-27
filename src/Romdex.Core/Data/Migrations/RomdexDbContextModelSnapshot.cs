@@ -689,6 +689,12 @@ namespace Romdex.Core.Data.Migrations
                     b.Property<string>("Message")
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("Paused")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("QueueOrder")
+                        .HasColumnType("REAL");
+
                     b.Property<string>("Regions")
                         .IsRequired()
                         .HasColumnType("TEXT");

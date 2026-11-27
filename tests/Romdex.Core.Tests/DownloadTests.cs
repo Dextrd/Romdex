@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -351,6 +352,58 @@ public sealed class DownloadTests : IDisposable
     }
 
     [Fact]
+    public async Task Requests_wait_their_turn_and_can_be_moved_paused_resumed_and_cancelled()
+    {
+        var lantern = _dats.Dump(Handheld, "Lantern Run (World)", [".gb"]);
+        var quarry = _dats.Dump(Handheld, "Quiet Quarry (USA)", [".gb"]);
+        var pond = _dats.Dump(Handheld, "Pond Hopper (World)", [".gb"]);
+        _dats.WriteDats();
+        await SetUpAsync();
+        await _api.SaveFetchSettingsAsync(new FetchSettings { ParallelFetches = 1 });
+        Assert.Equal(1, (await _api.GetFetchSettingsAsync()).ParallelFetches);
+        var titles = (await _api.ListAllTitlesAsync()).Items;
+        async Task<RequestInfo> GetAsync(string name) => Assert.Single((await _api.FetchTitleAsync(titles.Single(t => t.Name == name).Id)).Requests!);
+
+        // One fetches at a time: the first holds its place, the rest wait.
+        _plugin.Drop("l", ("l.gb", lantern[0].Data));
+        _plugin.DumpNames["l"] = "Lantern Run (World)";
+        _plugin.Held.Add("l");
+        var first = await GetAsync("Lantern Run");
+        Assert.Equal(RequestState.Active, first.State);
+        _plugin.Drop("q", ("q.gb", quarry[0].Data));
+        _plugin.DumpNames["q"] = "Quiet Quarry (USA)";
+        var second = await GetAsync("Quiet Quarry");
+        _plugin.Drop("p", ("p.gb", pond[0].Data));
+        _plugin.DumpNames["p"] = "Pond Hopper (World)";
+        var third = await GetAsync("Pond Hopper");
+        Assert.Equal(RequestState.Queued, second.State);
+        Assert.Equal(RequestState.Queued, third.State);
+
+        // The third goes before the second, paused; resumed, it's next.
+        await _api.MoveRequestAsync(third.Id, second.Id);
+        Assert.True((await _api.PauseRequestAsync(third.Id)).Paused);
+        var queued = (await _api.ListRequestsAsync(active: true)).Where(r => r.State == RequestState.Queued).OrderBy(r => r.QueueOrder).Select(r => r.Id);
+        Assert.Equal([third.Id, second.Id], queued);
+        Assert.False((await _api.ResumeRequestAsync(third.Id)).Paused);
+        var again = await Assert.ThrowsAsync<RomdexApiException>(() => _api.ResumeRequestAsync(third.Id));
+        Assert.Equal(HttpStatusCode.Conflict, again.Status);
+
+        // Pausing the one fetching stops that fetch and lets the next start; cancelling the next lets the last start.
+        await _api.PauseRequestAsync(first.Id);
+        Assert.Equal(RequestState.Active, (await _api.GetRequestAsync(third.Id))!.State);
+        Assert.Empty((await _api.GetRequestAsync(first.Id))!.Attempts);
+        _plugin.Held.Add("p");
+        Assert.Equal(RequestState.Dismissed, (await _api.CancelRequestAsync(third.Id)).State);
+        Assert.Equal(RequestState.Done, (await SettleAsync(second.Id)).State);
+
+        // Resumed, the paused one fetches its offer again from the start.
+        _plugin.Held.Clear();
+        _plugin.Drop("l", ("l.gb", lantern[0].Data));
+        Assert.Equal(1, (await _api.ChangeRequestsAsync(new BulkChange(BulkAction.Resume, [first.Id, second.Id, third.Id]))).Changed);
+        Assert.Equal(RequestState.Done, (await SettleAsync(first.Id)).State);
+    }
+
+    [Fact]
     public async Task Activity_lists_requests_newest_first_and_what_each_tried_names_it()
     {
         var lantern = _dats.Dump(Handheld, "Lantern Run (World)", [".gb"]);
@@ -634,7 +687,7 @@ public sealed class DownloadTests : IDisposable
         while (true)
         {
             var request = (await _api.GetRequestAsync(id))!;
-            if (request.State != RequestState.Active)
+            if (!request.Active)
                 return request;
             Assert.True(DateTime.UtcNow < deadline, $"Request {id}: {request.State} {request.Message}");
             await Task.Delay(200);

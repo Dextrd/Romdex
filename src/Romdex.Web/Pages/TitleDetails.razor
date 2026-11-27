@@ -116,8 +116,8 @@ else
                 @* As Melodex's fetch button: while it's being fetched, how that's going in place of Get. *@
                 @if (Tracker.Find(_title.Id) is { Count: > 0 } fetching)
                 {
-                    <a class="badge @Format.RequestBadge(RequestState.Active)" href="activity/fetches?open=@fetching[0].Id"
-                       title="@(fetching[0].Message ?? "Follow it in Activity")">@Format.RequestLabel(RequestState.Active)</a>
+                    <a class="badge @Format.RequestBadge(fetching[0])" href="activity/fetches?open=@fetching[0].Id"
+                       title="@(fetching[0].Message ?? "Follow it in Activity")">@Format.RequestLabel(fetching[0])</a>
                 }
                 else if (_title.Status != TitleStatus.Owned)
                 {

@@ -256,6 +256,27 @@ public sealed class RomdexClient(HttpClient http)
             (before is { } b ? $"&before={Uri.EscapeDataString(b.ToUniversalTime().ToString("O"))}" : ""), RomdexJson.Options, ct) ?? [];
 
     /// <summary>Pauses, resumes or cancels many tasks at once.</summary>
+    public Task<BulkChanged> ChangeRequestsAsync(BulkChange change, CancellationToken ct = default) => PostForAsync<BulkChanged>($"{Api}/requests/bulk", change, ct);
+
+    public Task<RequestInfo> PauseRequestAsync(Guid id, CancellationToken ct = default) => PostForAsync<RequestInfo>($"{Api}/requests/{id}/pause", null, ct);
+
+    public Task<RequestInfo> ResumeRequestAsync(Guid id, CancellationToken ct = default) => PostForAsync<RequestInfo>($"{Api}/requests/{id}/resume", null, ct);
+
+    public Task<RequestInfo> CancelRequestAsync(Guid id, CancellationToken ct = default) => PostForAsync<RequestInfo>($"{Api}/requests/{id}/cancel", null, ct);
+
+    /// <summary>Moves an unfinished request to just before another, or to the end of the queue.</summary>
+    public Task<RequestInfo> MoveRequestAsync(Guid id, Guid? before, CancellationToken ct = default) =>
+        PostForAsync<RequestInfo>($"{Api}/requests/{id}/move", new MoveInQueue(before), ct);
+
+    public async Task<FetchSettings> GetFetchSettingsAsync(CancellationToken ct = default) =>
+        (await http.GetFromJsonAsync<FetchSettings>($"{Api}/settings/fetch", RomdexJson.Options, ct))!;
+
+    public async Task SaveFetchSettingsAsync(FetchSettings settings, CancellationToken ct = default)
+    {
+        using var response = await http.PutAsJsonAsync($"{Api}/settings/fetch", settings, RomdexJson.Options, ct);
+        await EnsureAsync(response, ct);
+    }
+
     public Task<BulkChanged> ChangeTasksAsync(BulkChange change, CancellationToken ct = default) => PostForAsync<BulkChanged>($"{Api}/tasks/bulk", change, ct);
 
     public Task<RequestInfo?> GetRequestAsync(Guid id, CancellationToken ct = default) => GetOrNullAsync<RequestInfo>($"{Api}/requests/{id}", ct);

@@ -9,6 +9,11 @@ public sealed class SettingsService(RomdexDbContext db)
     private const string LogKey = "log";
     private const string ScheduleKey = "schedule";
     private const string ScheduleRunsKey = "schedule.runs";
+    private const string FetchKey = "fetch";
+
+    public Task<FetchSettings> GetFetchAsync(CancellationToken ct) => GetAsync<FetchSettings>(FetchKey, ct);
+
+    public Task SaveFetchAsync(FetchSettings value, CancellationToken ct) => SaveAsync(FetchKey, value, ct);
 
     public Task<ScheduleSettings> GetScheduleAsync(CancellationToken ct) => GetAsync<ScheduleSettings>(ScheduleKey, ct);
 

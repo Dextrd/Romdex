@@ -226,8 +226,13 @@ public static class Format
         _ => "neutral",
     };
 
+    public static string RequestLabel(RequestInfo r) => r.Paused && r.Active ? "Paused" : RequestLabel(r.State);
+
+    public static string RequestBadge(RequestInfo r) => r.Paused && r.Active ? "neutral" : RequestBadge(r.State);
+
     public static string RequestLabel(RequestState state) => state switch
     {
+        RequestState.Queued => "Queued",
         RequestState.Active => "Fetching",
         RequestState.Done => "In library",
         RequestState.Failed => "Failed",
@@ -236,6 +241,7 @@ public static class Format
 
     public static string RequestBadge(RequestState state) => state switch
     {
+        RequestState.Queued => "active waiting",
         RequestState.Active => "active",
         RequestState.Done => "owned",
         RequestState.Failed => "missing",

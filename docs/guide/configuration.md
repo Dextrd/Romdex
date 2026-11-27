@@ -28,6 +28,13 @@ The compose file has its own, shorter settings:
 
 Each retriever's README has its own, such as `INBOX_PATH` for the inbox folder.
 
+## Fetching
+
+**Settings → Fetching** sets how many games fetch at once: two to start with, up to eight. Each region of a game you
+get is a request of its own; the rest wait their turn, in the order asked for, under **Activity → Fetches**. There
+each can be moved to the front, up or down, paused, resumed or cancelled, and **Pause all** and **Cancel all** act on
+everything shown. Pausing one that's fetching stops that fetch; resumed, it fetches that offer again from the start.
+
 ## Scheduled tasks
 
 **Settings → Scheduled tasks** has three schedules, **Daily**, **Weekly** and **Monthly**, each a window between two
@@ -49,7 +56,7 @@ same times, for failed fetches; nothing is monthly.
 - **All three are in one time zone**, the server's UTC to start with: **Use this browser's** sets yours.
 - **A window runs its tasks once, in order**: scan, catalogue, then failed fetches. The first two are tasks on
   **Activity**, one after another; failed fetches wait for them.
-- **Fetches go a few at a time**, five to start with: as each finishes, the next is looked for in its place. When the
+- **Scheduled fetches go a few at a time**, five to start with (Settings → Fetching): as each finishes, the next is looked for in its place. When the
   window closes, nothing more is looked for; the rest wait for the next window, and those under way carry on.
 - **The windows take turns.** When two open on the same day, daily goes first, then weekly, then monthly, as long as
   its window is still open.
