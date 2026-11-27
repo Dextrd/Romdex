@@ -101,6 +101,9 @@ public enum TaskRowState
 
     /// <summary>It couldn't be done; the detail says why.</summary>
     Failed,
+
+    /// <summary>Done, and it waits for a decision under Review, where its link goes: a scanned file that matches nothing, as Melodex's scan list has.</summary>
+    Review,
 }
 
 /// <summary>Something a task has done or is doing, such as a file it formatted, from <c>GET /tasks/{id}/rows</c>.</summary>

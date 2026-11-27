@@ -56,8 +56,8 @@ public sealed class LibraryScanTask(LibraryScanner scanner, LibraryMatcher match
             {
                 var name = Path.GetFileName(file.Path);
                 var folder = Path.GetDirectoryName(file.Path)?.Replace('\\', '/') is { Length: > 0 } f ? f : null;
-                rows.Put(file.Path, TaskRowState.Done, file.Dumps.Count == 0 ? name : string.Join(", ", file.Dumps.Select(d => d.Name)), folder is null ? name : $"{folder}/{name}",
-                    file.Dumps.Count == 0 ? "Matches nothing: it waits under Review → Matching" : null,
+                rows.Put(file.Path, file.Dumps.Count == 0 ? TaskRowState.Review : TaskRowState.Done, file.Dumps.Count == 0 ? name : string.Join(", ", file.Dumps.Select(d => d.Name)), folder is null ? name : $"{folder}/{name}",
+                    file.Dumps.Count == 0 ? "Matches nothing" : null,
                     file.Dumps.Count == 0 ? "review" : $"titles/{file.Dumps[0].TitleId}");
             }
         }

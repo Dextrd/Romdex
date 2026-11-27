@@ -234,6 +234,13 @@ public sealed class LibraryTests : IDisposable
         var status = await _api.GetLibraryStatusAsync();
         Assert.Equal(4, status.Files);
         Assert.Equal(1, status.Unreadable);
+
+        // On the scan's list, what matches nothing waits under Review, and what couldn't be read says why.
+        var scan = (await _api.ListTasksAsync()).First(t => t.Kind == "library-scan");
+        var rows = (await _api.GetTaskRowsAsync(scan.Id))!.Rows.ToDictionary(r => r.Key);
+        Assert.Equal((TaskRowState.Review, "review"), (rows["Handheld/homebrew.gb"].State, rows["Handheld/homebrew.gb"].Href));
+        Assert.Equal(TaskRowState.Review, rows["Handheld/Name Only (USA).gb"].State);
+        Assert.Equal(TaskRowState.Failed, rows["Handheld/damaged.zip"].State);
     }
 
     [Fact]

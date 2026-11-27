@@ -66,6 +66,10 @@ else
                     case TaskRowState.Failed:
                         <span class="badge partial">Couldn't</span>
                         break;
+                    case TaskRowState.Review:
+                        @* Romdex's: Melodex's scan list has it, in ScanFiles. *@
+                        <a class="badge partial" href="@(row.Href ?? "review")">To review</a>
+                        break;
                     default:
                         <span class="badge neutral">Waiting</span>
                         break;
@@ -111,9 +115,10 @@ else
     {
         get
         {
-            var done = _rows!.Count(r => r.State is TaskRowState.Done or TaskRowState.Skipped);
+            var done = _rows!.Count(r => r.State is TaskRowState.Done or TaskRowState.Skipped or TaskRowState.Review);
             var failed = _rows!.Count(r => r.State == TaskRowState.Failed);
-            return $"{done:N0} of {_rows!.Count:N0} done" + (failed > 0 ? $" · {failed:N0} couldn't be" : "");
+            var review = _rows!.Count(r => r.State == TaskRowState.Review);
+            return $"{done:N0} of {_rows!.Count:N0} done" + (review > 0 ? $" · {review:N0} to review" : "") + (failed > 0 ? $" · {failed:N0} couldn't be" : "");
         }
     }
 
